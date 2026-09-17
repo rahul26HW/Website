@@ -272,7 +272,7 @@ New products still open before you do this (through `404.html`), just slower and
 | `404.html` | Sends deep links back to `index.html` on GitHub Pages |
 | `css/site.css`, `css/admin.css` | Styles (admin styles load only on `/admin`) |
 | `js/config.js` | Supabase URL + publishable key (public values only) |
-| `js/*.js` | Storefront: data, routing, pages, cart, checkout, search, wishlist… |
+| `js/*.js` | Storefront: data, routing, pages, cart, checkout, search, wishlist… (loaded in order by the small script list at the end of `<head>` in `index.html`) |
 | `js/admin/*.js` | Admin tabs (loaded only on `/admin`) |
 | `supabase-setup.sql` | Database, security rules and functions (safe to re-run) |
 | `ai-proxy.worker.js` | Cloudflare Worker: AI, images, welcome email, Snipcart webhook |

@@ -28,6 +28,8 @@
 - **Small images generated on the live store:** 444 of 444 (one retried after a temporary storage error). Product page weight went from about 2.9 MB to 0.7 MB.
 - First visit starts downloading the store copy from the HTML head instead of after all scripts run (`window.HW_SNAPSHOT`, used by `js/api.js`). Return visits use the saved copy as before.
 - The footer stays hidden until the first page renders, so on short pages it no longer slides up into view (Lighthouse CLS 0.137 → 0 on info pages).
+- Scripts load right after the first paint (a small loader in `index.html` keeps their order), so the header appears while they download. Adding a new storefront script means adding its name to that list.
+- Lighthouse mobile on the live site after these changes: Performance 85–94, Accessibility 100, Best Practices 100, SEO 100 (home, category, two products, info page).
 - Promotions: `WELCOME10` turned off; `WELCOME15` is the sign-up code.
 - Towel product names shortened to under 50 characters, with features and SEO titles added (URLs unchanged).
 
