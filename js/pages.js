@@ -109,6 +109,17 @@
       '<div id="trackResult" aria-live="polite"></div></form>';
   }
 
+  /* Carrier tracking page, when we know the carrier. */
+  HW.trackingUrl = function (carrier, number) {
+    if (!number) return '';
+    var n = encodeURIComponent(number), c = String(carrier || '').toLowerCase();
+    if (/usps|stamps/.test(c)) return 'https://tools.usps.com/go/TrackConfirmAction?tLabels=' + n;
+    if (/ups/.test(c)) return 'https://www.ups.com/track?tracknum=' + n;
+    if (/fedex/.test(c)) return 'https://www.fedex.com/fedextrack/?trknbr=' + n;
+    if (/dhl/.test(c)) return 'https://www.dhl.com/us-en/home/tracking.html?tracking-id=' + n;
+    return '';
+  };
+
   HW.track = {
     submit: async function (form) {
       var msg = form.querySelector('.form-msg'), btn = form.querySelector('button[type=submit]'), out = document.getElementById('trackResult');
@@ -128,16 +139,19 @@
           msg.textContent = 'We couldn’t find an order with that number and email. Check both and try again, or contact us.';
           return;
         }
-        var reached = o.status === 'refunded' ? -1 : STEPS.findIndex(function (s) { return s[0] === o.status; });
+        var ended = o.status === 'refunded' || o.status === 'cancelled';
+        var reached = ended ? -1 : STEPS.findIndex(function (s) { return s[0] === o.status; });
+        var link = HW.trackingUrl(o.carrier, o.tracking_number);
         out.innerHTML = '<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:18px">' +
           '<div class="sumrow"><span><b>' + esc(o.order_number) + '</b></span><span class="muted">Placed ' + esc(u.fmtDate(o.created_at)) + '</span></div>' +
-          (o.status === 'refunded'
-            ? '<p class="form-msg ok" style="margin:12px 0">This order has been refunded.</p>'
+          (ended
+            ? '<p class="form-msg ok" style="margin:12px 0">' + (o.status === 'refunded' ? 'This order has been refunded.' : 'This order was cancelled because payment wasn’t completed.') + '</p>'
             : '<ol class="track-steps">' + STEPS.map(function (s, i) {
                 return '<li class="' + (i <= reached ? 'done' : '') + (i < reached ? ' next-done' : '') + '"' + (i === reached ? ' aria-current="step"' : '') + '>' + s[1] + '</li>';
               }).join('') + '</ol>') +
-          (o.tracking_number ? '<p style="margin:12px 0 6px"><b>Tracking:</b> ' + esc((o.carrier ? o.carrier + ' ' : '') + o.tracking_number) + '</p>' : '') +
-          (o.payment_status === 'unpaid' && o.status === 'new' ? '<p class="muted" style="font-size:13.5px">We’ll email you to confirm payment before your order ships.</p>' : '') +
+          (o.tracking_number ? '<p style="margin:12px 0 6px"><b>Tracking:</b> ' + esc(o.carrier ? o.carrier + ' ' : '') +
+            (link ? '<a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + esc(link) + '" target="_blank" rel="noopener noreferrer">' + esc(o.tracking_number) + '</a>' : esc(o.tracking_number)) + '</p>' : '') +
+          (o.payment_status === 'unpaid' && o.status === 'new' ? '<p class="muted" style="font-size:13.5px">' + (HW.checkout && HW.checkout.cardPayments() ? 'Payment hasn’t been received for this order yet.' : 'We’ll email you to confirm payment before your order ships.') + '</p>' : '') +
           '<ul class="bullets" style="margin-top:10px">' + (o.items || []).map(function (i) {
             return '<li>' + esc(HW.seo.clip(i.name, 80)) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + ' × ' + i.qty + '</li>';
           }).join('') + '</ul>' +

@@ -662,6 +662,26 @@
       u.toast('Upload failed: ' + e.message);
     } finally { el.disabled = false; el.textContent = label; }
   };
+  /* The Cloudflare Worker that holds the Stripe and ShipStation keys (Storefront › Card payments). */
+  A.workerUrl = function () {
+    return String(((A.draft && A.draft.payments) || {}).workerUrl || (A.privDraft && A.privDraft.marketing && A.privDraft.marketing.endpoint) || '').trim().replace(/\/+$/, '');
+  };
+  /* Calls an admin-only worker route with the signed-in session. */
+  A.workerCall = async function (path, body) {
+    var base = A.workerUrl();
+    if (!/^https:\/\//.test(base)) throw new Error('Add the worker address in Storefront › Card payments first.');
+    var s = await A.sb.auth.getSession();
+    var token = s.data && s.data.session && s.data.session.access_token;
+    if (!token) throw new Error('Your session expired. Sign in again.');
+    var res;
+    try {
+      res = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(body || {}) });
+    } catch (e) { throw new Error('Couldn’t reach the worker. Check the address.'); }
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(data.error || ('Worker error ' + res.status));
+    return data;
+  };
+
   A.actions.copy = function (el) {
     var t = document.getElementById(el.dataset.target);
     var text = t ? (t.value != null ? t.value : t.textContent) : (el.dataset.text || '');

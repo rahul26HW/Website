@@ -197,7 +197,70 @@ The worker only emails addresses that subscribed in the last 10 minutes. The cod
 
 ---
 
-## 5. Optional: Snipcart (card payments)
+## 5. Card payments (Stripe) and ShipStation
+
+How it works:
+1. The shopper fills in checkout. The database saves the order and re-checks every price, the stock, the promo code and shipping.
+2. The worker opens a **Stripe Checkout** page for that saved order (card, Apple Pay, Google Pay). The amounts come from the saved order, never from the browser.
+3. When Stripe confirms payment, the worker marks the order **Paid** and sends it to **ShipStation** as "Awaiting shipment".
+4. When you buy a label in ShipStation, it tells the worker. The order becomes **Shipped**, with the carrier and tracking number. Shoppers see this on **Track your order**.
+
+If the shopper closes the Stripe page, the order stays **Unpaid**, and they can pay from the order page. Stripe payment pages expire after about 30 minutes. The order is then **Cancelled** and its promo code can be used again. Don't ship unpaid orders.
+
+All keys go into the Cloudflare worker (section 3). None go into the website or GitHub.
+
+### Step 1 — Stripe keys (start in test mode)
+1. Create or open your account at https://dashboard.stripe.com. Leave **Test mode** on for now.
+2. **Developers** → **API keys** → **Secret key** → **Reveal** → copy it (`sk_test_…`).
+3. **Developers** → **Webhooks** → **Add endpoint**:
+   - **Endpoint URL:** your worker address + `/stripe`, for example `https://home-weavers-ai.yourname.workers.dev/stripe`
+   - **Events:** `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`, `charge.refunded`
+   - **Add endpoint** → **Signing secret** → **Reveal** → copy it (`whsec_…`).
+4. Optional: **Settings** → **Customer emails** → turn on **Successful payments**, so Stripe emails receipts.
+
+### Step 2 — ShipStation keys (API v1)
+1. ShipStation → **Settings** (gear) → **Account** → **API Settings** → **Generate API Keys**. Copy the **API Key** and the **API Secret**.
+   API access depends on your ShipStation plan; if you don't see this page, ask ShipStation support.
+2. Make up a webhook token: any 32 or more random letters and numbers, for example from your password manager. Keep it private.
+3. Optional: to have ShipStation email shoppers their tracking number, set up the **Manual Orders** store's shipment notifications (ShipStation → **Settings** → **Selling Channels** → **Store Setup** → the "Manual Orders" store → **Notifications**).
+
+### Step 3 — Add the secrets to the worker
+Cloudflare → your worker → **Edit code** → paste the latest `ai-proxy.worker.js` → **Deploy**.
+Then **Settings** → **Variables and Secrets** → add each as **Type: Secret** → **Deploy**:
+
+| Name | Value |
+|---|---|
+| `SUPABASE_URL` | `https://soydgxrrwozmiqzutypr.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → **Project Settings** → **API Keys** → **Secret keys** |
+| `STRIPE_SECRET_KEY` | `sk_test_…` from Step 1 |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Step 1 |
+| `SHIPSTATION_API_KEY` | from Step 2 |
+| `SHIPSTATION_API_SECRET` | from Step 2 |
+| `SHIPSTATION_WEBHOOK_TOKEN` | the token you made in Step 2 |
+| `ALLOWED_ORIGINS` | `https://rahul26hw.github.io,http://localhost:8080` |
+
+### Step 4 — Turn it on in the admin
+1. Admin → **Storefront** → **Card payments (Stripe) & ShipStation** → paste the worker address → **Save changes**.
+2. Click **Check worker**. All three payment and shipping rows should show ✓ (Stripe shows "test mode").
+3. Click **Connect ShipStation tracking**. Expected: "✓ ShipStation will now send tracking numbers…".
+4. Tick **Take card payments with Stripe at checkout** → **Save changes**.
+
+### Step 5 — Test, then go live
+1. On the site, buy something and pay with card `4242 4242 4242 4242`, any future date, any CVC and any ZIP.
+2. Admin → **Orders**: the order shows **Paid** and "In ShipStation". In ShipStation it's under **Awaiting Shipment**.
+3. In ShipStation, create a test label (or mark it shipped with a tracking number). Within a minute the order shows **Shipped** with tracking.
+4. Also test closing the Stripe page: the order page offers **Pay securely** again.
+5. To go live: switch Stripe out of test mode, make a **live** webhook endpoint (same URL and events), then replace `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` with the live values → **Deploy** → **Check worker** shows "live mode".
+
+Notes:
+- Stock is not taken off automatically when an order is paid. Keep using **Deduct items from inventory** on the order, or manage stock in ShipStation.
+- Refunds: refund in Stripe. The order's payment changes to **Refunded** by itself.
+- If an order didn't reach ShipStation (the order shows the reason), fix it and click **Send to ShipStation** on the order.
+- Sales tax is not calculated. Talk to your accountant before you sell into states where you must collect it.
+
+---
+
+## 6. Optional: Snipcart (instead of the built-in checkout)
 
 1. Create an account at https://snipcart.com and connect a payment gateway (for example Stripe).
 2. Snipcart → **Account** → **API Keys** → copy the **public** test key.
@@ -207,11 +270,11 @@ The worker only emails addresses that subscribed in the last 10 minutes. The cod
    - Cloudflare worker → add the secrets `SNIPCART_SECRET_KEY` (Snipcart → **API Keys** → secret key) and `SUPABASE_SERVICE_ROLE_KEY`.
    - Snipcart → **Account** → **Webhooks** → add `https://home-weavers-ai.yourname.workers.dev/snipcart`.
 
-When Snipcart is off, the built-in checkout saves orders (no payment is taken) and shows shoppers that online payments aren't enabled yet.
+When Snipcart is off, the built-in checkout is used: with Stripe on (section 5) shoppers pay by card; with Stripe off it saves orders without payment and tells shoppers online payments aren't enabled yet.
 
 ---
 
-## 6. Publish on GitHub Pages
+## 7. Publish on GitHub Pages
 
 The site needs no build. Upload the files and GitHub serves them.
 It works at `https://USERNAME.github.io/REPO/`, at `https://USERNAME.github.io/` and on a custom domain;
@@ -275,7 +338,7 @@ New products still open before you do this (through `404.html`), just slower and
 | `js/*.js` | Storefront: data, routing, pages, cart, checkout, search, wishlist… (loaded in order by the small script list at the end of `<head>` in `index.html`) |
 | `js/admin/*.js` | Admin tabs (loaded only on `/admin`) |
 | `supabase-setup.sql` | Database, security rules and functions (safe to re-run) |
-| `ai-proxy.worker.js` | Cloudflare Worker: AI, images, welcome email, Snipcart webhook |
+| `ai-proxy.worker.js` | Cloudflare Worker: AI, images, welcome email, Stripe payments, ShipStation, Snipcart webhook |
 | `category/`, `product/`, `page/` | Page files made by `tools/build-pages.js` (copies of `index.html` with each page's title and description) |
 | `sitemap.xml`, `robots.txt` | Search engine files |
 | `tools/dev-server.js` | Local preview server (not used by GitHub Pages) |

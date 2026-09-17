@@ -3,13 +3,13 @@
   'use strict';
 
   var A = HW.A, u = HW.u, esc = u.esc;
-  var STATUSES = [['new', 'New'], ['packed', 'Packed'], ['shipped', 'Shipped'], ['delivered', 'Delivered'], ['refunded', 'Refunded']];
+  var STATUSES = [['new', 'New'], ['packed', 'Packed'], ['shipped', 'Shipped'], ['delivered', 'Delivered'], ['refunded', 'Refunded'], ['cancelled', 'Cancelled']];
   var PAYMENTS = [['unpaid', 'Unpaid'], ['paid', 'Paid'], ['refunded', 'Refunded']];
   var os = { filter: 'all', q: '', open: null, list: null };
   var ms = { list: null, open: null };
 
   function statusTag(s) {
-    var cls = { new: 'clay', packed: '', shipped: 'green', delivered: 'green', refunded: '' }[s] || '';
+    var cls = { new: 'clay', packed: '', shipped: 'green', delivered: 'green', refunded: '', cancelled: '' }[s] || '';
     var label = (STATUSES.find(function (x) { return x[0] === s; }) || [s, s])[1];
     return A.ui.tag(label, cls);
   }
@@ -36,7 +36,7 @@
     var counts = { all: os.list.length };
     STATUSES.forEach(function (s) { counts[s[0]] = os.list.filter(function (o) { return o.status === s[0]; }).length; });
     return '<h1 class="h1row">Orders <span class="btnrow"><button class="btn ghost sm" type="button" data-a="orders-refresh">↻ Refresh</button><button class="btn ghost sm" type="button" data-a="orders-csv">⬇ Export CSV</button></span></h1>' +
-      '<p class="sub">Orders from checkout' + (A.draft.snipcart.enabled ? ' and Snipcart' : '') + '. Newest first.</p>' +
+      '<p class="sub">Orders from checkout' + (A.draft.snipcart.enabled ? ' and Snipcart' : '') + '. Newest first.' + ((A.draft.payments || {}).stripe ? ' “Unpaid” orders haven’t finished Stripe payment — don’t ship them.' : '') + '</p>' +
       (os.error ? '<p class="badmsg">Couldn’t load orders: ' + esc(os.error) + '</p>' : '') +
       '<section class="panel"><div class="toolbar"><div class="subnav">' +
       [['all', 'All']].concat(STATUSES).map(function (s) {
@@ -80,6 +80,7 @@
         (o.customer_note ? '<div class="adwarn" style="margin-top:12px"><b>Customer note:</b> ' + esc(o.customer_note) + '</div>' : '') +
         '<div class="btnrow" style="margin-top:12px"><a class="btn ghost sm" href="' + mail + '" data-native>Email customer</a></div>') +
       '</div>' +
+      ui.panel('Payment &amp; ShipStation', paymentShipHTML(o)) +
       ui.panel('Fulfilment',
         '<div class="grid2">' + ui.field('Status', '@status', draft.status, { options: STATUSES }) + ui.field('Payment', '@payment_status', draft.payment_status, { options: PAYMENTS }) + '</div>' +
         '<div class="grid2">' + ui.field('Carrier', '@carrier', draft.carrier || '', { placeholder: 'USPS, UPS, FedEx…', type: 'trim' }) +
@@ -87,6 +88,22 @@
         ui.field('Private note', '@admin_note', draft.admin_note || '', { textarea: true, rows: 2, hint: 'Only visible here.' }) +
         '<p class="hint">Customers see status, carrier and tracking number on Track your order.</p>' +
         '<div class="btnrow"><button class="btn loom save-btn" type="button" data-a="order-save">Save order</button></div>');
+  }
+
+  function paymentShipHTML(o) {
+    var ref = o.payment_ref || '';
+    var stripeLink = /^pi_/.test(ref) ? 'https://dashboard.stripe.com/' + (/_test_/.test(ref) ? 'test/' : '') + 'payments/' + ref : '';
+    var pay = o.payment_status === 'paid'
+      ? '<p style="margin:0 0 6px">✓ Paid' + (o.paid_at ? ' ' + esc(new Date(o.paid_at).toLocaleString()) : '') + (ref ? ' · ' + (stripeLink ? '<a href="' + esc(stripeLink) + '" target="_blank" rel="noopener">View in Stripe</a>' : '<code>' + esc(ref) + '</code>') : '') + '</p>'
+      : o.status === 'cancelled'
+        ? '<p class="hint" style="margin:0 0 6px">Cancelled: the Stripe payment page expired without payment.</p>'
+        : '<p class="hint" style="margin:0 0 6px">' + (/^cs_/.test(ref) ? 'The customer opened the Stripe payment page but hasn’t paid yet.' : 'No online payment.') + '</p>';
+    var ship = o.shipstation_order_id
+      ? '<p style="margin:0 0 6px">✓ In ShipStation (order ' + esc(o.shipstation_order_id) + (o.shipstation_synced_at ? ', sent ' + esc(new Date(o.shipstation_synced_at).toLocaleString()) : '') + ')</p>'
+      : '<p class="hint" style="margin:0 0 6px">Not in ShipStation yet.' + (o.payment_status === 'paid' ? '' : ' Paid orders are sent automatically.') + '</p>';
+    var err = o.shipstation_error ? '<p class="badmsg" style="margin:0 0 6px">ShipStation said: ' + esc(o.shipstation_error) + '</p>' : '';
+    var btn = o.status === 'cancelled' ? '' : '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">' + (o.shipstation_order_id ? 'Send to ShipStation again' : 'Send to ShipStation') + '</button></div>';
+    return pay + ship + err + btn + (o.shipped_at ? '<p class="hint">Shipped ' + esc(new Date(o.shipped_at).toLocaleString()) + '</p>' : '');
   }
 
   A.tabs.orders = {
@@ -131,6 +148,18 @@
     A.newOrders = os.list.filter(function (x) { return x.status === 'new'; }).length;
     u.toast('Order ' + o.order_number + ' saved');
   };
+  A.actions['order-shipstation'] = async function (btn) {
+    var o = os.list.find(function (x) { return x.id === os.open; });
+    if (o.payment_status !== 'paid' && !confirm('This order isn’t paid. Send it to ShipStation as “awaiting payment”?')) return;
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      await A.workerCall('/shipstation/push', { order_id: o.id });
+      u.toast('Sent to ShipStation');
+    } catch (e) { u.toast('ShipStation: ' + e.message); }
+    var r = await A.sb.from('orders').select('*, order_items(*)').eq('id', o.id);
+    if (!r.error && r.data && r.data[0]) Object.assign(o, r.data[0]);
+    A.render();
+  };
   A.actions['order-deduct'] = async function () {
     var o = os.list.find(function (x) { return x.id === os.open; });
     if (A.dirtyStore() && !confirm('You have unsaved store changes. They will be saved together with the new stock. Continue?')) return;
@@ -145,12 +174,12 @@
   };
   A.actions['orders-csv'] = function () {
     var data = [['order_number', 'created_at', 'status', 'payment_status', 'source', 'name', 'email', 'phone', 'address_line1', 'address_line2', 'city', 'state', 'zip', 'country',
-      'sku', 'item', 'variant', 'qty', 'unit_price', 'line_total', 'subtotal', 'discount', 'promo_code', 'shipping', 'tax', 'total', 'carrier', 'tracking_number', 'customer_note']];
+      'sku', 'item', 'variant', 'qty', 'unit_price', 'line_total', 'subtotal', 'discount', 'promo_code', 'shipping', 'tax', 'total', 'carrier', 'tracking_number', 'customer_note', 'paid_at', 'payment_ref', 'shipstation_order_id']];
     (os.list || []).forEach(function (o) {
       var a = o.shipping_address || {};
       (o.order_items && o.order_items.length ? o.order_items : [{}]).forEach(function (i) {
         data.push([o.order_number, o.created_at, o.status, o.payment_status, o.source, o.name, o.email, o.phone, a.line1, a.line2, a.city, a.state, a.zip, a.country,
-          i.sku, i.name, i.variant, i.qty, i.unit_price, i.line_total, o.subtotal, o.discount, o.promo_code, o.shipping, o.tax, o.total, o.carrier, o.tracking_number, o.customer_note]);
+          i.sku, i.name, i.variant, i.qty, i.unit_price, i.line_total, o.subtotal, o.discount, o.promo_code, o.shipping, o.tax, o.total, o.carrier, o.tracking_number, o.customer_note, o.paid_at, o.payment_ref, o.shipstation_order_id]);
       });
     });
     A.download('home-weavers-orders-' + A.today() + '.csv', A.toCsv(data), 'text/csv');

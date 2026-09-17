@@ -357,6 +357,19 @@ create table if not exists public.orders (
 );
 alter table public.orders enable row level security;
 
+-- Card payments (Stripe) and ShipStation. Safe to run on an existing database.
+alter table public.orders add column if not exists pay_token             uuid not null default gen_random_uuid(); -- lets the shopper who placed the order pay for it
+alter table public.orders add column if not exists payment_ref           text;        -- Stripe Checkout session (cs_…) then payment (pi_…)
+alter table public.orders add column if not exists paid_at               timestamptz;
+alter table public.orders add column if not exists shipped_at            timestamptz;
+alter table public.orders add column if not exists shipstation_order_id  text;
+alter table public.orders add column if not exists shipstation_synced_at timestamptz;
+alter table public.orders add column if not exists shipstation_error     text;
+alter table public.orders drop constraint if exists orders_status_check;
+alter table public.orders add constraint orders_status_check
+  check (status in ('new','packed','shipped','delivered','refunded','cancelled'));
+create index if not exists orders_payment_ref_idx on public.orders(payment_ref);
+
 drop trigger if exists orders_touch on public.orders;
 create trigger orders_touch before update on public.orders
   for each row execute function public._touch_updated_at();
@@ -448,6 +461,7 @@ declare
   v_promo     jsonb;
   v_code      text := nullif(trim(coalesce(p_order->>'promoCode','')), '');
   v_order_id  uuid;
+  v_token     uuid;
   v_number    text;
   k           text;
 begin
@@ -600,7 +614,7 @@ begin
           round(v_sub,2), round(v_discount,2), round(v_ship,2), round(v_total,2),
           case when v_code is not null then upper(v_promo->>'code') end,
           left(nullif(trim(p_order->>'note'),''), 1000))
-  returning id into v_order_id;
+  returning id, pay_token into v_order_id, v_token;
 
   insert into public.order_items (order_id, product_id, sku, name, variant, unit_price, qty, line_total, image)
   select v_order_id, l->>'product_id', l->>'sku', l->>'name', l->>'variant',
@@ -613,7 +627,7 @@ begin
   end if;
 
   return jsonb_build_object(
-    'order_number', v_number, 'email', v_email,
+    'order_number', v_number, 'email', v_email, 'pay_token', v_token,
     'subtotal', round(v_sub,2), 'discount', round(v_discount,2),
     'shipping', round(v_ship,2), 'total', round(v_total,2),
     'items', v_lines);
@@ -633,6 +647,7 @@ returns jsonb language sql stable security definer set search_path = '' as $$
     'payment_status',  o.payment_status,
     'carrier',         o.carrier,
     'tracking_number', o.tracking_number,
+    'shipped_at',      o.shipped_at,
     'total',           o.total,
     'items', coalesce((select jsonb_agg(jsonb_build_object('name', i.name, 'variant', i.variant, 'qty', i.qty))
                          from public.order_items i where i.order_id = o.id), '[]'::jsonb))
@@ -671,7 +686,7 @@ grant select, update, delete on public.contact_messages to authenticated;
 grant select, update on public.orders to authenticated;
 grant select on public.order_items, public.promo_redemptions to authenticated;
 
--- service_role (used only by the Cloudflare Worker for Snipcart webhooks)
+-- service_role (used only by the Cloudflare Worker: Snipcart, Stripe and ShipStation webhooks)
 grant all on public.orders, public.order_items, public.promo_redemptions to service_role;
 grant usage, select on sequence public.order_number_seq to service_role;
 

@@ -11,6 +11,15 @@
 
 ## After launch
 
+### Card payments (Stripe Checkout) and ShipStation
+- **Checkout:** with Stripe on (Admin › Storefront), the order is saved and priced by `place_order` as before, then the shopper pays on a Stripe Checkout page built by the worker from the saved order. The cart is kept until payment succeeds; the order page offers **Pay securely** if the shopper backs out.
+- **Worker routes:** `/checkout/session`, `/stripe` (signed webhook: paid, expired → cancelled and promo freed, refunded), `/shipstation/push`, `/shipstation/setup` (registers SHIP_NOTIFY) and `/shipstation/webhook` (token-checked; only calls ssapi.shipstation.com). `GET /` lists which features are configured.
+- **ShipStation:** paid orders are created automatically (orderKey = order id, so resending updates the same order; discount sent as an adjustment line). Shipments set status Shipped, carrier, tracking number and shipped date.
+- **Database:** `orders` gains `pay_token`, `payment_ref`, `paid_at`, `shipped_at`, `shipstation_order_id`, `shipstation_synced_at`, `shipstation_error` and the status `cancelled`; `place_order` returns `pay_token`; `track_order` returns `shipped_at`. Applied to the live project.
+- **Admin:** Storefront › Card payments panel (worker check, connect ShipStation tracking); order detail shows payment, Stripe link, ShipStation status and **Send to ShipStation**; Cancelled filter; CSV adds paid_at, payment_ref, shipstation_order_id.
+- **Track your order:** carrier tracking links (USPS, UPS, FedEx, DHL) and a cancelled message.
+- **Tests:** 43 worker tests (mocked Stripe, ShipStation and Supabase, including signature, tampering and SSRF checks), SQL tests on a local Postgres, and an 11-step browser test of checkout → Stripe cancel → pay again → success, worker error and tracking.
+
 - **Small images:** product cards, cart, checkout, search results, category and social tiles, and gallery thumbnails
   now load a 700px copy (about 40–60 KB) instead of the full photo. The product page's main photo uses `srcset`, so phones get the small copy too.
   The copies live in Storage under `thumbs/`, mapped in `store.thumbs`. New uploads get one automatically, and

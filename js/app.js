@@ -103,6 +103,7 @@
     'lb-zoom': function (el, e) { HW.lightbox.toggleZoom(el.classList.contains('lb-stage') ? e : null); },
     'size-guide': function (el) { HW.sizeGuide.open(el); },
     consent: function (el) { HW.consent.set(el.dataset.level); },
+    'pay-order': function (el) { HW.checkout.payAgain(el); },
     'consent-settings': function () { HW.consent.show(); var b = document.querySelector('#cookieBanner button'); if (b) b.focus(); }
   };
 
