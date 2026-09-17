@@ -102,11 +102,16 @@
       ? '<p style="margin:0 0 6px">✓ In ShipStation (order ' + esc(o.shipstation_order_id) + (o.shipstation_synced_at ? ', sent ' + esc(new Date(o.shipstation_synced_at).toLocaleString()) : '') + ')</p>'
       : '<p class="hint" style="margin:0 0 6px">Not in ShipStation yet.' + (o.payment_status === 'paid' ? '' : ' Paid orders are sent automatically.') + '</p>';
     var err = o.shipstation_error ? '<p class="badmsg" style="margin:0 0 6px">ShipStation said: ' + esc(o.shipstation_error) + '</p>' : '';
-    var btn = o.status === 'cancelled'
+    // Once shipped (or refunded) the order is final in ShipStation; sending it again would reset it to "awaiting shipment".
+    var btn = /^(shipped|delivered|refunded)$/.test(o.status) ? ''
+      : o.status === 'cancelled'
       ? (o.shipstation_order_id ? '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">Cancel in ShipStation</button></div>' : '')
       : '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">' + (o.shipstation_order_id ? 'Send to ShipStation again' : 'Send to ShipStation') + '</button>' +
         (o.shipstation_order_id && /^(new|packed)$/.test(o.status) ? '<button class="btn ghost sm" type="button" data-a="order-sync">Get tracking from ShipStation</button>' : '') + '</div>';
-    return pay + ship + err + btn + (o.shipped_at ? '<p class="hint">Shipped ' + esc(new Date(o.shipped_at).toLocaleString()) + '</p>' : '');
+    // ShipStation sends a ship date without a time (stored as midnight UTC), so show just the date then.
+    var sd = o.shipped_at ? new Date(o.shipped_at) : null;
+    var shippedText = sd ? (/T00:00:00(\.0+)?(Z|\+00:00)$/.test(o.shipped_at) ? sd.toLocaleDateString(undefined, { timeZone: 'UTC' }) : sd.toLocaleString()) : '';
+    return pay + ship + err + btn + (sd ? '<p class="hint">Shipped ' + esc(shippedText) + '</p>' : '');
   }
 
   A.tabs.orders = {
