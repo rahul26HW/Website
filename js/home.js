@@ -220,6 +220,7 @@
   HW.rails = {
     scroll: function (id, dir) {
       var r = document.getElementById(id); if (!r) return;
+      r.classList.add('snap');
       r.scrollBy({ left: dir * Math.max(280, r.clientWidth * 0.85), behavior: u.reducedMotion() ? 'auto' : 'smooth' });
     },
     update: function (r) {
@@ -233,7 +234,12 @@
     init: function () {
       u.qsa('.rail').forEach(function (r) {
         HW.rails.update(r);
-        if (!r._wired) { r._wired = true; r.addEventListener('scroll', function () { HW.rails.update(r); }, { passive: true }); }
+        if (!r._wired) {
+          r._wired = true;
+          r.addEventListener('scroll', function () { HW.rails.update(r); }, { passive: true });
+          var snap = function () { r.classList.add('snap'); };
+          ['pointerdown', 'touchstart', 'wheel', 'focusin'].forEach(function (ev) { r.addEventListener(ev, snap, { once: true, passive: true }); });
+        }
       });
     }
   };

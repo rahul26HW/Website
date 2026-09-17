@@ -19,6 +19,9 @@
   Direct visits now return HTTP 200 with the right title, description and canonical link, with no redirect through `404.html`
   (Lighthouse measured about 0.9–1.1 s lost to that redirect). `404.html` still covers pages added later.
 - Category pages load the first four product photos right away (the first with high priority) instead of lazily; it was the page's largest image.
+- **Home page LCP:** the product rails' scroll snapping made Chrome see an automatic scroll on page load, which stops
+  Largest Contentful Paint measurement (Lighthouse reported "NO_LCP" and a performance score of 0). Snapping now starts on the first touch, scroll or arrow click.
+- Page files preload the category's first product photo or the product's main photo, so it starts downloading before the scripts run.
 - Hero slide dots have 24px tap targets (the dot itself is still 9px).
 - `404.html` no longer requests a missing favicon on deep links.
 - Promotions: `WELCOME10` turned off; `WELCOME15` is the sign-up code.

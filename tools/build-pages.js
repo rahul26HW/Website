@@ -63,12 +63,16 @@ async function main() {
   const pages = [];
   m.visibleCategories().forEach(function (c) {
     const n = m.productsIn(c);
+    const first = m.stockSort(n)[0];
     pages.push({ route: 'category/' + c.slug, title: c.seoTitle || c.name,
+      preload: first ? { src: m.thumb(m.imageOrSwatch(first)) } : null,
       description: c.seoDescription || ('Shop ' + c.name + ' from ' + brand + ' — ' + n.length + ' product' + (n.length === 1 ? '' : 's') + '. ' + tagline + '.'),
       image: n[0] ? m.primaryImage(n[0]) : c.image });
   });
   (data.products || []).filter(m.listable).forEach(function (p) {
+    const img = m.primaryImage(p);
     pages.push({ route: 'product/' + p.slug, title: p.seoTitle || p.name, type: 'product',
+      preload: img ? { src: img, srcset: m.srcset(img), sizes: '(max-width: 980px) 92vw, 50vw' } : null,
       description: p.seoDescription || text(p.description) || (p.name + ' from ' + brand + '.'), image: m.primaryImage(p) });
   });
   (data.pages || []).filter(function (p) { return p.show !== false; }).forEach(function (p) {
@@ -84,6 +88,9 @@ async function main() {
     const desc = clip(pg.description || (brand + ' — bath rugs, towels and home textiles. ' + tagline + '.'), 160);
     const url = abs(pg.route);
     const img = asset(pg.image);
+    // Start the page's main photo (its largest element) downloading before the scripts run.
+    const pre = pg.preload && /^https:\/\//.test(pg.preload.src) ? '\n<link rel="preload" as="image" href="' + attr(pg.preload.src) + '"' +
+      (pg.preload.srcset ? ' imagesrcset="' + attr(pg.preload.srcset) + '" imagesizes="' + attr(pg.preload.sizes) + '"' : '') + ' fetchpriority="high">' : '';
     let html = index
       // Files sit one folder down, so relative links need "../".
       .replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|tel:)/g, '$1../')
@@ -94,7 +101,7 @@ async function main() {
       .replace(/(<meta property="og:description" content=")[^"]*"/, '$1' + attr(desc) + '"')
       .replace(/(<meta name="twitter:card" content=")[^"]*">/, '$1' + (img ? 'summary_large_image' : 'summary') + '">' +
         '\n<link rel="canonical" href="' + attr(url) + '">\n<meta property="og:url" content="' + attr(url) + '">' +
-        (img ? '\n<meta property="og:image" content="' + attr(img) + '">' : ''));
+        (img ? '\n<meta property="og:image" content="' + attr(img) + '">' : '') + pre);
     const file = path.join(ROOT, pg.route + '.html');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, html);

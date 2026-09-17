@@ -108,7 +108,9 @@ header.site{position:sticky;top:var(--snip-top,0);z-index:40;background:rgba(247
 
 /* ---- horizontal rails (shared) ---- */
 .rail-wrap{position:relative}
-.rail{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x proximity;padding:4px 2px 8px;scrollbar-width:none;-ms-overflow-style:none;scroll-behavior:smooth}
+.rail{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 8px;scrollbar-width:none;-ms-overflow-style:none;scroll-behavior:smooth}
+/* Snapping starts on first touch/scroll: an automatic snap on page load counts as a scroll and stops Chrome measuring LCP. */
+.rail.snap{scroll-snap-type:x proximity}
 .rail::-webkit-scrollbar{display:none}
 .rail>*{scroll-snap-align:start}
 .cat-rail .cat-tile{flex:0 0 calc((100% - 42px)/4)}
