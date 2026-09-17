@@ -143,6 +143,18 @@
     return m.firstPhoto(p.images, p.primary) || p.image || '';
   };
 
+  /* Small version of an image (made by the admin), or the image itself. */
+  m.thumb = function (url) {
+    var t = DB() && DB().thumbs;
+    return (t && url && t[url]) || url;
+  };
+  /* srcset for a large image that has a small version. */
+  m.srcset = function (url) {
+    var t = m.thumb(url);
+    if (!url || t === url) return '';
+    return HW.asset(t) + ' 700w, ' + HW.asset(url) + ' 1600w';
+  };
+
   /* Brand fallback image: woven swatch as an SVG data URI. */
   m.weaveSwatch = function (color, label) {
     var c = color || '#C9BBA6';

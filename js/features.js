@@ -213,7 +213,7 @@
       box.innerHTML = res.slice(0, 6).map(function (p) {
         var r = m.priceRange(p), out = m.productOut(p);
         return '<li><a class="sres" href="' + HW.link('/product/' + p.slug) + '">' +
-          '<img src="' + esc(HW.asset(m.imageOrSwatch(p))) + '" alt="" width="56" height="56" loading="lazy">' +
+          '<img src="' + esc(HW.asset(m.thumb(m.imageOrSwatch(p)))) + '" alt="" width="56" height="56" loading="lazy">' +
           '<span class="snm">' + esc(HW.seo.clip(p.name, 80)) + '<span class="spr">' + (r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min)) + (out ? ' · Out of stock' : '') + '</span></span></a></li>';
       }).join('') + (res.length > 6 ? '<li><a class="sall link-u" href="' + HW.link('/search?q=' + encodeURIComponent(q)) + '">See all ' + res.length + ' results</a></li>' : '');
     }, 120)

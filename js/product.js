@@ -32,7 +32,7 @@
   function mainHTML(it, alt, eager) {
     if (it.type === 'video') return '<div class="galvideo">' + videoPlayer(it.src) + '</div>';
     return '<button class="zoombtn" type="button" data-act="zoom" aria-label="Zoom photo: ' + esc(alt) + '">' +
-      '<img class="ph" src="' + esc(HW.asset(it.src)) + '" alt="' + esc(alt) + '" width="900" height="900" decoding="async"' + (eager ? ' fetchpriority="high"' : '') + '>' +
+      '<img class="ph" src="' + esc(HW.asset(it.src)) + '"' + (m.srcset(it.src) ? ' srcset="' + esc(m.srcset(it.src)) + '" sizes="(max-width: 980px) 92vw, 50vw"' : '') + ' alt="' + esc(alt) + '" width="900" height="900" decoding="async"' + (eager ? ' fetchpriority="high"' : '') + '>' +
       '<span class="zoomhint" aria-hidden="true">⤢ Zoom</span></button>';
   }
 
@@ -42,7 +42,7 @@
     var thumbs = items.map(function (it, i) {
       var src = it.type === 'video' ? it.poster : it.src;
       return '<button class="vth ' + (i === idx ? 'active' : '') + '" type="button" data-act="gal" data-i="' + i + '" aria-label="' + (it.type === 'video' ? 'Play video' : 'Show photo ' + (i + 1) + ' of ' + items.length) + '"' + (i === idx ? ' aria-current="true"' : '') + '>' +
-        (src ? '<img src="' + esc(HW.asset(src)) + '" alt="" loading="lazy" decoding="async" width="76" height="76">' : '') +
+        (src ? '<img src="' + esc(HW.asset(m.thumb(src))) + '" alt="" loading="lazy" decoding="async" width="76" height="76">' : '') +
         (it.type === 'video' ? '<span class="vth-play" aria-hidden="true">▶</span>' : '') + '</button>';
     }).join('');
     var arrows = items.length > 6;

@@ -40,7 +40,7 @@
 
     return '<article class="pcard reveal' + (out ? ' is-out' : '') + '">' +
       '<div class="imgwrap">' +
-      '<a href="' + url + '" tabindex="-1" aria-hidden="true"><img class="ph" src="' + esc(HW.asset(m.imageOrSwatch(p))) + '" alt="' + esc(m.imageAlt(p)) + '" loading="lazy" decoding="async" width="600" height="770"></a>' +
+      '<a href="' + url + '" tabindex="-1" aria-hidden="true"><img class="ph" src="' + esc(HW.asset(m.thumb(m.imageOrSwatch(p)))) + '" alt="' + esc(m.imageAlt(p)) + '" loading="lazy" decoding="async" width="600" height="770"></a>' +
       badge + (HW.wishlist ? HW.wishlist.button(p) : '') + '<div class="quick">' + action + '</div></div>' +
       '<div class="meta"><div class="cat">' + esc(cat ? cat.name : '') + '</div>' +
       '<' + h + ' class="pname"><a href="' + url + '">' + esc(p.name) + '</a></' + h + '>' +

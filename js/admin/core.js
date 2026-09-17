@@ -650,7 +650,11 @@
     if (!file) return;
     el.disabled = true; var label = el.textContent; el.textContent = 'Uploading…';
     try {
-      var url = await A.media.upload(file, el.dataset.folder || 'misc', { max: +el.dataset.max || 2000 });
+      var folder = el.dataset.folder || 'misc';
+      var url = await A.media.upload(file, folder, { max: +el.dataset.max || 2000 });
+      if (/^(products|categories|social)/.test(folder)) {
+        try { A.draft.thumbs = A.draft.thumbs || {}; A.draft.thumbs[url] = await A.media.upload(file, 'thumbs/' + folder, { max: 700, quality: 0.78 }); } catch (e) {}
+      }
       input.value = url;
       input.dispatchEvent(new Event('input', { bubbles: true }));
       u.toast('Image uploaded');

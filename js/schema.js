@@ -58,6 +58,7 @@
       categories: [],
       products: [],
       inventory: {},
+      thumbs: {},                     // full image URL -> small (700px) WebP URL, used for cards and thumbnails
       promos: [],
       newsletter: { couponCode: '', emailEndpoint: '' },
       shipping: { enabled: true, freeThreshold: 75, flatRate: 9.95 },
@@ -154,6 +155,9 @@
     delete d.password;
     delete d.subscribers;
     delete d.marketing;
+
+    if (!isObj(d.thumbs)) d.thumbs = {};
+    Object.keys(d.thumbs).forEach(function (k) { if (typeof d.thumbs[k] !== 'string' || !/^https:\/\//.test(d.thumbs[k])) delete d.thumbs[k]; });
 
     if (!Array.isArray(d.hero.slides)) d.hero.slides = [];
     d.hero.slides.forEach(function (s) {

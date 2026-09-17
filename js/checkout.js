@@ -27,7 +27,7 @@
 
   function summaryHTML(t) {
     return '<h2>Order summary</h2>' + t.lines.map(function (l) {
-      return '<div class="co-line"><div class="thumb"><img src="' + esc(HW.asset(l.image)) + '" alt="" width="56" height="56" loading="lazy"><span class="qty" aria-label="Quantity ' + l.qty + '">' + l.qty + '</span></div>' +
+      return '<div class="co-line"><div class="thumb"><img src="' + esc(HW.asset(HW.m.thumb(l.image))) + '" alt="" width="56" height="56" loading="lazy"><span class="qty" aria-label="Quantity ' + l.qty + '">' + l.qty + '</span></div>' +
         '<div><div class="nm">' + esc(l.name) + '</div>' + (l.variant ? '<div class="vr">' + esc(l.variant) + '</div>' : '') + '</div>' +
         '<div>' + u.money(l.price * l.qty) + '</div></div>';
     }).join('') +

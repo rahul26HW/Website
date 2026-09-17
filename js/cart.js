@@ -131,7 +131,7 @@
       }
       items.innerHTML = '<ul style="list-style:none;margin:0;padding:0">' + t.lines.map(function (l) {
         return '<li class="citem">' +
-          '<div class="thumb"><img src="' + esc(HW.asset(l.image)) + '" alt="" width="74" height="74" loading="lazy"></div>' +
+          '<div class="thumb"><img src="' + esc(HW.asset(m.thumb(l.image))) + '" alt="" width="74" height="74" loading="lazy"></div>' +
           '<div><h3 class="h4" style="font-family:var(--disp);font-size:16px;margin:0 0 3px;line-height:1.25">' + esc(HW.seo.clip(l.name, 90)) + '</h3>' +
           (l.variant ? '<div class="muted" style="font-size:12.5px;margin:-1px 0 2px">' + esc(l.variant) + '</div>' : '') +
           (!l.inStock ? '<div style="font-size:12.5px;color:var(--clay);font-weight:600">Out of stock — please remove</div>' : '') +

@@ -44,6 +44,48 @@
   A.media = {
     isOurs: isOurs,
 
+    /* Count of catalog images (not hero/logo/home band) with no small copy yet. */
+    missingThumbs: function (d) {
+      var t = d.thumbs || {}, seen = {};
+      A.media.collect(d, true).forEach(function (r) { if (!/^(logo|hero|home)$/.test(r.folder) && !t[r.url] && !/\.(svg|gif)(\?|$)/i.test(r.url)) seen[r.url] = 1; });
+      return Object.keys(seen).length;
+    },
+
+    /* Small copies (700px) of catalog images for cards, cart and gallery thumbnails.
+       Map: d.thumbs[fullUrl] = thumbUrl. Hero, logo and home band are shown large, so skipped.
+       Entries for images no longer used are dropped. */
+    makeThumbs: async function (d, onProgress, shouldStop) {
+      d.thumbs = d.thumbs && typeof d.thumbs === 'object' ? d.thumbs : {};
+      var refs = A.media.collect(d, true).filter(function (r) { return !/^(logo|hero|home)$/.test(r.folder); });
+      var used = {};
+      refs.forEach(function (r) { used[r.url] = r; });
+      Object.keys(d.thumbs).forEach(function (k) { if (!used[k]) delete d.thumbs[k]; });
+      var queue = Object.keys(used).filter(function (k) { return !d.thumbs[k] && !/\.(svg|gif)(\?|$)/i.test(k); });
+      var total = queue.length, done = 0, failures = [];
+      async function worker() {
+        while (queue.length) {
+          if (shouldStop && shouldStop()) return;
+          var url = queue.shift(), r = used[url];
+          try {
+            var res = await fetch(url);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var conv = await toWebp(await res.blob(), 700, 0.78);
+            var name = decodeURIComponent(url.split('?')[0].split('/').pop() || 'image');
+            var path = 'thumbs/' + r.folder + '/' + safeName(name) + '-' + rand() + '.' + conv.ext;
+            var up = await A.sb.storage.from(BUCKET).upload(path, conv.blob, { contentType: conv.type, cacheControl: '31536000', upsert: false });
+            if (up.error) throw new Error(up.error.message || 'Upload failed');
+            d.thumbs[url] = A.sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+          } catch (e) {
+            failures.push({ url: url, label: r.label, error: e.message });
+          }
+          done++;
+          onProgress && onProgress(done, total, failures);
+        }
+      }
+      await Promise.all([worker(), worker(), worker(), worker()]);
+      return { total: total, done: done, failures: failures };
+    },
+
     upload: async function (fileOrBlob, folder, o) {
       o = o || {};
       if (!fileOrBlob) throw new Error('No file chosen');
@@ -58,11 +100,11 @@
     },
 
     /* Every image URL in the store, with a setter to replace it. */
-    collect: function (d) {
+    collect: function (d, ours) {
       var refs = [];
       function add(obj, key, folder, label) {
         var v = obj && obj[key];
-        if (typeof v === 'string' && /^https?:\/\//i.test(v.trim()) && !isOurs(v)) refs.push({ obj: obj, key: key, url: v.trim(), folder: folder, label: label });
+        if (typeof v === 'string' && /^https?:\/\//i.test(v.trim()) && (ours ? isOurs(v.trim()) : !isOurs(v))) refs.push({ obj: obj, key: key, url: v.trim(), folder: folder, label: label });
       }
       add(d.brand, 'logoImage', 'logo', 'Logo');
       (d.hero.slides || []).forEach(function (s, i) { add(s, 'image', 'hero', 'Hero slide ' + (i + 1)); add(s, 'mobileImage', 'hero', 'Hero slide ' + (i + 1) + ' (mobile)'); });

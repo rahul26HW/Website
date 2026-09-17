@@ -90,7 +90,7 @@
         railHTML('catRail', 'cat-rail', cats.map(function (c, i) {
           var n = m.productsIn(c).length;
           var ph = c.image
-            ? '<img class="ph" src="' + esc(HW.asset(c.image)) + '" alt="" loading="lazy" decoding="async" width="600" height="770">'
+            ? '<img class="ph" src="' + esc(HW.asset(m.thumb(c.image))) + '" alt="" loading="lazy" decoding="async" width="600" height="770">'
             : '<div class="ph" style="background:linear-gradient(160deg,' + SWATCH[i % SWATCH.length] + ',' + SWATCH[(i + 4) % SWATCH.length] + ')"></div>';
           return '<a class="cat-tile reveal" href="' + HW.link('/category/' + c.slug) + '">' + ph + '<div class="ov"></div>' +
             '<div class="lab"><span>' + u.plural(n, 'product') + '</span><h3>' + esc(c.name) + '</h3></div></a>';
@@ -140,7 +140,7 @@
         (g.heading ? '<div class="wrap"><div class="shead reveal" style="margin-bottom:18px"><div class="weave-rule">' + HW.SVG.weave + '</div><h2>' + esc(g.heading) + '</h2></div></div>' : '') +
         '<div class="sgrid">' + tiles.map(function (t) {
           var name = (t.platform || 'social').replace(/^\w/, function (c) { return c.toUpperCase(); });
-          var inner = (t.image ? '<img src="' + esc(HW.asset(t.image)) + '" alt="" loading="lazy" decoding="async" width="600" height="540">' : '') +
+          var inner = (t.image ? '<img src="' + esc(HW.asset(m.thumb(t.image))) + '" alt="" loading="lazy" decoding="async" width="600" height="540">' : '') +
             '<span class="sgtile-scrim"></span><span class="sgtile-circle">' + (HW.SVG[t.platform] || HW.SVG.logo) + '</span>';
           return /^https?:\/\//i.test(t.url)
             ? '<a class="sgtile ' + (t.image ? '' : 'noimg') + '" href="' + esc(t.url) + '" target="_blank" rel="noopener noreferrer" aria-label="' + esc(name) + ' (opens in a new tab)">' + inner + '</a>'

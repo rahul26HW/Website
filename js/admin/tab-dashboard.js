@@ -41,6 +41,8 @@
     if (welcome.length > 1) items.push(['warn', welcome.length + ' welcome codes are active (' + welcome.map(function (p) { return p.code; }).join(', ') + '). Keep one.', 'promotions']);
     var ext = A.media.collect(A.clone(d)).length;
     if (ext) items.push(['warn', ext + ' image link' + (ext > 1 ? 's point' : ' points') + ' outside your Storage (slow Dropbox/postimg files). Use “Move images to Storage” below.', null]);
+    var noThumb = A.media.missingThumbs(d);
+    if (noThumb) items.push(['info', noThumb + ' catalog image' + (noThumb > 1 ? 's have' : ' has') + ' no small version yet, so product grids load the full photo. Use “Create small images” below.', null]);
     if (!d.brand.logoImage) items.push(['info', 'No logo image — the text logo is shown. Add one in Storefront.', 'storefront']);
     if (!u.isEmail((d.contact || {}).email)) items.push(['warn', 'No contact email. Add one in Storefront > Contact.', 'storefront']);
     if (!(d.settings || {}).siteUrl) items.push(['info', 'Site address not set (used for sitemap and share links). Add it in Storefront > Store settings.', 'storefront']);
@@ -86,6 +88,11 @@
           '<p class="hint" style="margin:-6px 0 12px">Copies every product, hero, category and logo image that is hosted elsewhere (Dropbox, postimg…) into your Supabase Storage as fast WebP files, then updates the links. Large originals (about 1 MB each) become roughly 100–200 KB. Nothing is deleted from Dropbox.</p>' +
           '<div class="btnrow"><button class="btn loom sm" type="button" data-a="media-migrate">Move images to Storage</button></div>' +
           '<div id="migrateOut" aria-live="polite" style="margin-top:10px"></div>') +
+
+        A.ui.panel('Small images for faster pages',
+          '<p class="hint" style="margin:-6px 0 12px">Makes a 700px copy of every product, category and social image. Product cards, the cart and gallery thumbnails use the small copy; the product page still shows the full photo. New uploads get one automatically. Run this after pasting image links or importing a backup.</p>' +
+          '<div class="btnrow"><button class="btn loom sm" type="button" data-a="media-thumbs">Create small images</button></div>' +
+          '<div id="thumbsOut" aria-live="polite" style="margin-top:10px"></div>') +
 
         A.ui.panel('Recently added', recent.length ? '<table class="adt"><thead><tr><th><span class="sr-only">Photo</span></th><th>Name</th><th>Category</th><th>Price</th></tr></thead><tbody>' +
           recent.map(function (p) {
@@ -159,6 +166,24 @@
     btn.disabled = false;
     out.innerHTML = '<p class="' + (saved ? 'okmsg' : 'badmsg') + '">' + (saved ? 'Moved ' + (res.done - res.failures.length) + ' of ' + res.total + ' images and saved.' : 'Images were uploaded but the store did NOT save. Try Save changes again.') + '</p>' +
       (res.failures.length ? '<details><summary class="hint">' + res.failures.length + ' could not be moved</summary><ul class="hint">' + res.failures.map(function (f) { return '<li>' + esc(f.label) + ': ' + esc(f.error) + '</li>'; }).join('') + '</ul></details>' : '');
+  };
+
+  A.actions['media-thumbs'] = async function (btn) {
+    if (A.dirty() && !confirm('You have unsaved changes. They will be saved together with the small images. Continue?')) return;
+    var out = document.getElementById('thumbsOut');
+    btn.disabled = true; stopMigrate = false;
+    out.innerHTML = '<div class="progress"><i style="width:0%"></i></div><p class="hint" id="thTxt">Starting…</p><button class="txtbtn" type="button" id="thStop">Stop</button>';
+    document.getElementById('thStop').onclick = function () { stopMigrate = true; };
+    var before = JSON.stringify(A.draft.thumbs || {});
+    var res = await A.media.makeThumbs(A.draft, function (done, total, fails) {
+      var bar = out.querySelector('.progress i'); if (bar) bar.style.width = Math.round(done / total * 100) + '%';
+      var t = document.getElementById('thTxt'); if (t) t.textContent = done + ' of ' + total + ' images' + (fails.length ? ' · ' + fails.length + ' failed' : '');
+    }, function () { return stopMigrate; });
+    btn.disabled = false;
+    if (JSON.stringify(A.draft.thumbs) === before) { out.innerHTML = '<p class="hint">Every catalog image already has a small version. 🎉</p>'; return; }
+    var saved = await A.saveStore('Small images saved');
+    out.innerHTML = '<p class="' + (saved ? 'okmsg' : 'badmsg') + '">' + (saved ? 'Created ' + (res.done - res.failures.length) + ' of ' + res.total + ' small images and saved.' : 'Small images were uploaded but the store did NOT save. Try Save changes again.') + '</p>' +
+      (res.failures.length ? '<details><summary class="hint">' + res.failures.length + ' failed</summary><ul class="hint">' + res.failures.map(function (f) { return '<li>' + esc(f.label) + ': ' + esc(f.error) + '</li>'; }).join('') + '</ul></details>' : '');
   };
 
   A.actions['backup-export'] = async function () {

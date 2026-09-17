@@ -9,6 +9,15 @@
 - Marketing results auto-save to `store_private` and can be deleted.
 - **Move images to Storage:** 444 images copied with 0 failures. The live store has 0 Dropbox links, and photos are about 250 KB WebP instead of 0.7–1.1 MB.
 
+## After launch
+
+- **Small images:** product cards, cart, checkout, search results, category and social tiles, and gallery thumbnails
+  now load a 700px copy (about 40–60 KB) instead of the full photo. The product page's main photo uses `srcset`, so phones get the small copy too.
+  The copies live in Storage under `thumbs/`, mapped in `store.thumbs`. New uploads get one automatically, and
+  Dashboard › **Create small images** fills in any that are missing. With no small copy, the full photo is used.
+- Promotions: `WELCOME10` turned off; `WELCOME15` is the sign-up code.
+- Towel product names shortened to under 50 characters, with features and SEO titles added (URLs unchanged).
+
 ## Phase 5 — Mobile, performance, deploy
 
 - **No layout shift while loading:** the page reserves space until the store loads, and the menu row keeps its height.
