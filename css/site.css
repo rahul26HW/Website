@@ -722,5 +722,7 @@ body.noscroll{overflow:hidden}
 
 /* ---- no layout shift while the store loads ---- */
 main#view.booting{min-height:100vh}
+/* On short pages the footer would slide up into view once content arrives (a layout shift); hidden, it just appears. */
+main#view.booting ~ footer.site{visibility:hidden}
 #topnav{min-height:42px}
 @media(max-width:720px){#topnav{min-height:0}}
