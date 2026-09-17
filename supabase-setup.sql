@@ -361,6 +361,7 @@ alter table public.orders enable row level security;
 alter table public.orders add column if not exists pay_token             uuid not null default gen_random_uuid(); -- lets the shopper who placed the order pay for it
 alter table public.orders add column if not exists payment_ref           text;        -- Stripe Checkout session (cs_…) then payment (pi_…)
 alter table public.orders add column if not exists paid_at               timestamptz;
+alter table public.orders add column if not exists payment_livemode      boolean;     -- false = a Stripe test-mode payment
 alter table public.orders add column if not exists shipped_at            timestamptz;
 alter table public.orders add column if not exists shipstation_order_id  text;
 alter table public.orders add column if not exists shipstation_synced_at timestamptz;

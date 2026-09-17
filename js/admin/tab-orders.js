@@ -92,7 +92,7 @@
 
   function paymentShipHTML(o) {
     var ref = o.payment_ref || '';
-    var stripeLink = /^pi_/.test(ref) ? 'https://dashboard.stripe.com/' + (/_test_/.test(ref) ? 'test/' : '') + 'payments/' + ref : '';
+    var stripeLink = /^pi_/.test(ref) ? 'https://dashboard.stripe.com/' + (o.payment_livemode === false ? 'test/' : '') + 'payments/' + ref : '';
     var pay = o.payment_status === 'paid'
       ? '<p style="margin:0 0 6px">✓ Paid' + (o.paid_at ? ' ' + esc(new Date(o.paid_at).toLocaleString()) : '') + (ref ? ' · ' + (stripeLink ? '<a href="' + esc(stripeLink) + '" target="_blank" rel="noopener">View in Stripe</a>' : '<code>' + esc(ref) + '</code>') : '') + '</p>'
       : o.status === 'cancelled'

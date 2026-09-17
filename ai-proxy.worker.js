@@ -474,6 +474,7 @@ async function handleStripeWebhook(request, env) {
         payment_status: "paid",
         paid_at: new Date().toISOString(),
         payment_ref: obj.payment_intent || obj.id,
+        payment_livemode: !!obj.livemode,
         status: order.status === "cancelled" ? "new" : order.status,
         admin_note: mismatch
           ? (order.admin_note ? order.admin_note + "\n" : "") + "⚠ Stripe charged $" + (obj.amount_total / 100).toFixed(2) + " but the order total is $" + Number(order.total).toFixed(2) + ". Check before shipping."
