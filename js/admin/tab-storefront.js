@@ -94,13 +94,13 @@
 
         ui.panel('Card payments (Stripe) &amp; ShipStation',
           '<p class="hint" style="margin:-6px 0 12px">Shoppers pay on a secure Stripe page after checkout. Paid orders are sent to ShipStation, and when you ship there the carrier and tracking number come back to the order. ' +
-          'All keys live in your Cloudflare Worker — never here. Setup steps: README › “Card payments and ShipStation”.</p>' +
+          'All keys live in your Supabase Edge Function “hw” (Supabase › Edge Functions › Secrets) — never here. Setup steps: README › “Card payments and ShipStation”.</p>' +
           ui.check('Take card payments with Stripe at checkout', 'payments.stripe', pay.stripe) +
           '<p class="hint" style="margin:-4px 0 12px">While this is off, checkout is closed — the site takes no orders without payment.</p>' +
-          ui.field('Worker address', 'payments.workerUrl', pay.workerUrl, { type: 'trim', placeholder: 'https://home-weavers.yourname.workers.dev',
-            hint: 'The same worker as the Marketing AI. Leave Stripe off until “Check worker” shows Stripe ready.' }) +
+          ui.field('Server address (optional)', 'payments.workerUrl', pay.workerUrl, { type: 'trim', placeholder: A.defaultWorkerUrl(),
+            hint: 'Leave blank to use your Supabase Edge Function. Leave Stripe off until “Check server” shows Stripe ready.' }) +
           (sn.enabled && pay.stripe ? '<p class="adwarn">Snipcart is also on. While Snipcart is on, shoppers use Snipcart’s checkout and Stripe isn’t used.</p>' : '') +
-          '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="worker-check">Check worker</button>' +
+          '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="worker-check">Check server</button>' +
           '<button class="btn ghost sm" type="button" data-a="shipstation-setup">Connect ShipStation tracking</button></div>' +
           '<div id="workerOut" aria-live="polite" style="margin-top:10px"></div>' +
           ui.saveBtn()) +
@@ -135,22 +135,22 @@
 
   A.actions['worker-check'] = async function () {
     var out = document.getElementById('workerOut'), base = A.workerUrl();
-    if (!/^https:\/\//.test(base)) { out.innerHTML = '<p class="badmsg">Enter the worker address (starts with https://).</p>'; return; }
+    if (!/^https:\/\//.test(base)) { out.innerHTML = '<p class="badmsg">The server address must start with https://</p>'; return; }
     out.innerHTML = '<p class="hint">Checking…</p>';
     try {
       var res = await fetch(base + '/', { cache: 'no-store' });
       var data = await res.json();
       var f = data.features;
-      if (!f) throw new Error('This worker is an older version. Paste the new ai-proxy.worker.js into Cloudflare and deploy.');
+      if (!f) throw new Error('The server is an older version. Deploy the latest supabase/functions/hw/index.ts.');
       var row = function (on, text, fix) { return '<li class="' + (on ? 'ok' : 'warn') + '"><span>' + (on ? '✓' : '⚠') + '</span><span>' + text + (on ? '' : ' — ' + fix) + '</span></li>'; };
       out.innerHTML = '<ul class="checklist">' +
-        row(f.stripe, 'Stripe payments' + (f.stripeMode ? ' (' + f.stripeMode + ' mode)' : ''), 'add STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY') +
-        row(f.shipstation, 'Send orders to ShipStation', 'add SHIPSTATION_API_KEY and SHIPSTATION_API_SECRET') +
-        row(f.shipstationWebhook, 'Tracking numbers from ShipStation', 'add SHIPSTATION_WEBHOOK_TOKEN, then click Connect ShipStation tracking') +
-        row(f.ai, 'Marketing AI', 'optional: add ANTHROPIC_API_KEY and SUPABASE_PUBLISHABLE_KEY') + '</ul>' +
+        row(f.stripe, 'Stripe payments' + (f.stripeMode ? ' (' + f.stripeMode + ' mode)' : ''), 'add the secrets STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET') +
+        row(f.shipstation, 'Send orders to ShipStation', 'add the secrets SHIPSTATION_API_KEY and SHIPSTATION_API_SECRET') +
+        row(f.shipstationWebhook, 'Tracking numbers from ShipStation', 'add the secret SHIPSTATION_WEBHOOK_TOKEN, then click Connect ShipStation tracking') +
+        row(f.ai, 'Marketing AI', 'optional: add the secret ANTHROPIC_API_KEY') + '</ul>' +
         (f.stripeMode === 'test' ? '<p class="hint">Stripe is in test mode: use card 4242 4242 4242 4242, any future date and any CVC. Switch to your live key before launch.</p>' : '');
     } catch (e) {
-      out.innerHTML = '<p class="badmsg">⚠ ' + esc(e.message && !/JSON/.test(e.message) ? e.message : 'That address didn’t answer like the Home Weavers worker.') + '</p>';
+      out.innerHTML = '<p class="badmsg">⚠ ' + esc(e.message && !/JSON/.test(e.message) ? e.message : 'The payments server didn’t answer. Is the “hw” Edge Function deployed, with Verify JWT turned off?') + '</p>';
     }
   };
   A.actions['shipstation-setup'] = async function (btn) {

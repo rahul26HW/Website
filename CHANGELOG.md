@@ -11,6 +11,12 @@
 
 ## After launch
 
+### Payments server moved to Supabase Edge Functions
+- The Stripe/ShipStation/AI server code now runs as the Supabase Edge Function **hw** (`https://soydgxrrwozmiqzutypr.supabase.co/functions/v1/hw`), deployed with Verify JWT off. No Cloudflare account needed.
+- `tools/build-edge.js` generates `supabase/functions/hw/index.ts` from `ai-proxy.worker.js` (same code; a small Deno wrapper strips the `/hw` path prefix and supplies Supabase's built-in URL and keys). All 44 server tests pass both directly and through the Edge wrapper.
+- The worker sends new `sb_secret_` keys only in the `apikey` header (JWT keys also in `Authorization`), and ShipStation's webhook address uses the function's public URL. The health check reports `database`.
+- The site and admin use the Edge Function by default; Storefront › Card payments only needs an address for a different server. Buttons renamed to **Check server**.
+
 ### Hero banner, legal pages
 - Live hero: the old site's banner (blank white strip trimmed; a close-up of the bathroom photo on phones, linked to Rugs), plus photo slides for Willow towels and bath rugs. The Waterford and Bedding slides were removed because those products don't exist.
 - Terms of Service and Refund Policy rewritten; Shipping & Returns now matches the Refund Policy (30 days, unused and unwashed; free returns only for damaged, defective or wrong items). The old site's "90 nights" and "from our studio" wording was removed.

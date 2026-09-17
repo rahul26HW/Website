@@ -145,6 +145,8 @@ Your product photos are 0.7–1.1 MB each on Dropbox.
 
 ## 3. AI worker (Cloudflare, free) — for the Marketing tab
 
+> **Easier:** the Supabase Edge Function **hw** from section 5 runs the AI too. Add the secret `ANTHROPIC_API_KEY` in Supabase → **Edge Functions** → **Secrets**, then paste `https://soydgxrrwozmiqzutypr.supabase.co/functions/v1/hw` into Admin → **Marketing** → **AI worker URL**. The Cloudflare steps below are only needed if you prefer Cloudflare.
+
 The admin never calls Anthropic or OpenAI directly. It calls your worker, and the worker checks that you are a
 signed-in admin before it uses your API key.
 
@@ -201,60 +203,65 @@ The worker only emails addresses that subscribed in the last 10 minutes. The cod
 
 How it works:
 1. The shopper fills in checkout. The database saves the order and re-checks every price, the stock, the promo code and shipping.
-2. The worker opens a **Stripe Checkout** page for that saved order (card, Apple Pay, Google Pay). The amounts come from the saved order, never from the browser.
-3. When Stripe confirms payment, the worker marks the order **Paid** and sends it to **ShipStation** as "Awaiting shipment".
-4. When you buy a label in ShipStation, it tells the worker. The order becomes **Shipped**, with the carrier and tracking number. Shoppers see this on **Track your order**.
+2. The payments server opens a **Stripe Checkout** page for that saved order (card, Apple Pay, Google Pay). The amounts come from the saved order, never from the browser.
+3. When Stripe confirms payment, the server marks the order **Paid** and sends it to **ShipStation** as "Awaiting shipment".
+4. When you buy a label in ShipStation, it tells the server. The order becomes **Shipped**, with the carrier and tracking number. Shoppers see this on **Track your order**.
 
 If the shopper closes the Stripe page, the order stays **Unpaid**, and they can pay from the order page. Stripe payment pages expire after about 30 minutes. The order is then **Cancelled** and its promo code can be used again. Don't ship unpaid orders.
 
-All keys go into the Cloudflare worker (section 3). None go into the website or GitHub.
+**The payments server** is the Supabase Edge Function **hw**, in your existing Supabase project (no other account needed):
+`https://soydgxrrwozmiqzutypr.supabase.co/functions/v1/hw`.
+Its keys are stored in **Supabase → Edge Functions → Secrets**. They never go into the website or GitHub.
+Supabase provides the database address and keys to the function automatically.
 
-### Step 1 — Stripe keys (start in test mode)
+### Step 1 — ShipStation keys (API v1)
+1. ShipStation → **Settings** (gear) → **Account** → **API Settings** → **Generate API Keys**. You'll use the **API Key** and **API Secret** in Step 3.
+   API access depends on your ShipStation plan; if you don't see this page, ask ShipStation support.
+2. Make up a webhook token: 32 or more random letters and numbers (for example from your password manager). Keep it private.
+3. Optional: to have ShipStation email shoppers their tracking number, turn on shipment notifications for the **Manual Orders** store (ShipStation → **Settings** → **Selling Channels** → **Store Setup** → "Manual Orders" → **Notifications**).
+
+### Step 2 — Stripe keys (start in test mode)
 1. Create or open your account at https://dashboard.stripe.com. Leave **Test mode** on for now.
-2. **Developers** → **API keys** → **Secret key** → **Reveal** → copy it (`sk_test_…`).
+2. **Developers** → **API keys** → **Secret key** → **Reveal**. You'll use it (`sk_test_…`) in Step 3.
 3. **Developers** → **Webhooks** → **Add endpoint**:
-   - **Endpoint URL:** your worker address + `/stripe`, for example `https://home-weavers-ai.yourname.workers.dev/stripe`
+   - **Endpoint URL:** `https://soydgxrrwozmiqzutypr.supabase.co/functions/v1/hw/stripe`
    - **Events:** `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`, `charge.refunded`
-   - **Add endpoint** → **Signing secret** → **Reveal** → copy it (`whsec_…`).
+   - **Add endpoint** → **Signing secret** → **Reveal** (`whsec_…`).
 4. Optional: **Settings** → **Customer emails** → turn on **Successful payments**, so Stripe emails receipts.
 
-### Step 2 — ShipStation keys (API v1)
-1. ShipStation → **Settings** (gear) → **Account** → **API Settings** → **Generate API Keys**. Copy the **API Key** and the **API Secret**.
-   API access depends on your ShipStation plan; if you don't see this page, ask ShipStation support.
-2. Make up a webhook token: any 32 or more random letters and numbers, for example from your password manager. Keep it private.
-3. Optional: to have ShipStation email shoppers their tracking number, set up the **Manual Orders** store's shipment notifications (ShipStation → **Settings** → **Selling Channels** → **Store Setup** → the "Manual Orders" store → **Notifications**).
-
-### Step 3 — Add the secrets to the worker
-Cloudflare → your worker → **Edit code** → paste the latest `ai-proxy.worker.js` → **Deploy**.
-Then **Settings** → **Variables and Secrets** → add each as **Type: Secret** → **Deploy**:
+### Step 3 — Add the secrets
+Supabase → **Edge Functions** → **Secrets** → add each name and value → **Save**:
 
 | Name | Value |
 |---|---|
-| `SUPABASE_URL` | `https://soydgxrrwozmiqzutypr.supabase.co` |
-| `SUPABASE_PUBLISHABLE_KEY` | the `sb_publishable_…` key from `js/config.js` (lets the worker confirm you are a signed-in admin) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → **Project Settings** → **API Keys** → **Secret keys** |
-| `STRIPE_SECRET_KEY` | `sk_test_…` from Step 1 |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Step 1 |
-| `SHIPSTATION_API_KEY` | from Step 2 |
-| `SHIPSTATION_API_SECRET` | from Step 2 |
-| `SHIPSTATION_WEBHOOK_TOKEN` | the token you made in Step 2 |
-| `ALLOWED_ORIGINS` | `https://rahul26hw.github.io,http://localhost:8080` |
+| `SHIPSTATION_API_KEY` | from Step 1 |
+| `SHIPSTATION_API_SECRET` | from Step 1 |
+| `SHIPSTATION_WEBHOOK_TOKEN` | the token you made in Step 1 |
+| `STRIPE_SECRET_KEY` | `sk_test_…` from Step 2 |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Step 2 |
+
+Secrets take effect within a minute; you don't need to redeploy.
 
 ### Step 4 — Turn it on in the admin
-1. Admin → **Storefront** → **Card payments (Stripe) & ShipStation** → paste the worker address → **Save changes**.
-2. Click **Check worker**. All three payment and shipping rows should show ✓ (Stripe shows "test mode").
-3. Click **Connect ShipStation tracking**. Expected: "✓ ShipStation will now send tracking numbers…".
-4. Tick **Take card payments with Stripe at checkout** → **Save changes**.
+1. Admin → **Storefront** → **Card payments (Stripe) & ShipStation** → **Check server**. The payment and shipping rows should show ✓ (Stripe shows "test mode").
+2. Click **Connect ShipStation tracking**. Expected: "✓ ShipStation will now send tracking numbers…".
+3. Tick **Take card payments with Stripe at checkout** → **Save changes**.
    Until this is ticked, checkout is closed: the site takes no orders without payment.
-
-If you put the worker on your own domain instead of `workers.dev`, add that address to `connect-src` in `tools/csp.js`, run `node tools/build-pages.js` and publish, or the browser will block it.
 
 ### Step 5 — Test, then go live
 1. On the site, buy something and pay with card `4242 4242 4242 4242`, any future date, any CVC and any ZIP.
 2. Admin → **Orders**: the order shows **Paid** and "In ShipStation". In ShipStation it's under **Awaiting Shipment**.
 3. In ShipStation, create a test label (or mark it shipped with a tracking number). Within a minute the order shows **Shipped** with tracking.
 4. Also test closing the Stripe page: the order page offers **Pay securely** again.
-5. To go live: switch Stripe out of test mode, make a **live** webhook endpoint (same URL and events), then replace `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` with the live values → **Deploy** → **Check worker** shows "live mode".
+5. To go live: switch Stripe out of test mode, add a **live** webhook endpoint (same URL and events), then replace the `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` secrets with the live values. **Check server** then shows "live mode".
+
+### Updating the server code
+The function is built from `ai-proxy.worker.js`. After changing that file:
+1. Run `node tools/build-edge.js`. It writes `supabase/functions/hw/index.ts`.
+2. Supabase → **Edge Functions** → **hw** → **Code** → select all → paste the new `index.ts` → **Deploy updates**.
+3. Keep **Settings** → **Verify JWT with legacy secret** turned **off**. Stripe and ShipStation can't send a Supabase login; the code checks admin sessions and webhook signatures itself.
+
+(The same `ai-proxy.worker.js` also runs as a Cloudflare Worker if you ever move it. Enter that address under **Server address** in the admin and add it to `connect-src` in `tools/csp.js`.)
 
 Notes:
 - Stock is not taken off automatically when an order is paid. Keep using **Deduct items from inventory** on the order, or manage stock in ShipStation.
@@ -342,7 +349,9 @@ New products still open before you do this (through `404.html`), just slower and
 | `js/*.js` | Storefront: data, routing, pages, cart, checkout, search, wishlist… (loaded in order by the small script list at the end of `<head>` in `index.html`) |
 | `js/admin/*.js` | Admin tabs (loaded only on `/admin`) |
 | `supabase-setup.sql` | Database, security rules and functions (safe to re-run) |
-| `ai-proxy.worker.js` | Cloudflare Worker: AI, images, welcome email, Stripe payments, ShipStation, Snipcart webhook |
+| `ai-proxy.worker.js` | Server code: Stripe payments, ShipStation, AI, images, welcome email, Snipcart webhook |
+| `supabase/functions/hw/index.ts` | The same server code as a Supabase Edge Function (made by `tools/build-edge.js`) |
+| `tools/build-edge.js` | Builds the Edge Function from `ai-proxy.worker.js` |
 | `category/`, `product/`, `page/` | Page files made by `tools/build-pages.js` (copies of `index.html` with each page's title and description) |
 | `sitemap.xml`, `robots.txt` | Search engine files |
 | `tools/dev-server.js` | Local preview server (not used by GitHub Pages) |

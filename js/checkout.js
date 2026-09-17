@@ -102,7 +102,11 @@
     };
   };
 
-  function workerUrl() { return String(((HW.DB && HW.DB.payments) || {}).workerUrl || '').trim().replace(/\/+$/, ''); }
+  /* The payments server: the Supabase Edge Function "hw" unless the admin entered another address (e.g. a Cloudflare Worker). */
+  function workerUrl() {
+    var custom = String(((HW.DB && HW.DB.payments) || {}).workerUrl || '').trim().replace(/\/+$/, '');
+    return custom || String((window.HW_CONFIG || {}).supabaseUrl || '').replace(/\/+$/, '') + '/functions/v1/hw';
+  }
 
   HW.checkout = {
     /* Card payments are on when the admin turned Stripe on and gave a worker address (and Snipcart is off). */
