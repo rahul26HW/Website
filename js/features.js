@@ -13,6 +13,16 @@
     if (/^https?:\/\//i.test(src)) return src;
     return HW.absUrl('/' + src.replace(/^\/+/, ''));
   }
+  /* "Company\n123 Main St, Suite 4\nCity, ST 12345\nUnited States" → schema.org PostalAddress (US format only). */
+  function postalAddress(text) {
+    var lines = String(text || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    var at = -1, m = null;
+    lines.forEach(function (l, i) { var x = l.match(/^(.+?),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/); if (x) { at = i; m = x; } });
+    if (!m) return undefined;
+    var street = lines.slice(0, at).filter(function (l) { return /\d/.test(l); }).join(', ');
+    return { '@type': 'PostalAddress', streetAddress: street || undefined, addressLocality: m[1], addressRegion: m[2], postalCode: m[3], addressCountry: 'US' };
+  }
+
   HW.ld = {
     breadcrumb: function (items) {
       return { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: items.map(function (it, i) {
@@ -58,7 +68,8 @@
           potentialAction: { '@type': 'SearchAction', target: HW.absUrl('/search') + '?q={search_term_string}', 'query-input': 'required name=search_term_string' } },
         { '@context': 'https://schema.org', '@type': 'Organization', name: DB.brand.name, url: HW.absUrl('/'),
           logo: DB.brand.logoImage ? absAsset(DB.brand.logoImage) : undefined,
-          email: u.isEmail((DB.contact || {}).email) ? DB.contact.email : undefined, sameAs: sameAs.length ? sameAs : undefined }
+          email: u.isEmail((DB.contact || {}).email) ? DB.contact.email : undefined, address: postalAddress((DB.contact || {}).address),
+          sameAs: sameAs.length ? sameAs : undefined }
       ];
     }
   };
