@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /Website/admin
+Disallow: /Website/checkout
+Disallow: /Website/order/
+
+Sitemap: https://rahul26hw.github.io/Website/sitemap.xml

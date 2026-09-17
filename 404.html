@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home Weavers</title>
+<meta name="robots" content="noindex">
+<script>
+  /* Single-page-app fallback for GitHub Pages.
+     A direct visit to /Website/product/x has no file, so Pages serves this page.
+     It rewrites the address to /Website/?/product/x and index.html turns it back.
+     On a *.github.io project site the first path part is the repo name and is kept.
+     On a custom domain or a user site (username.github.io) nothing is kept. */
+  (function () {
+    var l = window.location;
+    var segs = l.pathname.split('/').filter(Boolean);
+    var routes = ['category', 'product', 'page', 'admin', 'checkout', 'order', 'search', 'wishlist'];
+    var keep = (/github\.io$/i.test(l.hostname) && segs.length && routes.indexOf(segs[0]) < 0) ? 1 : 0;
+    l.replace(
+      l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+      l.pathname.split('/').slice(0, 1 + keep).join('/') + '/?/' +
+      l.pathname.slice(1).split('/').slice(keep).join('/').replace(/&/g, '~and~') +
+      (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+      l.hash
+    );
+  })();
+</script>
+</head>
+<body></body>
+</html>
