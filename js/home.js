@@ -20,9 +20,21 @@
     var slides = (hero.slides || []).filter(function (s) { return s.title || s.image || s.eyebrow; });
     if (!slides.length) slides = [{ eyebrow: '', title: HW.DB.brand.name, subtitle: HW.DB.brand.tagline, ctaText: '', ctaLink: '', image: '' }];
     var many = slides.length > 1;
-    return '<section class="hero" id="heroSlider" aria-roledescription="carousel" aria-label="Featured collections">' +
+    var firstPic = slides[0] && slides[0].image && !slides[0].eyebrow && !slides[0].title && !slides[0].subtitle && !String(slides[0].ctaText || '').trim();
+    return '<section class="hero' + (firstPic ? ' light' : '') + '" id="heroSlider" aria-roledescription="carousel" aria-label="Featured collections">' +
       slides.map(function (s, i) {
         var bg;
+        var attrs = 'data-i="' + i + '" role="group" aria-roledescription="slide" aria-label="' + (i + 1) + ' of ' + slides.length + '"' + (i === 0 ? '' : ' aria-hidden="true" inert');
+        // Picture-only slide: a banner that already has its words in the image. Shown whole (not cropped), no text on top.
+        if (s.image && !s.eyebrow && !s.title && !s.subtitle && !String(s.ctaText || '').trim()) {
+          var pic = '<picture class="bg">' + (s.mobileImage ? '<source media="(max-width:720px)" srcset="' + esc(HW.asset(s.mobileImage)) + '">' : '') +
+            '<img src="' + esc(HW.asset(s.image)) + '" alt="' + esc(s.alt || '') + '" width="1600" height="700" decoding="async"' + (i === 0 ? ' fetchpriority="high"' : ' loading="lazy"') + '></picture>';
+          var target = m.linkTarget(s.ctaLink);
+          var fill = /^#[0-9a-f]{3,8}$/i.test(s.bg || '') ? ' style="background:' + s.bg + '"' : '';
+          return '<div class="hslide pic' + (i === 0 ? ' active' : '') + '"' + fill + ' ' + attrs + '>' +
+            (target ? '<a class="piclink" href="' + esc(target.external ? target.href : HW.link(target.href)) + '"' + (target.external ? ' target="_blank" rel="noopener noreferrer"' : '') + '>' + pic + '</a>' : pic) +
+            '</div>';
+        }
         if (s.image) {
           var img = '<img src="' + esc(HW.asset(s.image)) + '" alt="' + esc(s.alt || '') + '" width="1600" height="700" decoding="async"' +
             (i === 0 ? ' fetchpriority="high"' : ' loading="lazy"') + '>';
@@ -30,7 +42,7 @@
         } else {
           bg = '<div class="bg" style="background:' + GRADIENTS[i % GRADIENTS.length] + '"></div>';
         }
-        return '<div class="hslide ' + (i === 0 ? 'active' : '') + '" data-i="' + i + '" role="group" aria-roledescription="slide" aria-label="' + (i + 1) + ' of ' + slides.length + '"' + (i === 0 ? '' : ' aria-hidden="true" inert') + '>' +
+        return '<div class="hslide ' + (i === 0 ? 'active' : '') + '" ' + attrs + '>' +
           bg + '<div class="scrim"></div>' +
           '<div class="inner"><div class="card">' +
           (s.eyebrow ? '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' : '') +
@@ -168,6 +180,8 @@
         if (on) { el.removeAttribute('aria-hidden'); el.removeAttribute('inert'); }
         else { el.setAttribute('aria-hidden', 'true'); el.setAttribute('inert', ''); }
       });
+      var root = document.getElementById('heroSlider');
+      if (root) root.classList.toggle('light', s[idx].classList.contains('pic'));
       u.qsa('#heroSlider .hdots button[data-i]').forEach(function (d, j) {
         d.classList.toggle('active', j === idx);
         if (j === idx) d.setAttribute('aria-current', 'true'); else d.removeAttribute('aria-current');

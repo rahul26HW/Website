@@ -16,7 +16,7 @@
       ui.field('Subtext', p + 'subtitle', s.subtitle, { textarea: true, rows: 2, maxlength: 220 }) +
       '<div class="grid2">' + ui.field('Button text', p + 'ctaText', s.ctaText, { hint: 'Blank = no button', maxlength: 40 }) + A.linkField('Button link', p + 'ctaLink', s.ctaLink) + '</div>' +
       '<div class="grid2">' +
-      ui.imageInput('Desktop image', p + 'image', s.image, { folder: 'hero', max: 2400, wide: true, hint: 'Landscape, about 2400 × 1200 px. Keep the subject to one side — text sits over the image. Don’t put text in the image.' }) +
+      ui.imageInput('Desktop image', p + 'image', s.image, { folder: 'hero', max: 2400, wide: true, hint: 'Landscape, about 2400 × 1200 px. Keep the subject to one side — text sits over the image. Already have a finished banner with words in it? Leave Eyebrow, Headline, Subtext and Button text blank: the picture then shows whole, and the Button link makes the whole banner clickable.' }) +
       ui.imageInput('Mobile image (optional)', p + 'mobileImage', s.mobileImage, { folder: 'hero', max: 1200, hint: 'Portrait, about 1080 × 1350 px. Used on phones.' }) + '</div>' +
       ui.field('Image description (alt text)', p + 'alt', s.alt, { hint: 'Describe the photo for screen readers, e.g. “Striped bath rug beside a white bathtub”.', maxlength: 140 }) +
       '</section>';

@@ -11,6 +11,9 @@
 
 ## After launch
 
+### Hero banner, legal pages
+- Hero slides can be **picture-only**: when a slide has a photo but no eyebrow, headline, subtext or button text, the picture is shown whole (not cropped, no dark overlay) and the button link makes the whole banner clickable. Phones use the optional mobile image. The slide dots get a dark backing on light banners.
+
 ### Security and privacy pass
 - **No orders without payment:** checkout is closed (“Checkout is opening soon”) until Stripe is switched on, and `place_order` refuses orders in the database too (`CHECKOUT_CLOSED`). One email address can have at most 5 unpaid orders per hour (`TOO_MANY_ORDERS`).
 - **No third parties on page load:** fonts (Fraunces, Inter; OFL) are served from `assets/fonts` instead of Google Fonts, and the admin's supabase-js 2.116.0 is served from `js/vendor` (copied from the npm package, integrity checked) instead of a CDN. A normal page view now contacts only this site and the store's Supabase project.

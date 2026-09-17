@@ -732,3 +732,12 @@ main#view.booting{min-height:100vh}
 main#view.booting ~ footer.site{visibility:hidden}
 #topnav{min-height:42px}
 @media(max-width:720px){#topnav{min-height:0}}
+
+/* ---- hero: picture-only slide (banner with its words already in the image) ---- */
+.hslide.pic{background:#E9EDF3}
+.hslide.pic .bg img{object-fit:contain}
+.hslide.pic .piclink{position:absolute;inset:0;display:block}
+.hslide.pic .piclink:focus-visible{outline:3px solid var(--ink);outline-offset:-6px}
+.hero.light .hdots{background:rgba(28,24,21,.38);border-radius:999px;padding:0 4px}
+@media(min-width:721px){.hslide.pic .bg{bottom:40px}} /* keep the slide dots off the banner's own text */
+@media(max-width:720px){.hslide.pic .bg img{object-fit:cover}}
