@@ -15,6 +15,12 @@
   now load a 700px copy (about 40–60 KB) instead of the full photo. The product page's main photo uses `srcset`, so phones get the small copy too.
   The copies live in Storage under `thumbs/`, mapped in `store.thumbs`. New uploads get one automatically, and
   Dashboard › **Create small images** fills in any that are missing. With no small copy, the full photo is used.
+- **Page files:** `tools/build-pages.js` writes `category/*.html`, `product/*.html` and `page/*.html` (plus `sitemap.xml`).
+  Direct visits now return HTTP 200 with the right title, description and canonical link, with no redirect through `404.html`
+  (Lighthouse measured about 0.9–1.1 s lost to that redirect). `404.html` still covers pages added later.
+- Category pages load the first four product photos right away (the first with high priority) instead of lazily; it was the page's largest image.
+- Hero slide dots have 24px tap targets (the dot itself is still 9px).
+- `404.html` no longer requests a missing favicon on deep links.
 - Promotions: `WELCOME10` turned off; `WELCOME15` is the sign-up code.
 - Towel product names shortened to under 50 characters, with features and SEO titles added (URLs unchanged).
 

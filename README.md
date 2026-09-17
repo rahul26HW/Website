@@ -138,6 +138,8 @@ with the email and password from Step 3. There is no admin link on the public si
 Your product photos are 0.7–1.1 MB each on Dropbox.
 1. Admin → **Dashboard** → **Move images to Storage**.
 2. Wait for the bar to finish. Each image becomes a WebP of about 100–200 KB, and the links update and save automatically.
+3. Then **Dashboard** → **Create small images**. Product cards, the cart and gallery thumbnails use a 700px copy (about 50 KB).
+   New uploads get one automatically; run it again after pasting image links or importing a backup.
 
 ---
 
@@ -238,8 +240,21 @@ With Git: copy the files into your clone, then `git add -A`, `git commit -m "Upd
 2. **Storefront** → **Store settings** → **Live site address**: `https://rahul26hw.github.io/Website/` → **Save changes**.
    (Every save also publishes a fast copy of the store for shoppers.)
 3. **Dashboard** → **Move images to Storage** (one time).
-4. **Storefront** → **Search engines** → download `sitemap.xml`, then upload it to the repository (replace the old one).
+4. Refresh the page files and sitemap (see below), then upload them.
 5. Optional: submit `https://rahul26hw.github.io/Website/sitemap.xml` in Google Search Console.
+
+### Page files for categories, products and info pages
+GitHub Pages has no server routing, so each category, product and info page gets its own small HTML file
+(`category/*.html`, `product/*.html`, `page/*.html`). Without them a direct visit loads through `404.html`:
+about a second slower, and search engines see an error code.
+
+After you add, rename or remove products, categories or pages (and **Save** in the admin):
+```
+node tools/build-pages.js
+```
+It reads the live store, rewrites those three folders and `sitemap.xml`, then upload the folders and `sitemap.xml`.
+New products still open before you do this (through `404.html`), just slower and not indexed as well.
+(Needs Node.js 18+. Without Node, use **Storefront** → **Search engines** → download `sitemap.xml`.)
 
 ### After launch checklist
 - Home, a category, a product with colors and sizes, cart, checkout, **Track your order**, **Contact us** and newsletter all work.
@@ -261,5 +276,7 @@ With Git: copy the files into your clone, then `git add -A`, `git commit -m "Upd
 | `js/admin/*.js` | Admin tabs (loaded only on `/admin`) |
 | `supabase-setup.sql` | Database, security rules and functions (safe to re-run) |
 | `ai-proxy.worker.js` | Cloudflare Worker: AI, images, welcome email, Snipcart webhook |
+| `category/`, `product/`, `page/` | Page files made by `tools/build-pages.js` (copies of `index.html` with each page's title and description) |
 | `sitemap.xml`, `robots.txt` | Search engine files |
 | `tools/dev-server.js` | Local preview server (not used by GitHub Pages) |
+| `tools/build-pages.js` | Writes the page files and `sitemap.xml` from the live store |

@@ -37,6 +37,7 @@ http.createServer((req, res) => {
   let file = path.normalize(path.join(ROOT, urlPath));
   if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
   if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
+  if (!fs.existsSync(file) && fs.existsSync(file + '.html')) file += '.html'; // GitHub Pages serves /x from x.html
   if (!fs.existsSync(file)) return send404(res);
   const type = TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
   if (PREFIX && file.endsWith(path.join('js', 'config.js'))) {

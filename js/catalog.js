@@ -40,7 +40,7 @@
 
     return '<article class="pcard reveal' + (out ? ' is-out' : '') + '">' +
       '<div class="imgwrap">' +
-      '<a href="' + url + '" tabindex="-1" aria-hidden="true"><img class="ph" src="' + esc(HW.asset(m.thumb(m.imageOrSwatch(p)))) + '" alt="' + esc(m.imageAlt(p)) + '" loading="lazy" decoding="async" width="600" height="770"></a>' +
+      '<a href="' + url + '" tabindex="-1" aria-hidden="true"><img class="ph" src="' + esc(HW.asset(m.thumb(m.imageOrSwatch(p)))) + '" alt="' + esc(m.imageAlt(p)) + '"' + (opts.eager ? (opts.eager === 'high' ? ' fetchpriority="high"' : '') : ' loading="lazy"') + ' decoding="async" width="600" height="770"></a>' +
       badge + (HW.wishlist ? HW.wishlist.button(p) : '') + '<div class="quick">' + action + '</div></div>' +
       '<div class="meta"><div class="cat">' + esc(cat ? cat.name : '') + '</div>' +
       '<' + h + ' class="pname"><a href="' + url + '">' + esc(p.name) + '</a></' + h + '>' +
@@ -172,7 +172,7 @@
     var grid = document.getElementById('catGrid');
     if (grid) {
       grid.innerHTML = items.length
-        ? items.map(function (p) { return HW.productCard(p, { heading: 'h2' }); }).join('')
+        ? items.map(function (p, i) { return HW.productCard(p, { heading: 'h2', eager: i === 0 ? 'high' : i < 4 }); }).join('')
         : '<p class="muted" style="padding:30px 0 80px">No products match these filters. <button class="link-u" type="button" style="background:none;border:none;border-bottom:1px solid var(--ink);cursor:pointer" data-act="cf-clear">Clear filters</button></p>';
     }
     var c = document.getElementById('catCount');
@@ -287,7 +287,7 @@
     } else {
       body = '<div class="catlayout ' + (anyFilter ? '' : 'nofilters') + '">' +
         (anyFilter ? '<aside class="cfilters' + (window.innerWidth <= 980 ? ' collapsed' : '') + '" id="catFilters" aria-label="Product filters">' + sidebarHTML() + '</aside>' : '') +
-        '<div class="catmain"><div class="p-grid" id="catGrid">' + items.map(function (p) { return HW.productCard(p, { heading: 'h2' }); }).join('') + '</div></div></div>';
+        '<div class="catmain"><div class="p-grid" id="catGrid">' + items.map(function (p, i) { return HW.productCard(p, { heading: 'h2', eager: i === 0 ? 'high' : i < 4 }); }).join('') + '</div></div></div>';
     }
 
     return {
