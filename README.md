@@ -231,6 +231,7 @@ Then **Settings** → **Variables and Secrets** → add each as **Type: Secret**
 | Name | Value |
 |---|---|
 | `SUPABASE_URL` | `https://soydgxrrwozmiqzutypr.supabase.co` |
+| `SUPABASE_PUBLISHABLE_KEY` | the `sb_publishable_…` key from `js/config.js` (lets the worker confirm you are a signed-in admin) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → **Project Settings** → **API Keys** → **Secret keys** |
 | `STRIPE_SECRET_KEY` | `sk_test_…` from Step 1 |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Step 1 |
