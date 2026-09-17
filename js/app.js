@@ -104,6 +104,7 @@
     'size-guide': function (el) { HW.sizeGuide.open(el); },
     consent: function (el) { HW.consent.set(el.dataset.level); },
     'pay-order': function (el) { HW.checkout.payAgain(el); },
+    reload: function () { location.reload(); },
     'consent-settings': function () { HW.consent.show(); var b = document.querySelector('#cookieBanner button'); if (b) b.focus(); }
   };
 
@@ -182,7 +183,7 @@
 
   function showFatal(text) {
     main().innerHTML = '<div class="wrap"><div class="loading"><div><div class="weave-rule" style="margin-bottom:14px">' + HW.SVG.weave + '</div>' +
-      '<p>' + u.esc(text) + '</p><button class="btn" type="button" onclick="location.reload()">Try again</button></div></div></div>';
+      '<p>' + u.esc(text) + '</p><button class="btn" type="button" data-act="reload">Try again</button></div></div></div>';
   }
 
   async function boot() {

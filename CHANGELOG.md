@@ -11,6 +11,15 @@
 
 ## After launch
 
+### Security and privacy pass
+- **No orders without payment:** checkout is closed (“Checkout is opening soon”) until Stripe is switched on, and `place_order` refuses orders in the database too (`CHECKOUT_CLOSED`). One email address can have at most 5 unpaid orders per hour (`TOO_MANY_ORDERS`).
+- **No third parties on page load:** fonts (Fraunces, Inter; OFL) are served from `assets/fonts` instead of Google Fonts, and the admin's supabase-js 2.116.0 is served from `js/vendor` (copied from the npm package, integrity checked) instead of a CDN. A normal page view now contacts only this site and the store's Supabase project.
+- **Content Security Policy** on every page (`tools/csp.js`, run by `build-pages.js`): scripts only from this site (inline scripts by hash), no plugins, forms only to this site, connections only to Supabase, `*.workers.dev` and Snipcart. The last inline `onclick` was removed. `Referrer-Policy: strict-origin-when-cross-origin`.
+- The admin refuses to run inside another site's frame (clickjacking).
+- The worker no longer returns internal error details to shoppers or webhooks (they go to the Cloudflare log); admins still see them.
+- The payment token is removed from the browser's session once an order is paid.
+- Privacy policy lists what is collected and which services receive it (Stripe, ShipStation, carriers, Supabase, Cloudflare, GitHub Pages).
+
 ### Card payments (Stripe Checkout) and ShipStation
 - **Checkout:** with Stripe on (Admin › Storefront), the order is saved and priced by `place_order` as before, then the shopper pays on a Stripe Checkout page built by the worker from the saved order. The cart is kept until payment succeeds; the order page offers **Pay securely** if the shopper backs out.
 - **Worker routes:** `/checkout/session`, `/stripe` (signed webhook: paid, expired → cancelled and promo freed, refunded), `/shipstation/push`, `/shipstation/setup` (registers SHIP_NOTIFY) and `/shipstation/webhook` (token-checked; only calls ssapi.shipstation.com). `GET /` lists which features are configured.

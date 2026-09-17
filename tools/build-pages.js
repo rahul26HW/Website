@@ -81,6 +81,8 @@ async function main() {
       description: p.seoDescription || text(m.pageText(p.body)).replace(/[#*\[\]()|-]/g, ' ') });
   });
 
+  require('./csp.js').write('index.html'); // keep the inline-script hashes current before copying
+  require('./csp.js').write('404.html');
   const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   DIRS.forEach(function (d) { fs.rmSync(path.join(ROOT, d), { recursive: true, force: true }); });
 

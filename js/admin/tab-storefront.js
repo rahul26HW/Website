@@ -96,6 +96,7 @@
           '<p class="hint" style="margin:-6px 0 12px">Shoppers pay on a secure Stripe page after checkout. Paid orders are sent to ShipStation, and when you ship there the carrier and tracking number come back to the order. ' +
           'All keys live in your Cloudflare Worker — never here. Setup steps: README › “Card payments and ShipStation”.</p>' +
           ui.check('Take card payments with Stripe at checkout', 'payments.stripe', pay.stripe) +
+          '<p class="hint" style="margin:-4px 0 12px">While this is off, checkout is closed — the site takes no orders without payment.</p>' +
           ui.field('Worker address', 'payments.workerUrl', pay.workerUrl, { type: 'trim', placeholder: 'https://home-weavers.yourname.workers.dev',
             hint: 'The same worker as the Marketing AI. Leave Stripe off until “Check worker” shows Stripe ready.' }) +
           (sn.enabled && pay.stripe ? '<p class="adwarn">Snipcart is also on. While Snipcart is on, shoppers use Snipcart’s checkout and Stripe isn’t used.</p>' : '') +
@@ -105,7 +106,7 @@
           ui.saveBtn()) +
 
         ui.panel('Checkout &amp; payments (Snipcart)',
-          '<p class="hint" style="margin:-6px 0 12px">When on, Snipcart handles cart and card checkout. When off, the built-in checkout saves orders to your Orders tab (no payment taken). Paste your <b>public</b> API key only.</p>' +
+          '<p class="hint" style="margin:-6px 0 12px">When on, Snipcart handles cart and card checkout instead of Stripe. When off, the built-in checkout with Stripe is used. Paste your <b>public</b> API key only.</p>' +
           ui.check('Use Snipcart for cart &amp; checkout', 'snipcart.enabled', sn.enabled) +
           ui.field('Public API key', 'snipcart.apiKey', sn.apiKey, { type: 'trim', placeholder: 'Your public test or live key' }) +
           '<div class="grid3">' + ui.field('Currency', 'snipcart.currency', sn.currency, { type: 'trim' }) +

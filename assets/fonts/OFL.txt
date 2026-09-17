@@ -1,0 +1,6 @@
+Fraunces — Copyright 2020 The Fraunces Project Authors (https://github.com/undercasetype/Fraunces)
+Inter — Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)
+
+These fonts are licensed under the SIL Open Font License, Version 1.1.
+The full license text is available at https://openfontlicense.org/open-font-license-official-text/
+The font files here are the unmodified Latin-subset WOFF2 files distributed by Google Fonts.

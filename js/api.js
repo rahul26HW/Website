@@ -30,6 +30,8 @@
       PROMO_MIN_ORDER: 'Your order doesn’t meet the minimum for that promo code.',
       PROMO_USED_UP: 'That promo code has reached its usage limit.',
       PROMO_ALREADY_USED: 'You’ve already used that promo code.',
+      CHECKOUT_CLOSED: 'Checkout is closed right now. Please try again later.',
+      TOO_MANY_ORDERS: 'You’ve started several orders in the last hour. Please pay for an open order or try again later.',
       RATE_LIMIT: 'You’ve sent a few messages already. Please wait a few minutes and try again.'
     };
     if (/^OUT_OF_STOCK:/.test(code)) return '“' + code.slice(13) + '” doesn’t have enough stock for your quantity.';

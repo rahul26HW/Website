@@ -486,6 +486,16 @@ begin
   select s.data into v_store from public.store s where s.id = 'main';
   v_inv := coalesce(v_store->'inventory', '{}'::jsonb);
 
+  -- No orders without online payment: checkout only opens when Stripe is switched on in the admin.
+  if coalesce(v_store->'payments'->>'stripe', 'false') <> 'true' then
+    raise exception 'CHECKOUT_CLOSED' using errcode = '22023';
+  end if;
+  -- Stop one address from piling up unpaid orders.
+  if (select count(*) from public.orders o
+       where o.email = v_email and o.payment_status = 'unpaid' and o.created_at > now() - interval '1 hour') >= 5 then
+    raise exception 'TOO_MANY_ORDERS' using errcode = '22023';
+  end if;
+
   -- Price every line from the published catalog
   for v_item in select * from jsonb_array_elements(p_order->'items') loop
     v_qty := coalesce(public._num(v_item->>'qty'), 0)::int;

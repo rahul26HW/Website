@@ -4,7 +4,8 @@
 
   var FILES = ['core.js', 'media.js', 'sample.js', 'tab-dashboard.js', 'tab-storefront.js', 'tab-banner.js', 'tab-pages.js',
     'tab-categories.js', 'tab-products.js', 'tab-inventory.js', 'tab-orders.js', 'tab-promotions.js', 'tab-marketing.js'];
-  var SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+  // Served from this site (copied from the npm package @supabase/supabase-js 2.116.0) — no third-party script CDN.
+  var SUPABASE_JS = HW.asset('js/vendor/supabase-js-2.116.0.js');
   var loading = null;
 
   function script(src) {
@@ -34,6 +35,11 @@
   HW.admin = {
     enter: function () {
       var root = document.getElementById('admin');
+      // Never run the admin inside another site's frame (clickjacking). GitHub Pages can't send a frame-blocking header.
+      if (window.top !== window.self) {
+        root.innerHTML = '<div class="login"><div class="box"><p>For your security, the admin can’t be opened inside another page.</p><p><a href="' + HW.u.esc(location.href) + '" target="_top" rel="noopener">Open the admin directly</a></p></div></div>';
+        return;
+      }
       if (!HW.A) root.innerHTML = '<div class="login"><div class="box"><p class="muted" style="margin:0">Loading admin…</p></div></div>';
       load().then(function () { HW.A.enter(); }).catch(function (e) {
         loading = null;

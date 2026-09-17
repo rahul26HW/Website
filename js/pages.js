@@ -151,7 +151,7 @@
               }).join('') + '</ol>') +
           (o.tracking_number ? '<p style="margin:12px 0 6px"><b>Tracking:</b> ' + esc(o.carrier ? o.carrier + ' ' : '') +
             (link ? '<a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + esc(link) + '" target="_blank" rel="noopener noreferrer">' + esc(o.tracking_number) + '</a>' : esc(o.tracking_number)) + '</p>' : '') +
-          (o.payment_status === 'unpaid' && o.status === 'new' ? '<p class="muted" style="font-size:13.5px">' + (HW.checkout && HW.checkout.cardPayments() ? 'Payment hasn’t been received for this order yet.' : 'We’ll email you to confirm payment before your order ships.') + '</p>' : '') +
+          (o.payment_status === 'unpaid' && o.status === 'new' ? '<p class="muted" style="font-size:13.5px">' + 'Payment hasn’t been received for this order yet.' + '</p>' : '') +
           '<ul class="bullets" style="margin-top:10px">' + (o.items || []).map(function (i) {
             return '<li>' + esc(HW.seo.clip(i.name, 80)) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + ' × ' + i.qty + '</li>';
           }).join('') + '</ul>' +

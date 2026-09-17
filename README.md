@@ -244,6 +244,9 @@ Then **Settings** → **Variables and Secrets** → add each as **Type: Secret**
 2. Click **Check worker**. All three payment and shipping rows should show ✓ (Stripe shows "test mode").
 3. Click **Connect ShipStation tracking**. Expected: "✓ ShipStation will now send tracking numbers…".
 4. Tick **Take card payments with Stripe at checkout** → **Save changes**.
+   Until this is ticked, checkout is closed: the site takes no orders without payment.
+
+If you put the worker on your own domain instead of `workers.dev`, add that address to `connect-src` in `tools/csp.js`, run `node tools/build-pages.js` and publish, or the browser will block it.
 
 ### Step 5 — Test, then go live
 1. On the site, buy something and pay with card `4242 4242 4242 4242`, any future date, any CVC and any ZIP.
@@ -343,3 +346,6 @@ New products still open before you do this (through `404.html`), just slower and
 | `sitemap.xml`, `robots.txt` | Search engine files |
 | `tools/dev-server.js` | Local preview server (not used by GitHub Pages) |
 | `tools/build-pages.js` | Writes the page files and `sitemap.xml` from the live store |
+| `tools/csp.js` | Writes the Content Security Policy into `index.html` and `404.html` (run after editing an inline script; `build-pages.js` runs it) |
+| `js/vendor/` | supabase-js for the admin, served from this site |
+| `assets/fonts/` | Fraunces and Inter font files (SIL Open Font License) |

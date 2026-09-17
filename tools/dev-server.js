@@ -21,7 +21,11 @@ const TYPES = {
 function send404(res) {
   let html = fs.readFileSync(path.join(ROOT, '404.html'), 'utf8');
   // Locally there is no *.github.io host, so tell 404.html how many path parts to keep.
-  if (PREFIX) html = html.replace('var keep = ', 'var keep = 1 || ');
+  if (PREFIX) {
+    html = html.replace('var keep = ', 'var keep = 1 || ');
+    // The edit changes the inline script, so its Content-Security-Policy hash no longer matches. Local only.
+    html = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, '');
+  }
   res.writeHead(404, { 'Content-Type': TYPES['.html'] });
   res.end(html);
 }

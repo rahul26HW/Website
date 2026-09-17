@@ -63,14 +63,23 @@
     }
     var anyOut = t.lines.some(function (l) { return !l.inStock; });
     var card = HW.checkout.cardPayments();
+    if (!card) {
+      // Orders are only taken with online payment (no pay-later / cash on delivery).
+      var c = HW.DB.contact || {};
+      return {
+        html: '<div class="wrap"><div class="confirm"><div class="weave-rule">' + HW.SVG.weave + '</div><h1>Checkout is opening soon</h1>' +
+          '<p class="muted">We’re finishing secure card payments. Your cart is saved on this device, so you can check out as soon as it opens.</p>' +
+          (u.isEmail(c.email) ? '<p>Questions? Email <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>.</p>' : '') +
+          '<a class="btn" href="' + HW.link('/') + '">Continue shopping</a></div></div>',
+        seo: { title: 'Checkout', noindex: true }
+      };
+    }
     return {
       html: '<div class="wrap"><div class="checkout">' +
         '<form class="form" data-form="checkout" novalidate aria-labelledby="coHead">' +
         '<nav class="crumb" aria-label="Breadcrumb"><a href="' + HW.link('/') + '">Home</a> &nbsp;/&nbsp; <span aria-current="page">Checkout</span></nav>' +
         '<h1 id="coHead">Checkout</h1>' +
-        (card
-          ? '<div class="notice" role="note"><b>Secure card payment.</b> After you enter your details you’ll pay on a Stripe page (card, Apple Pay or Google Pay). We never see or store your card number.</div>'
-          : '<div class="notice" role="note"><b>Online payments aren’t enabled yet.</b> Place your order and we’ll email you within one business day to confirm it and arrange payment. You won’t be charged now.</div>') +
+        '<div class="notice" role="note"><b>Secure card payment.</b> After you enter your details you’ll pay on Stripe’s secure page. Your card number goes only to Stripe — we never see or store it.</div>' +
         '<h2>Contact</h2>' +
         field('email', 'Email', 'email', { ac: 'email', max: 254 }) +
         '<div class="row2">' + field('name', 'Full name', 'text', { ac: 'name', max: 120 }) + field('phone', 'Phone', 'tel', { ac: 'tel', optional: true, max: 40 }) + '</div>' +
@@ -83,9 +92,9 @@
         '<p class="muted" style="font-size:13px;margin:0">We currently ship within the United States.</p>' +
         field('note', 'Order note', 'textarea', { optional: true }) +
         '<p class="form-msg" id="coMsg" role="alert" hidden></p>' +
-        '<button class="btn loom block" type="submit"' + (anyOut ? ' disabled' : '') + '>' + (card ? 'Continue to payment · ' : 'Place order · ') + u.money(t.total) + '</button>' +
+        '<button class="btn loom block" type="submit"' + (anyOut ? ' disabled' : '') + '>Continue to payment · ' + u.money(t.total) + '</button>' +
         (anyOut ? '<p class="muted" style="font-size:13px">Remove out-of-stock items from your cart to continue.</p>' : '') +
-        '<p class="muted" style="font-size:12.5px;margin:0">By ' + (card ? 'continuing' : 'placing your order') + ' you agree to our <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/terms-of-service') + '">Terms</a> and <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/privacy-policy') + '">Privacy Policy</a>.</p>' +
+        '<p class="muted" style="font-size:12.5px;margin:0">By continuing you agree to our <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/terms-of-service') + '">Terms</a> and <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/privacy-policy') + '">Privacy Policy</a>.</p>' +
         '</form>' +
         '<aside class="co-summary" id="coSummary" aria-label="Order summary">' + summaryHTML(t) + '</aside>' +
         '</div></div>',
@@ -151,13 +160,12 @@
         return;
       }
       var t = HW.cart.totals();
-      if (!t.lines.length) { HW.router.navigate('/checkout'); return; }
+      if (!t.lines.length || !HW.checkout.cardPayments()) { HW.router.navigate('/checkout'); return; }
       if (t.promo && !t.promoValid) { msg.hidden = false; msg.className = 'form-msg err'; msg.textContent = t.promoNote + ' Remove the code from your cart to continue.'; return; }
 
       btn.disabled = true;
       var label = btn.textContent;
-      var card = HW.checkout.cardPayments();
-      btn.textContent = card ? 'Saving your order…' : 'Placing order…';
+      btn.textContent = 'Saving your order…';
       msg.hidden = true;
       try {
         var result = await HW.api.rpc('place_order', {
@@ -170,15 +178,10 @@
         });
         result.name = get('name');
         u.session.set(LAST, result);
-        if (card) {
-          // The cart stays until Stripe confirms payment, so a shopper who backs out can still change it.
-          btn.textContent = 'Opening secure payment…';
-          try { await HW.checkout.pay(result); return; }
-          catch (e) { result.payError = e.message; u.session.set(LAST, result); }
-        } else {
-          u.session.set(DRAFT, {});
-          HW.cart.clear();
-        }
+        // The cart stays until Stripe confirms payment, so a shopper who backs out can still change it.
+        btn.textContent = 'Opening secure payment…';
+        try { await HW.checkout.pay(result); return; }
+        catch (e) { result.payError = e.message; u.session.set(LAST, result); }
         HW.router.navigate('/order/' + encodeURIComponent(result.order_number));
       } catch (e) {
         btn.disabled = false; btn.textContent = label;
@@ -208,7 +211,7 @@
     var payment = (function () { try { return new URLSearchParams(location.search).get('payment'); } catch (e) { return null; } })();
     if (payment === 'success' && !o.paid) {
       // Display only: the Stripe webhook is what marks the order paid in the database.
-      o.paid = true; delete o.payError; u.session.set(LAST, o);
+      o.paid = true; delete o.payError; delete o.pay_token; u.session.set(LAST, o);
       u.session.set(DRAFT, {});
       HW.cart.clear();
     }
@@ -219,14 +222,14 @@
       ? '<h1>Thank you' + first + '!</h1><p class="muted" style="margin:0">Your payment went through and your order is confirmed.</p>'
       : unpaid
         ? '<h1>Your order isn’t paid yet</h1><p class="muted" style="margin:0">' + (payment === 'cancelled' ? 'Payment was cancelled, so you haven’t been charged.' : 'We saved your order, but payment wasn’t completed.') + '</p>'
-        : '<h1>Thank you' + first + '!</h1><p class="muted" style="margin:0">Your order has been received.</p>';
+        : '<h1>Order ' + esc(o.order_number) + '</h1><p class="muted" style="margin:0">This order hasn’t been paid.</p>';
     var next = o.paid
       ? '<p>A receipt goes to <b>' + esc(o.email) + '</b>. Orders ship within ' + esc(m.shippingDays()) + ', and you can follow yours on Track your order.</p>'
       : unpaid
         ? '<p class="form-msg err" id="payMsg" role="alert"' + (o.payError ? '' : ' hidden') + '>' + esc(o.payError || '') + '</p>' +
           '<p><button class="btn loom" type="button" data-act="pay-order">Pay ' + u.money(o.total) + ' securely</button></p>' +
           '<p class="muted" style="font-size:13.5px">Want to change something? <a class="link-u"' + linkStyle + ' href="' + HW.link('/checkout') + '">Go back to checkout</a> — your cart is still saved. Unpaid orders are cancelled automatically.</p>'
-        : '<p>We’ll email <b>' + esc(o.email) + '</b> within one business day to confirm your order and arrange payment. Orders ship within ' + esc(m.shippingDays()) + ' after payment.</p>';
+        : '<p class="muted">Online payment is closed right now, so this order can’t be paid here. Questions? Use the Contact us page.</p>';
     return {
       html: '<div class="wrap"><div class="confirm">' +
         '<div class="weave-rule">' + HW.SVG.weave + '</div>' +
@@ -244,7 +247,7 @@
         '<a class="btn" href="' + HW.link('/') + '">Continue shopping</a> ' +
         '<a class="btn ghost" href="' + HW.link('/page/track-your-order') + '">Track your order</a>' +
         '</div></div>',
-      seo: { title: unpaid ? 'Payment needed' : 'Order confirmed', noindex: true },
+      seo: { title: o.paid ? 'Order confirmed' : 'Payment needed', noindex: true },
       after: function () { var h = document.querySelector('.confirm h1'); if (h) { h.tabIndex = -1; h.focus(); } }
     };
   };

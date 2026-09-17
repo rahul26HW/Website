@@ -65,7 +65,10 @@ export default {
         default: return json({ error: "Not found" }, 404, cors);
       }
     } catch (e) {
-      return json({ error: "Worker error: " + (e && e.message ? e.message : "unknown") }, 500, cors);
+      // Details go to the Cloudflare log. Only signed-in admins get them back; shoppers and webhooks get a plain message.
+      console.error(url.pathname, e && e.stack ? e.stack : e);
+      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup"].includes(url.pathname.replace(/\/+$/, ""));
+      return json({ error: adminRoute ? "Worker error: " + (e && e.message ? e.message : "unknown") : "Something went wrong. Please try again in a moment." }, 500, cors);
     }
   },
 };
