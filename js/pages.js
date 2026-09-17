@@ -5,20 +5,21 @@
   var u = HW.u, esc = u.esc, m = HW.m;
 
   /* Minimal, safe formatter for admin-written page text.
-     ## heading, # heading, - bullet, **bold**, [text](link) */
+     ## heading, # heading, - bullet, 1. numbered, **bold**, *italic*, [text](link) */
   HW.richText = function (md, underH2) {
     var inline = function (s) {
       return esc(s)
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?![*\w])/g, '$1<em>$2</em>')
         .replace(/\[(.+?)\]\(((?:https?:\/\/|mailto:|\/|#\/)[^\s)]*)\)/g, function (all, text, href) {
           var ext = /^https?:/i.test(href);
           var h = ext || /^mailto:/i.test(href) ? href : HW.link(href);
           return '<a class="link-u" href="' + h + '"' + (ext ? ' target="_blank" rel="noopener noreferrer"' : '') + '>' + text + '</a>';
         });
     };
-    var html = '', list = null, para = [], table = null;
+    var html = '', list = null, listTag = 'ul', para = [], table = null;
     function flushPara() { if (para.length) { html += '<p>' + para.map(inline).join('<br>') + '</p>'; para = []; } }
-    function flushList() { if (list) { html += '<ul>' + list.map(function (li) { return '<li>' + inline(li) + '</li>'; }).join('') + '</ul>'; list = null; } }
+    function flushList() { if (list) { html += '<' + listTag + '>' + list.map(function (li) { return '<li>' + inline(li) + '</li>'; }).join('') + '</' + listTag + '>'; list = null; } }
     /* | a | b | rows: first row is the header; a |---| row is ignored. */
     function flushTable() {
       if (!table) return;
@@ -38,7 +39,13 @@
       if (/^\s*$/.test(line)) { flushPara(); flushList(); return; }
       if (/^##\s+/.test(line)) { flushPara(); flushList(); html += sub[0] + inline(line.replace(/^##\s+/, '')) + sub[1]; return; }
       if (/^#\s+/.test(line)) { flushPara(); flushList(); html += '<h2>' + inline(line.replace(/^#\s+/, '')) + '</h2>'; return; }
-      if (/^\s*-\s+/.test(line)) { flushPara(); list = list || []; list.push(line.replace(/^\s*-\s+/, '')); return; }
+      var item = line.match(/^\s*(-|\d+\.)\s+(.*)$/);
+      if (item) {
+        var tag = item[1] === '-' ? 'ul' : 'ol';
+        flushPara();
+        if (list && tag !== listTag) flushList();
+        listTag = tag; list = list || []; list.push(item[2]); return;
+      }
       flushList(); para.push(line);
     });
     flushTable(); flushPara(); flushList();

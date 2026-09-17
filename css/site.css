@@ -175,7 +175,7 @@ header.site{position:sticky;top:var(--snip-top,0);z-index:40;background:rgba(247
 .cms-body h2{font-size:26px;color:var(--ink);margin:30px 0 12px}
 .cms-body h3,.cms-body h2.cms-sub{font-size:20px;color:var(--ink);margin:26px 0 10px}
 .cms-body p{margin:0 0 18px}
-.cms-body ul{margin:0 0 18px;padding-left:20px}
+.cms-body ul,.cms-body ol{margin:0 0 18px;padding-left:20px}
 .cms-body li{margin:0 0 8px}
 .cms-body strong{color:var(--ink)}
 .crumb a:hover{color:var(--ink)}

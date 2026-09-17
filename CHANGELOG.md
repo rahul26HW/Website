@@ -12,6 +12,9 @@
 ## After launch
 
 ### Hero banner, legal pages
+- Live hero: the old site's banner (blank white strip trimmed; a close-up of the bathroom photo on phones, linked to Rugs), plus photo slides for Willow towels and bath rugs. The Waterford and Bedding slides were removed because those products don't exist.
+- Terms of Service and Refund Policy rewritten; Shipping & Returns now matches the Refund Policy (30 days, unused and unwashed; free returns only for damaged, defective or wrong items). The old site's "90 nights" and "from our studio" wording was removed.
+- Page text supports *italic* and numbered lists (1. 2. 3.).
 - Hero slides can be **picture-only**: when a slide has a photo but no eyebrow, headline, subtext or button text, the picture is shown whole (not cropped, no dark overlay) and the button link makes the whole banner clickable. Phones use the optional mobile image. The slide dots get a dark backing on light banners.
 
 ### Security and privacy pass
