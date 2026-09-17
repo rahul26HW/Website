@@ -67,8 +67,10 @@
        Falls back to the database if the copy is missing or slow. */
     loadStore: function () {
       // Ask the CDN copy and the database at the same time; use whichever valid answer arrives first.
-      var snapshot = fetch(cfg.supabaseUrl + '/storage/v1/object/public/media/public/store.json')
-        .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('no snapshot')); })
+      var url = cfg.supabaseUrl + '/storage/v1/object/public/media/public/store.json';
+      // index.html may already have started this download; use it only if it asked the same project.
+      var snapshot = (window.HW_SNAPSHOT && window.HW_SNAPSHOT_URL === url ? window.HW_SNAPSHOT
+        : fetch(url).then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('no snapshot')); }))
         .then(function (snap) {
           if (!(snap && snap.data && Array.isArray(snap.data.products) && snap.at)) throw new Error('bad snapshot');
           return { data: snap.data, updated_at: snap.at, fromSnapshot: true };

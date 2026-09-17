@@ -24,6 +24,18 @@
     }
   })(window.location);
 </script>
+<script>
+  /* First visit: start downloading the store copy now, not after the scripts run (js/api.js picks it up).
+     Keep the address in step with supabaseUrl in js/config.js. */
+  try {
+    if (!localStorage.getItem('hw:store:v2')) {
+      window.HW_SNAPSHOT_URL = 'https://soydgxrrwozmiqzutypr.supabase.co/storage/v1/object/public/media/public/store.json';
+      window.HW_SNAPSHOT = fetch(window.HW_SNAPSHOT_URL)
+        .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('no snapshot')); });
+      window.HW_SNAPSHOT.catch(function () {});
+    }
+  } catch (e) {}
+</script>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://soydgxrrwozmiqzutypr.supabase.co" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
