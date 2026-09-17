@@ -11,7 +11,8 @@
      POST /stripe               Stripe webhook → marks the order paid, sends it to ShipStation
      POST /shipstation/push     Send one order to ShipStation again           (admins only)
      POST /shipstation/setup    Register the "order shipped" webhook          (admins only)
-     POST /shipstation/webhook  ShipStation SHIP_NOTIFY → saves carrier + tracking number
+     POST /shipstation/webhook  ShipStation SHIP_NOTIFY / FULFILLMENT_SHIPPED → saves carrier + tracking number
+     POST /shipstation/sync     Look an order up in ShipStation and save its tracking  (admins only)
      GET  /          Health check (lists which features are set up — never the keys)
 
    "Admins only" = the request must carry the signed-in admin's Supabase
@@ -62,12 +63,13 @@ export default {
         case "/shipstation/push": return await handleShipstationPush(request, env, cors);
         case "/shipstation/setup": return await handleShipstationSetup(request, env, cors);
         case "/shipstation/webhook": return await handleShipstationWebhook(request, env);
+        case "/shipstation/sync": return await handleShipstationSync(request, env, cors);
         default: return json({ error: "Not found" }, 404, cors);
       }
     } catch (e) {
       // Details go to the Cloudflare log. Only signed-in admins get them back; shoppers and webhooks get a plain message.
       console.error(url.pathname, e && e.stack ? e.stack : e);
-      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup"].includes(url.pathname.replace(/\/+$/, ""));
+      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync"].includes(url.pathname.replace(/\/+$/, ""));
       return json({ error: adminRoute ? "Worker error: " + (e && e.message ? e.message : "unknown") : "Something went wrong. Please try again in a moment." }, 500, cors);
     }
   },
@@ -591,7 +593,9 @@ async function handleShipstationPush(request, env, cors) {
   catch (e) { return json({ error: e.message }, 502, cors); }
 }
 
-/* POST /shipstation/setup — admins only. Points ShipStation's SHIP_NOTIFY webhook at this worker (once). */
+/* POST /shipstation/setup — admins only. Points ShipStation's webhooks at this server (once):
+   SHIP_NOTIFY (a label was created) and FULFILLMENT_SHIPPED (an order was marked shipped with a tracking number). */
+const SS_EVENTS = ["SHIP_NOTIFY", "FULFILLMENT_SHIPPED"];
 async function handleShipstationSetup(request, env, cors) {
   const denied = await requireAdmin(request, env);
   if (denied) return json({ error: denied }, 401, cors);
@@ -600,22 +604,48 @@ async function handleShipstationSetup(request, env, cors) {
   const base = String(env.SELF_URL || new URL(request.url).origin).replace(/\/+$/, "") + "/shipstation/webhook";
   const target = base + "?token=" + encodeURIComponent(env.SHIPSTATION_WEBHOOK_TOKEN);
   const list = await shipstation(env, "webhooks");
-  const hooks = ((list && list.webhooks) || []).filter((h) => String(h.Url || h.url || "").split("?")[0] === base);
-  if (hooks.some((h) => (h.Url || h.url) === target && (h.HookType || h.hookType) === "SHIP_NOTIFY")) return json({ ok: true, already: true }, 200, cors);
-  for (const h of hooks) await shipstation(env, "webhooks/" + (h.WebHookID || h.webHookId), { method: "DELETE" }).catch(() => {}); // e.g. an old token
-  const res = await shipstation(env, "webhooks/subscribe", { method: "POST", body: JSON.stringify({ target_url: target, event: "SHIP_NOTIFY", store_id: null, friendly_name: "Home Weavers tracking" }) });
-  return json({ ok: true, id: res && res.id }, 200, cors);
+  const mine = ((list && list.webhooks) || []).filter((h) => String(h.Url || h.url || "").split("?")[0] === base);
+  const added = [];
+  for (const h of mine) {
+    const ok = (h.Url || h.url) === target && SS_EVENTS.includes(h.HookType || h.hookType);
+    if (!ok) await shipstation(env, "webhooks/" + (h.WebHookID || h.webHookId), { method: "DELETE" }).catch(() => {}); // e.g. an old token
+  }
+  for (const event of SS_EVENTS) {
+    if (mine.some((h) => (h.Url || h.url) === target && (h.HookType || h.hookType) === event)) continue;
+    const res = await shipstation(env, "webhooks/subscribe", { method: "POST", body: JSON.stringify({ target_url: target, event, store_id: null, friendly_name: "Home Weavers tracking (" + event + ")" }) });
+    added.push({ event, id: res && res.id });
+  }
+  return json({ ok: true, already: added.length === 0, added }, 200, cors);
 }
 
 const CARRIERS = { stamps_com: "USPS", usps: "USPS", endicia: "USPS", ups: "UPS", ups_walleted: "UPS", fedex: "FedEx", fedex_walleted: "FedEx", dhl_express: "DHL", dhl_express_worldwide: "DHL", ontrac: "OnTrac" };
 
-/* POST /shipstation/webhook?token=… — ShipStation SHIP_NOTIFY: { resource_url, resource_type } */
+/* Saves one ShipStation shipment or fulfillment on our order. `filter` picks the order (by our id or ShipStation's id). */
+async function applyShipment(env, filter, s) {
+  if (!s || s.voided || !s.trackingNumber) return 0;
+  const rows = await patchOrder(env, filter + "&status=in.(new,packed,shipped)", {
+    status: "shipped",
+    carrier: CARRIERS[s.carrierCode] || String(s.carrierCode || "").toUpperCase() || null,
+    tracking_number: String(s.trackingNumber).slice(0, 100),
+    shipped_at: s.shipDate ? new Date(s.shipDate).toISOString() : new Date().toISOString(),
+  });
+  return Array.isArray(rows) ? rows.length : 0;
+}
+
+/* Our order for a ShipStation record: labels carry our orderKey; fulfillments only carry ShipStation's orderId. */
+function shipmentFilter(s) {
+  if (UUID.test(s.orderKey || "")) return "id=eq." + s.orderKey;
+  if (/^\d+$/.test(String(s.orderId || ""))) return "shipstation_order_id=eq." + s.orderId;
+  return null;
+}
+
+/* POST /shipstation/webhook?token=… — ShipStation SHIP_NOTIFY / FULFILLMENT_SHIPPED: { resource_url, resource_type } */
 async function handleShipstationWebhook(request, env) {
   if (!features(env).shipstationWebhook) return json({ error: "Not set up" }, 501);
   const token = new URL(request.url).searchParams.get("token") || "";
   if (!safeEqual(token, env.SHIPSTATION_WEBHOOK_TOKEN)) return json({ error: "Forbidden" }, 403);
   const body = await readJson(request);
-  if (body.resource_type !== "SHIP_NOTIFY") return json({ ok: true, ignored: body.resource_type || "unknown" });
+  if (!SS_EVENTS.includes(body.resource_type)) return json({ ok: true, ignored: body.resource_type || "unknown" });
   let resource;
   try { resource = new URL(String(body.resource_url || "")); } catch { return json({ error: "Bad resource_url" }, 400); }
   // The ShipStation key goes with this request, so only ever call ShipStation itself.
@@ -626,17 +656,34 @@ async function handleShipstationWebhook(request, env) {
     resource.searchParams.set("page", String(page));
     const data = await shipstation(env, resource.toString());
     pages = Math.min(Number(data && data.pages) || 1, 20);
-    for (const s of (data && data.shipments) || []) {
-      if (s.voided || !UUID.test(s.orderKey || "") || !s.trackingNumber) continue;
-      const rows = await patchOrder(env, "id=eq." + s.orderKey + "&status=in.(new,packed,shipped)", {
-        status: "shipped",
-        carrier: CARRIERS[s.carrierCode] || String(s.carrierCode || "").toUpperCase() || null,
-        tracking_number: String(s.trackingNumber).slice(0, 100),
-        shipped_at: s.shipDate ? new Date(s.shipDate).toISOString() : new Date().toISOString(),
-      });
-      updated += Array.isArray(rows) ? rows.length : 0;
+    for (const s of [].concat((data && data.shipments) || [], (data && data.fulfillments) || [])) {
+      const filter = shipmentFilter(s);
+      if (filter) updated += await applyShipment(env, filter, s);
     }
     page++;
   } while (page <= pages);
   return json({ ok: true, updated });
+}
+
+/* POST /shipstation/sync { order_id } — admins only. Looks the order up in ShipStation and saves its tracking
+   (a safety net if a webhook was missed). */
+async function handleShipstationSync(request, env, cors) {
+  const denied = await requireAdmin(request, env);
+  if (denied) return json({ error: denied }, 401, cors);
+  if (!features(env).shipstation) return json({ error: "ShipStation isn’t set up on the server." }, 501, cors);
+  const body = await readJson(request);
+  if (!UUID.test(body.order_id || "")) return json({ error: "Missing order" }, 400, cors);
+  const order = await loadOrder(env, "id=eq." + body.order_id);
+  if (!order) return json({ error: "Order not found" }, 404, cors);
+  if (!order.shipstation_order_id) return json({ error: "This order isn’t in ShipStation yet." }, 409, cors);
+  const num = encodeURIComponent(order.order_number);
+  const mine = (s) => !s.voided && s.trackingNumber && (s.orderKey === order.id || String(s.orderId) === String(order.shipstation_order_id));
+  const shipments = ((await shipstation(env, "shipments?orderNumber=" + num + "&includeShipmentItems=false")) || {}).shipments || [];
+  let found = shipments.filter(mine);
+  if (!found.length) found = (((await shipstation(env, "fulfillments?orderNumber=" + num)) || {}).fulfillments || []).filter(mine);
+  if (!found.length) return json({ ok: true, shipped: false }, 200, cors);
+  const latest = found.sort((a, b) => String(b.shipDate || "").localeCompare(String(a.shipDate || "")))[0];
+  const updated = await applyShipment(env, "id=eq." + order.id, latest);
+  const fresh = await loadOrder(env, "id=eq." + order.id);
+  return json({ ok: true, shipped: true, updated, carrier: fresh && fresh.carrier, tracking_number: fresh && fresh.tracking_number, status: fresh && fresh.status }, 200, cors);
 }

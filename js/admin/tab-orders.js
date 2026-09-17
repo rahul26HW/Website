@@ -104,7 +104,8 @@
     var err = o.shipstation_error ? '<p class="badmsg" style="margin:0 0 6px">ShipStation said: ' + esc(o.shipstation_error) + '</p>' : '';
     var btn = o.status === 'cancelled'
       ? (o.shipstation_order_id ? '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">Cancel in ShipStation</button></div>' : '')
-      : '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">' + (o.shipstation_order_id ? 'Send to ShipStation again' : 'Send to ShipStation') + '</button></div>';
+      : '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">' + (o.shipstation_order_id ? 'Send to ShipStation again' : 'Send to ShipStation') + '</button>' +
+        (o.shipstation_order_id && /^(new|packed)$/.test(o.status) ? '<button class="btn ghost sm" type="button" data-a="order-sync">Get tracking from ShipStation</button>' : '') + '</div>';
     return pay + ship + err + btn + (o.shipped_at ? '<p class="hint">Shipped ' + esc(new Date(o.shipped_at).toLocaleString()) + '</p>' : '');
   }
 
@@ -162,6 +163,17 @@
     var r = await A.sb.from('orders').select('*, order_items(*)').eq('id', o.id);
     if (!r.error && r.data && r.data[0]) Object.assign(o, r.data[0]);
     A.render();
+  };
+  A.actions['order-sync'] = async function (btn) {
+    var o = os.list.find(function (x) { return x.id === os.open; });
+    btn.disabled = true; btn.textContent = 'Checking…';
+    try {
+      var r = await A.workerCall('/shipstation/sync', { order_id: o.id });
+      u.toast(r.shipped ? 'Shipped — ' + (r.carrier ? r.carrier + ' ' : '') + r.tracking_number : 'Not shipped in ShipStation yet');
+    } catch (e) { u.toast('ShipStation: ' + e.message); }
+    var res = await A.sb.from('orders').select('*, order_items(*)').eq('id', o.id);
+    if (!res.error && res.data && res.data[0]) Object.assign(o, res.data[0]);
+    A.actions['order-open']({ dataset: { id: o.id } });
   };
   A.actions['order-deduct'] = async function () {
     var o = os.list.find(function (x) { return x.id === os.open; });
