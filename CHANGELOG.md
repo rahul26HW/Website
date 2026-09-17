@@ -15,6 +15,7 @@
 - The Stripe/ShipStation/AI server code now runs as the Supabase Edge Function **hw** (`https://soydgxrrwozmiqzutypr.supabase.co/functions/v1/hw`), deployed with Verify JWT off. No Cloudflare account needed.
 - `tools/build-edge.js` generates `supabase/functions/hw/index.ts` from `ai-proxy.worker.js` (same code; a small Deno wrapper strips the `/hw` path prefix and supplies Supabase's built-in URL and keys). All 44 server tests pass both directly and through the Edge wrapper.
 - The worker sends new `sb_secret_` keys only in the `apikey` header (JWT keys also in `Authorization`), and ShipStation's webhook address uses the function's public URL. The health check reports `database`.
+- A cancelled order that is already in ShipStation can be cancelled there too (**Cancel in ShipStation** on the order).
 - The site and admin use the Edge Function by default; Storefront › Card payments only needs an address for a different server. Buttons renamed to **Check server**.
 
 ### Hero banner, legal pages

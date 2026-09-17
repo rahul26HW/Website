@@ -552,7 +552,7 @@ function shipstationOrder(order) {
     orderKey: order.id, // ShipStation updates the same order when this is sent again
     orderDate: order.created_at,
     paymentDate: order.paid_at || undefined,
-    orderStatus: paid ? "awaiting_shipment" : "awaiting_payment",
+    orderStatus: order.status === "cancelled" ? "cancelled" : paid ? "awaiting_shipment" : "awaiting_payment",
     customerUsername: order.email,
     customerEmail: order.email,
     billTo: { name: order.name },
@@ -591,7 +591,8 @@ async function handleShipstationPush(request, env, cors) {
   if (!UUID.test(body.order_id || "")) return json({ error: "Missing order" }, 400, cors);
   const order = await loadOrder(env, "id=eq." + body.order_id);
   if (!order) return json({ error: "Order not found" }, 404, cors);
-  if (order.status === "cancelled") return json({ error: "This order is cancelled." }, 409, cors);
+  // A cancelled order is only sent to cancel its copy in ShipStation.
+  if (order.status === "cancelled" && !order.shipstation_order_id) return json({ error: "This order is cancelled and isn’t in ShipStation." }, 409, cors);
   try { return json(await pushToShipstation(env, order), 200, cors); }
   catch (e) { return json({ error: e.message }, 502, cors); }
 }
@@ -600,7 +601,7 @@ async function handleShipstationPush(request, env, cors) {
 async function handleShipstationSetup(request, env, cors) {
   const denied = await requireAdmin(request, env);
   if (denied) return json({ error: denied }, 401, cors);
-  if (!features(env).shipstationWebhook) return json({ error: "Add SHIPSTATION_API_KEY, SHIPSTATION_API_SECRET and SHIPSTATION_WEBHOOK_TOKEN to the worker first." }, 501, cors);
+  if (!features(env).shipstationWebhook) return json({ error: "Add SHIPSTATION_API_KEY, SHIPSTATION_API_SECRET and SHIPSTATION_WEBHOOK_TOKEN to the server secrets first." }, 501, cors);
   // SELF_URL is set when this code runs as a Supabase Edge Function (its public address includes /functions/v1/hw).
   const base = String(env.SELF_URL || new URL(request.url).origin).replace(/\/+$/, "") + "/shipstation/webhook";
   const target = base + "?token=" + encodeURIComponent(env.SHIPSTATION_WEBHOOK_TOKEN);

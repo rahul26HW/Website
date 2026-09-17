@@ -102,7 +102,9 @@
       ? '<p style="margin:0 0 6px">✓ In ShipStation (order ' + esc(o.shipstation_order_id) + (o.shipstation_synced_at ? ', sent ' + esc(new Date(o.shipstation_synced_at).toLocaleString()) : '') + ')</p>'
       : '<p class="hint" style="margin:0 0 6px">Not in ShipStation yet.' + (o.payment_status === 'paid' ? '' : ' Paid orders are sent automatically.') + '</p>';
     var err = o.shipstation_error ? '<p class="badmsg" style="margin:0 0 6px">ShipStation said: ' + esc(o.shipstation_error) + '</p>' : '';
-    var btn = o.status === 'cancelled' ? '' : '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">' + (o.shipstation_order_id ? 'Send to ShipStation again' : 'Send to ShipStation') + '</button></div>';
+    var btn = o.status === 'cancelled'
+      ? (o.shipstation_order_id ? '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">Cancel in ShipStation</button></div>' : '')
+      : '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">' + (o.shipstation_order_id ? 'Send to ShipStation again' : 'Send to ShipStation') + '</button></div>';
     return pay + ship + err + btn + (o.shipped_at ? '<p class="hint">Shipped ' + esc(new Date(o.shipped_at).toLocaleString()) + '</p>' : '');
   }
 
@@ -150,7 +152,8 @@
   };
   A.actions['order-shipstation'] = async function (btn) {
     var o = os.list.find(function (x) { return x.id === os.open; });
-    if (o.payment_status !== 'paid' && !confirm('This order isn’t paid. Send it to ShipStation as “awaiting payment”?')) return;
+    if (o.status === 'cancelled') { if (!confirm('Mark this order as cancelled in ShipStation?')) return; }
+    else if (o.payment_status !== 'paid' && !confirm('This order isn’t paid. Send it to ShipStation as “awaiting payment”?')) return;
     btn.disabled = true; btn.textContent = 'Sending…';
     try {
       await A.workerCall('/shipstation/push', { order_id: o.id });
