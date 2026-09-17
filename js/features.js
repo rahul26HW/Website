@@ -294,7 +294,7 @@
     available: function () { return !!String((HW.DB.settings || {}).sizeGuide || '').trim(); },
     open: function (trigger) {
       var box = document.getElementById('sizeGuide');
-      box.querySelector('.sg-body').innerHTML = HW.richText(m.pageText(HW.DB.settings.sizeGuide));
+      box.querySelector('.sg-body').innerHTML = HW.richText(m.pageText(HW.DB.settings.sizeGuide), true);
       box.hidden = false;
       document.body.classList.add('noscroll');
       var release = u.trapFocus(box.querySelector('.sg-inner'), close);

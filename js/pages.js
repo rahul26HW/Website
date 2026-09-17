@@ -6,7 +6,7 @@
 
   /* Minimal, safe formatter for admin-written page text.
      ## heading, # heading, - bullet, **bold**, [text](link) */
-  HW.richText = function (md) {
+  HW.richText = function (md, underH2) {
     var inline = function (s) {
       return esc(s)
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -29,12 +29,14 @@
         rows.slice(1).map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + inline(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
       table = null;
     }
+    // "##" is an h3 under a "#" heading or when the caller already has an h2 (size guide); otherwise an h2 with the same look, so headings never skip a level after the page h1.
+    var sub = underH2 || /^#\s+/m.test(String(md || '')) ? ['<h3>', '</h3>'] : ['<h2 class="cms-sub">', '</h2>'];
     String(md || '').split('\n').forEach(function (raw) {
       var line = raw.replace(/\s+$/, '');
       if (/^\s*\|/.test(line)) { flushPara(); flushList(); table = table || []; table.push(line); return; }
       flushTable();
       if (/^\s*$/.test(line)) { flushPara(); flushList(); return; }
-      if (/^##\s+/.test(line)) { flushPara(); flushList(); html += '<h3>' + inline(line.replace(/^##\s+/, '')) + '</h3>'; return; }
+      if (/^##\s+/.test(line)) { flushPara(); flushList(); html += sub[0] + inline(line.replace(/^##\s+/, '')) + sub[1]; return; }
       if (/^#\s+/.test(line)) { flushPara(); flushList(); html += '<h2>' + inline(line.replace(/^#\s+/, '')) + '</h2>'; return; }
       if (/^\s*-\s+/.test(line)) { flushPara(); list = list || []; list.push(line.replace(/^\s*-\s+/, '')); return; }
       flushList(); para.push(line);

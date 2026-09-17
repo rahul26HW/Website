@@ -23,6 +23,7 @@
   Largest Contentful Paint measurement (Lighthouse reported "NO_LCP" and a performance score of 0). Snapping now starts on the first touch, scroll or arrow click.
 - Page files preload the category's first product photo or the product's main photo, so it starts downloading before the scripts run.
 - Hero slide dots have 24px tap targets (the dot itself is still 9px).
+- Info pages: `##` sections are now `<h2>` (same look) when the page has no `#` heading, so headings don't jump from h1 to h3. The size guide dialog keeps `<h3>` under its own `<h2>`.
 - `404.html` no longer requests a missing favicon on deep links.
 - Promotions: `WELCOME10` turned off; `WELCOME15` is the sign-up code.
 - Towel product names shortened to under 50 characters, with features and SEO titles added (URLs unchanged).
