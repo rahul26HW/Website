@@ -59,6 +59,7 @@ async function main() {
   if (!/^https:\/\//.test(site)) throw new Error('Set “Live site address” in Admin › Storefront first.');
   const abs = (p) => site + p.replace(/^\//, '');
   const asset = (src) => !src || /^data:/.test(src) ? '' : /^https?:\/\//.test(src) ? src : abs(src);
+  HW.asset = asset; // used by m.srcset (router.js is not loaded here)
 
   const pages = [];
   m.visibleCategories().forEach(function (c) {
