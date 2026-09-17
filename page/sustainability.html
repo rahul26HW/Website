@@ -43,24 +43,28 @@
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap"></noscript>
 <link rel="stylesheet" href="../css/site.css">
-<script defer src="../js/config.js"></script>
-<script defer src="../js/util.js"></script>
-<script defer src="../js/sanitize.js"></script>
-<script defer src="../js/schema.js"></script>
-<script defer src="../js/model.js"></script>
-<script defer src="../js/api.js"></script>
-<script defer src="../js/router.js"></script>
-<script defer src="../js/seo.js"></script>
-<script defer src="../js/chrome.js"></script>
-<script defer src="../js/home.js"></script>
-<script defer src="../js/catalog.js"></script>
-<script defer src="../js/product.js"></script>
-<script defer src="../js/cart.js"></script>
-<script defer src="../js/snipcart.js"></script>
-<script defer src="../js/checkout.js"></script>
-<script defer src="../js/pages.js"></script>
-<script defer src="../js/features.js"></script>
-<script defer src="../js/app.js"></script>
+<script>
+  /* Scripts load right after the first paint, so the header shows while they download.
+     Order is kept (async=false). A background tab may never paint, so it loads at once there. */
+  (function () {
+    var files = ['config', 'util', 'sanitize', 'schema', 'model', 'api', 'router', 'seo', 'chrome', 'home', 'catalog',
+      'product', 'cart', 'snipcart', 'checkout', 'pages', 'features', 'app'];
+    var css = document.querySelector('link[rel="stylesheet"][href$="css/site.css"]');
+    var base = css ? css.getAttribute('href').slice(0, -'css/site.css'.length) : ''; // "" or "../" on page files
+    var done = false;
+    function load() {
+      if (done) return; done = true;
+      files.forEach(function (f) {
+        var el = document.createElement('script');
+        el.src = base + 'js/' + f + '.js';
+        el.async = false;
+        document.head.appendChild(el);
+      });
+    }
+    if (document.visibilityState !== 'visible' || !window.requestAnimationFrame) load();
+    else { requestAnimationFrame(function () { setTimeout(load, 0); }); setTimeout(load, 1500); }
+  })();
+</script>
 </head>
 <body>
 <a class="skip" href="#view">Skip to content</a>
