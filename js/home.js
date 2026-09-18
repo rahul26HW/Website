@@ -101,8 +101,9 @@
         '<div class="shead reveal"><div class="weave-rule">' + HW.SVG.weave + '</div><div class="eyebrow">Shop by room</div><h2>Explore the collections</h2></div>' +
         railHTML('catRail', 'cat-rail', cats.map(function (c, i) {
           var n = m.productsIn(c).length;
-          var ph = c.image
-            ? '<img class="ph" src="' + esc(HW.asset(m.thumb(c.image))) + '" alt="" loading="lazy" decoding="async" width="600" height="770">'
+          var pick = c.image || (function () { var first = m.stockSort(m.productsIn(c))[0]; return first ? m.primaryImage(first) : ''; })();
+          var ph = pick
+            ? '<img class="ph" src="' + esc(HW.asset(m.thumb(pick))) + '" alt="" loading="lazy" decoding="async" width="600" height="770">'
             : '<div class="ph" style="background:linear-gradient(160deg,' + SWATCH[i % SWATCH.length] + ',' + SWATCH[(i + 4) % SWATCH.length] + ')"></div>';
           return '<a class="cat-tile reveal" href="' + HW.link('/category/' + c.slug) + '">' + ph + '<div class="ov"></div>' +
             '<div class="lab"><span>' + u.plural(n, 'product') + '</span><h3>' + esc(c.name) + '</h3></div></a>';

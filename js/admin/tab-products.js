@@ -27,7 +27,7 @@
     });
     var selIds = Object.keys(listState.selected).filter(function (id) { return listState.selected[id] && d.products.some(function (p) { return p.id === id; }); });
     var selSimple = selIds.filter(function (id) { var p = d.products.find(function (x) { return x.id === id; }); return p && !isColl(p); });
-    return '<h1 class="h1row">Products <button class="btn loom sm" type="button" data-a="product-new">+ Add product</button></h1>' +
+    return '<h1 class="h1row">Products <span class="btnrow">' + (A.productCsvButtons ? A.productCsvButtons() : '') + '<button class="btn loom sm" type="button" data-a="product-new">+ Add product</button></span></h1>' +
       '<p class="sub">Your catalog. A collection holds many color &amp; size variations, each its own SKU.</p>' +
       '<section class="panel" style="padding:14px 16px">' +
       '<div class="toolbar"><label class="sr-only" for="pSearch">Search products</label><input id="pSearch" type="search" placeholder="Search name or SKU" value="' + esc(listState.q) + '">' +

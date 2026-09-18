@@ -27,7 +27,9 @@
         : '<a class="btn block sm loom" href="' + url + '" aria-label="Select options for ' + esc(p.name) + '">Select options</a>';
       var cols = m.optColor(p).values;
       swatches = '<div class="cardswatch">' + cols.slice(0, 6).map(function (c) {
-        return '<span role="img" aria-label="' + esc(c.label) + '" title="' + esc(c.label) + '" style="background:' + esc(c.hex) + '"></span>';
+        var sw = m.swatchImage(p, c);
+        return '<span role="img" aria-label="' + esc(c.label) + '" title="' + esc(c.label) + '" style="background:' + esc(c.hex) + '"' + (sw ? ' class="has-img"' : '') + '>' +
+          (sw ? '<img src="' + esc(HW.asset(m.thumb(sw))) + '" alt="" loading="lazy" decoding="async" width="15" height="15" style="transform-origin:50% ' + (/swatch/i.test(sw.split('/').pop()) ? '85%' : '25%') + '">' : '') + '</span>';
       }).join('') + (cols.length > 6 ? '<em>+' + (cols.length - 6) + '<span class="sr-only"> more colors</span></em>' : '') + '</div>';
     } else {
       var sp = m.simplePrice(p);
