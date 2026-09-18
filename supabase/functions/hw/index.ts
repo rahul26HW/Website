@@ -636,6 +636,10 @@ async function handleCheckoutSession(request, env, cors) {
       },
     }],
   };
+  // Sales tax worked out by place_order, shown as its own line so the Stripe total matches the order.
+  if (cents(order.tax) > 0) {
+    params.line_items.push({ quantity: 1, price_data: { currency, unit_amount: cents(order.tax), product_data: { name: "Sales tax" } } });
+  }
   if (cents(order.discount) > 0) {
     // A one-use coupon for exactly the discount place_order worked out.
     const coupon = await stripe(env, "coupons", {
@@ -983,6 +987,8 @@ function itemsTable(order) {
     line("Subtotal", money(order.subtotal)) +
     (Number(order.discount) > 0 ? line("Discount" + (order.promo_code ? " (" + esc(order.promo_code) + ")" : ""), "−" + money(order.discount)) : "") +
     line("Shipping", Number(order.shipping) > 0 ? money(order.shipping) : "Free") +
+    (Number(order.cod_fee) > 0 ? line("Cash on delivery fee", money(order.cod_fee)) : "") +
+    (Number(order.tax) > 0 ? line("Sales tax", money(order.tax)) : "") +
     `<tr><td style="padding:6px 0;font-size:15px"><b>Total</b></td><td align="right" style="padding:6px 0;font-size:15px"><b>${money(order.total)}</b></td></tr></table>`;
 }
 

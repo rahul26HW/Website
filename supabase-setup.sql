@@ -482,6 +482,8 @@ declare
   v_held      numeric;
   v_state     text := upper(trim(coalesce(p_order->'address'->>'state','')));
   v_fee       numeric := 0;
+  v_tax       numeric := 0;
+  v_rate      jsonb;
   v_order_id  uuid;
   v_token     uuid;
   v_number    text;
@@ -668,7 +670,18 @@ begin
     v_ship := coalesce(public._num(v_sh->>'flatRate'), 9.95);
   end if;
 
-  v_total  := greatest(v_sub - v_discount, 0) + v_ship + v_fee;
+  -- Sales tax (Admin › Promotions › Sales tax): a rate per state, on the discounted items and, if set, shipping.
+  if coalesce(v_store->'tax'->>'enabled', 'false') = 'true' then
+    select e into v_rate from jsonb_array_elements(coalesce(v_store->'tax'->'rates', '[]'::jsonb)) e
+     where upper(trim(e->>'state')) = v_state limit 1;
+    if v_rate is not null and coalesce(public._num(v_rate->>'rate'), 0) > 0 then
+      v_tax := round((greatest(v_sub - v_discount, 0)
+                      + case when coalesce(v_rate->>'shipping', 'true') <> 'false' then v_ship else 0 end)
+                     * least(public._num(v_rate->>'rate'), 20) / 100, 2);
+    end if;
+  end if;
+
+  v_total  := greatest(v_sub - v_discount, 0) + v_ship + v_fee + v_tax;
   if v_method = 'cod' and v_total > coalesce(nullif(public._num(v_store->'payments'->>'codMax'), 0), 500) then
     raise exception 'COD_LIMIT' using errcode = '22023';
   end if;
@@ -679,7 +692,7 @@ begin
   end loop;
 
   insert into public.orders (order_number, email, name, phone, shipping_address,
-                             subtotal, discount, shipping, total, promo_code, customer_note,
+                             subtotal, discount, shipping, tax, total, promo_code, customer_note,
                              payment_method, cod_fee, payment_status, paid_at)
   values (v_number, v_email, v_name, left(nullif(trim(p_order->>'phone'),''), 40),
           jsonb_build_object(
@@ -689,7 +702,7 @@ begin
             'state',   v_state,
             'zip',     left(trim(v_addr->>'zip'), 20),
             'country', 'US'),
-          round(v_sub,2), round(v_discount,2), round(v_ship,2), round(v_total,2),
+          round(v_sub,2), round(v_discount,2), round(v_ship,2), round(v_tax,2), round(v_total,2),
           case when v_code is not null then upper(v_promo->>'code') end,
           left(nullif(trim(p_order->>'note'),''), 1000),
           -- A COD order is confirmed straight away (paid_at starts the free cancellation window); cash is collected on delivery.
@@ -710,7 +723,7 @@ begin
   return jsonb_build_object(
     'order_number', v_number, 'email', v_email, 'pay_token', v_token,
     'subtotal', round(v_sub,2), 'discount', round(v_discount,2),
-    'shipping', round(v_ship,2), 'total', round(v_total,2),
+    'shipping', round(v_ship,2), 'tax', round(v_tax,2), 'total', round(v_total,2),
     'payment_method', v_method, 'cod_fee', round(v_fee,2),
     'paid_at', case when v_method = 'cod' then now() end,
     'items', v_lines);
