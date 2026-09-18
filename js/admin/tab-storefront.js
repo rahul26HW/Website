@@ -100,8 +100,8 @@
         ui.panel('Payment methods',
           '<p class="hint" style="margin:-6px 0 12px">Switch each way to pay on or off, then press <b>Save</b>. With both off, checkout is closed.</p>' +
           '<div class="switches">' +
-          ui.check('<b>Card payments (Stripe)</b><span class="hint">Card, Apple Pay and Google Pay on Stripe’s secure page. Needs the Stripe keys in Supabase — “Check server” below must show Stripe ready.</span>', 'payments.stripe', pay.stripe) +
-          ui.check('<b>Cash on delivery</b><span class="hint">The customer pays the courier in cash. Before switching on: make sure your carrier offers cash collection, and update the Terms and Refund pages (they currently say you don’t take cash on delivery).</span>', 'payments.cod', pay.cod) +
+          ui.check('<span class="swtext"><b>Card payments (Stripe)</b><span class="hint">Card, Apple Pay and Google Pay on Stripe’s secure page. Needs the Stripe keys in Supabase — “Check server” below must show Stripe ready.</span></span>', 'payments.stripe', pay.stripe) +
+          ui.check('<span class="swtext"><b>Cash on delivery</b><span class="hint">The customer pays the courier in cash. Before switching on: make sure your carrier offers cash collection, and update the Terms and Refund pages (they currently say you don’t take cash on delivery).</span></span>', 'payments.cod', pay.cod) +
           '</div>' +
           '<div class="grid2">' +
           ui.field('Cash on delivery fee ($)', 'payments.codFee', pay.codFee, { type: 'number', min: 0, hint: 'Added to COD orders. 0 = no fee. Up to $50.' }) +

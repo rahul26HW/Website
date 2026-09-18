@@ -247,7 +247,8 @@ details.colgroup .gbody{padding:4px 14px 14px}
 
 /* On/off switches (Admin › Storefront › Payment methods) */
 .switches{display:flex;flex-direction:column;gap:4px;margin:0 0 14px}
-.switches .checkrow{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line, #e5e0d6);cursor:pointer;flex-direction:row-reverse}
+.switches .checkrow{display:flex;align-items:flex-start;gap:14px;padding:12px 0;border-bottom:1px solid var(--line, #e5e0d6);cursor:pointer}
+.switches .swtext{flex:1;min-width:0}
 .switches .checkrow:last-child{border-bottom:0}
 .switches .checkrow b{display:block}
 .switches .checkrow .hint{display:block;margin-top:2px}
