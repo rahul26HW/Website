@@ -104,6 +104,8 @@
     'size-guide': function (el) { HW.sizeGuide.open(el); },
     consent: function (el) { HW.consent.set(el.dataset.level); },
     'pay-order': function (el) { HW.checkout.payAgain(el); },
+    'cancel-order': function (el) { HW.orderCancel.run(el); },
+    'cancel-ask': function (el) { HW.orderCancel.request(el); },
     reload: function () { location.reload(); },
     'consent-settings': function () { HW.consent.show(); var b = document.querySelector('#cookieBanner button'); if (b) b.focus(); }
   };
@@ -114,6 +116,7 @@
     checkout: function (f) { HW.checkout.submit(f); },
     contact: function (f) { HW.contact.submit(f); },
     track: function (f) { HW.track.submit(f); },
+
     notify: function (f) { HW.pdp.notify(f); },
     search: function (f) {
       var q = f.querySelector('input[name=q]').value.trim();

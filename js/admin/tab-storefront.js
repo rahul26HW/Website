@@ -97,6 +97,8 @@
           'All keys live in your Supabase Edge Function “hw” (Supabase › Edge Functions › Secrets) — never here. Setup steps: README › “Card payments and ShipStation”.</p>' +
           ui.check('Take card payments with Stripe at checkout', 'payments.stripe', pay.stripe) +
           '<p class="hint" style="margin:-4px 0 12px">While this is off, checkout is closed — the site takes no orders without payment.</p>' +
+          ui.field('Free cancellation window (minutes)', 'settings.cancelMinutes', (d.settings || {}).cancelMinutes, { type: 'int', min: 0, max: 1440,
+            hint: 'After payment the customer can cancel themselves for this long and get an automatic refund. The order is then sent to ShipStation by itself. 0 = no self-service cancelling.' }) +
           ui.field('Server address (optional)', 'payments.workerUrl', pay.workerUrl, { type: 'trim', placeholder: A.defaultWorkerUrl(),
             hint: 'Leave blank to use your Supabase Edge Function. Leave Stripe off until “Check server” shows Stripe ready.' }) +
           (sn.enabled && pay.stripe ? '<p class="adwarn">Snipcart is also on. While Snipcart is on, shoppers use Snipcart’s checkout and Stripe isn’t used.</p>' : '') +

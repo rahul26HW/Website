@@ -366,9 +366,15 @@ alter table public.orders add column if not exists shipped_at            timesta
 alter table public.orders add column if not exists shipstation_order_id  text;
 alter table public.orders add column if not exists shipstation_synced_at timestamptz;
 alter table public.orders add column if not exists shipstation_error     text;
+-- A paid order waits as "new" while the customer can still cancel it (30 minutes), then becomes "accepted"
+-- (sent to ShipStation) either when an admin accepts it or automatically.
+alter table public.orders add column if not exists accepted_at           timestamptz;
+alter table public.orders add column if not exists cancelled_at          timestamptz;
+alter table public.orders add column if not exists cancel_requested_at   timestamptz; -- customer asked to cancel after the window
+alter table public.orders add column if not exists cancel_reason         text;
 alter table public.orders drop constraint if exists orders_status_check;
 alter table public.orders add constraint orders_status_check
-  check (status in ('new','packed','shipped','delivered','refunded','cancelled'));
+  check (status in ('new','accepted','packed','shipped','delivered','refunded','cancelled'));
 create index if not exists orders_payment_ref_idx on public.orders(payment_ref);
 
 drop trigger if exists orders_touch on public.orders;
@@ -646,6 +652,29 @@ end $$;
 
 
 -- ---------------------------------------------------------------------
+-- 9b. request_cancel — after the free cancellation window, the customer can only ASK.
+--     Needs order number AND email, and never touches the order status.
+-- ---------------------------------------------------------------------
+create or replace function public.request_cancel(p_number text, p_email text, p_reason text default '')
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_order public.orders%rowtype;
+begin
+  select * into v_order from public.orders o
+   where upper(o.order_number) = upper(trim(p_number)) and o.email = lower(trim(p_email));
+  if v_order.id is null then
+    raise exception 'ORDER_NOT_FOUND' using errcode = '22023';
+  end if;
+  if v_order.status in ('shipped','delivered','cancelled','refunded') then
+    return jsonb_build_object('ok', false, 'status', v_order.status);
+  end if;
+  update public.orders
+     set cancel_requested_at = coalesce(cancel_requested_at, now()),
+         cancel_reason = left(nullif(trim(p_reason), ''), 500)
+   where id = v_order.id;
+  return jsonb_build_object('ok', true, 'status', v_order.status);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- 10. track_order — visitor lookup by order number + email.
 --     Returns nothing unless BOTH match. Never returns address or phone.
 -- ---------------------------------------------------------------------
@@ -659,6 +688,8 @@ returns jsonb language sql stable security definer set search_path = '' as $$
     'carrier',         o.carrier,
     'tracking_number', o.tracking_number,
     'shipped_at',      o.shipped_at,
+    'paid_at',         o.paid_at,
+    'cancel_requested_at', o.cancel_requested_at,
     'total',           o.total,
     'items', coalesce((select jsonb_agg(jsonb_build_object('name', i.name, 'variant', i.variant, 'qty', i.qty))
                          from public.order_items i where i.order_id = o.id), '[]'::jsonb))
@@ -715,6 +746,7 @@ revoke all on function public.place_order(jsonb)                 from public;
 revoke all on function public.track_order(text, text)            from public;
 revoke all on function public.subscribe(text, text)              from public;
 revoke all on function public.request_stock_alert(text, text, text, text) from public;
+revoke all on function public.request_cancel(text, text, text)            from public;
 
 grant execute on function public.is_admin()                       to anon, authenticated;
 grant execute on function public.save_store(jsonb, timestamptz)   to authenticated;
@@ -723,6 +755,7 @@ grant execute on function public.place_order(jsonb)               to anon, authe
 grant execute on function public.track_order(text, text)          to anon, authenticated;
 grant execute on function public.subscribe(text, text)            to anon, authenticated;
 grant execute on function public.request_stock_alert(text, text, text, text) to anon, authenticated;
+grant execute on function public.request_cancel(text, text, text)           to anon, authenticated;
 grant execute on function public.place_order(jsonb)               to service_role;
 
 

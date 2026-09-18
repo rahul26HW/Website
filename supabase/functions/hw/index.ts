@@ -19,6 +19,9 @@
      POST /shipstation/setup    Register the "order shipped" webhook          (admins only)
      POST /shipstation/webhook  ShipStation SHIP_NOTIFY / FULFILLMENT_SHIPPED → saves carrier + tracking number
      POST /shipstation/sync     Look an order up in ShipStation and save its tracking  (admins only)
+     POST /order/cancel         Customer cancels inside the free window: refund + cancel  (order number + email)
+     POST /orders/accept        Accept one order now and send it to ShipStation           (admins only)
+     POST /orders/release       Accept orders whose cancellation window has passed        (scheduled job)
      GET  /          Health check (lists which features are set up — never the keys)
 
    "Admins only" = the request must carry the signed-in admin's Supabase
@@ -70,12 +73,15 @@ const handler = {
         case "/shipstation/setup": return await handleShipstationSetup(request, env, cors);
         case "/shipstation/webhook": return await handleShipstationWebhook(request, env);
         case "/shipstation/sync": return await handleShipstationSync(request, env, cors);
+        case "/order/cancel": return await handleOrderCancel(request, env, cors);
+        case "/orders/accept": return await handleOrderAccept(request, env, cors);
+        case "/orders/release": return await handleOrderRelease(request, env, cors);
         default: return json({ error: "Not found" }, 404, cors);
       }
     } catch (e) {
       // Details go to the Cloudflare log. Only signed-in admins get them back; shoppers and webhooks get a plain message.
       console.error(url.pathname, e && e.stack ? e.stack : e);
-      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync"].includes(url.pathname.replace(/\/+$/, ""));
+      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept"].includes(url.pathname.replace(/\/+$/, ""));
       return json({ error: adminRoute ? "Worker error: " + (e && e.message ? e.message : "unknown") : "Something went wrong. Please try again in a moment." }, 500, cors);
     }
   },
@@ -360,6 +366,94 @@ async function patchOrder(env, filter, patch) {
   return db(env, "orders?" + filter, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(patch) });
 }
 
+/* Minutes a customer can cancel a paid order themselves (Admin › Storefront, default 30). */
+async function cancelMinutes(env) {
+  const rows = await db(env, "store?id=eq.main&select=data");
+  const n = Number(((rows && rows[0] && rows[0].data && rows[0].data.settings) || {}).cancelMinutes);
+  return n >= 0 && n <= 1440 ? n : 30;
+}
+
+/* ---------------------------------------------------------------- *
+ * POST /order/cancel  { order_number, email }  → refunds and cancels inside the free window
+ * ---------------------------------------------------------------- */
+async function handleOrderCancel(request, env, cors) {
+  if (!features(env).database) return json({ error: "Orders aren’t set up yet." }, 501, cors);
+  const body = await readJson(request);
+  const number = String(body.order_number || "").trim().toUpperCase();
+  const email = String(body.email || "").trim().toLowerCase();
+  if (!/^[A-Z]{2,4}-\d{1,12}$/.test(number) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "Order not found" }, 404, cors);
+
+  const order = await loadOrder(env, "order_number=eq." + encodeURIComponent(number) + "&email=eq." + encodeURIComponent(email));
+  if (!order) return json({ error: "Order not found" }, 404, cors);
+  if (order.status === "cancelled") return json({ ok: true, already: true }, 200, cors);
+
+  const minutes = await cancelMinutes(env);
+  const started = new Date(order.paid_at || order.created_at).getTime();
+  const left = started + minutes * 60000 - Date.now();
+  if (order.status !== "new" || left <= 0) {
+    return json({ error: "This order can no longer be cancelled here.", tooLate: true, status: order.status }, 409, cors);
+  }
+
+  // Money back first: if the refund fails the order stays as it was.
+  let refunded = false;
+  if (order.payment_status === "paid" && /^pi_/.test(order.payment_ref || "")) {
+    if (!env.STRIPE_SECRET_KEY) return json({ error: "Refunds aren’t set up. Please contact us." }, 501, cors);
+    await stripe(env, "refunds", { payment_intent: order.payment_ref, reason: "requested_by_customer" }, "refund-" + order.id);
+    refunded = true;
+  }
+  const rows = await patchOrder(env, "id=eq." + order.id + "&status=eq.new", {
+    status: "cancelled",
+    cancelled_at: new Date().toISOString(),
+    payment_status: refunded ? "refunded" : order.payment_status,
+    cancel_reason: String(body.reason || "").slice(0, 500) || null,
+  });
+  if (!Array.isArray(rows) || !rows.length) return json({ error: "This order can no longer be cancelled here.", tooLate: true }, 409, cors);
+  await db(env, "promo_redemptions?order_id=eq." + order.id, { method: "DELETE" }).catch(() => {});
+  if (order.shipstation_order_id && features(env).shipstation) await pushToShipstation(env, { ...order, status: "cancelled" }).catch(() => {});
+  return json({ ok: true, refunded }, 200, cors);
+}
+
+/* Moves one paid order to "accepted" and sends it to ShipStation. */
+async function acceptOrder(env, order) {
+  const rows = await patchOrder(env, "id=eq." + order.id + "&status=eq.new", { status: "accepted", accepted_at: new Date().toISOString() });
+  if (!Array.isArray(rows) || !rows.length) return { ok: false, skipped: order.order_number };
+  const fresh = Object.assign({}, order, rows[0]);
+  let shipstation = null;
+  if (features(env).shipstation && !fresh.shipstation_order_id) {
+    try { shipstation = (await pushToShipstation(env, fresh)).shipstation_order_id; } catch (e) { shipstation = "error: " + e.message; }
+  }
+  return { ok: true, order_number: fresh.order_number, shipstation };
+}
+
+/* POST /orders/accept { order_id } — admins only. Accepts now, even if the window hasn't passed. */
+async function handleOrderAccept(request, env, cors) {
+  const denied = await requireAdmin(request, env);
+  if (denied) return json({ error: denied }, 401, cors);
+  const body = await readJson(request);
+  if (!UUID.test(body.order_id || "")) return json({ error: "Missing order" }, 400, cors);
+  const order = await loadOrder(env, "id=eq." + body.order_id);
+  if (!order) return json({ error: "Order not found" }, 404, cors);
+  if (order.status !== "new") return json({ error: "This order was already accepted." }, 409, cors);
+  return json(await acceptOrder(env, order), 200, cors);
+}
+
+/* POST /orders/release — the scheduled job (and admins). Accepts every paid order whose window has passed. */
+async function handleOrderRelease(request, env, cors) {
+  if (!features(env).database) return json({ error: "Not set up" }, 501);
+  // The scheduled job calls this without a key: it can only accept orders whose cancellation window has
+  // already passed (what would happen anyway) and gets back a bare count. Admins get the details.
+  const auth = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  let trusted = !!auth && safeEqual(auth, env.SUPABASE_SERVICE_ROLE_KEY || "");
+  if (!trusted && auth) trusted = !(await requireAdmin(request, env));
+  const minutes = await cancelMinutes(env);
+  const cutoff = new Date(Date.now() - minutes * 60000).toISOString();
+  const due = await db(env, "orders?status=eq.new&payment_status=eq.paid&paid_at=lt." + encodeURIComponent(cutoff) + "&select=*,order_items(*)&order=paid_at.asc&limit=50");
+  const results = [];
+  for (const order of Array.isArray(due) ? due : []) results.push(await acceptOrder(env, order));
+  const accepted = results.filter((r) => r.ok).length;
+  return json(trusted ? { ok: true, accepted, results } : { ok: true, accepted }, 200, cors);
+}
+
 async function siteUrl(env) {
   const rows = await db(env, "store?id=eq.main&select=data");
   const s = String((rows && rows[0] && rows[0].data && rows[0].data.settings && rows[0].data.settings.siteUrl) || "").trim();
@@ -498,8 +592,8 @@ async function handleStripeWebhook(request, env) {
       });
       if (Array.isArray(rows) && rows[0]) Object.assign(order, rows[0]);
     }
-    // A ShipStation problem is saved on the order (shipstation_error) and must not make Stripe retry the payment event.
-    if (features(env).shipstation && !order.shipstation_order_id) await pushToShipstation(env, order).catch(() => {});
+    // The order now waits as "new" until it is accepted (see /orders/accept and /orders/release),
+    // so the customer still has their cancellation window before anything reaches the warehouse.
     return json({ ok: true });
   }
 
@@ -629,7 +723,7 @@ const CARRIERS = { stamps_com: "USPS", usps: "USPS", endicia: "USPS", ups: "UPS"
 /* Saves one ShipStation shipment or fulfillment on our order. `filter` picks the order (by our id or ShipStation's id). */
 async function applyShipment(env, filter, s) {
   if (!s || s.voided || !s.trackingNumber) return 0;
-  const rows = await patchOrder(env, filter + "&status=in.(new,packed,shipped)", {
+  const rows = await patchOrder(env, filter + "&status=in.(new,accepted,packed,shipped)", {
     status: "shipped",
     carrier: CARRIERS[s.carrierCode] || String(s.carrierCode || "").toUpperCase() || null,
     tracking_number: String(s.trackingNumber).slice(0, 100),

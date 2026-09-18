@@ -127,6 +127,72 @@
     return '';
   };
 
+  /* What the customer can do about cancelling, based on the order's stage. */
+  function cancelBlock(o, number, email) {
+    var done = /^(shipped|delivered|cancelled|refunded)$/.test(o.status);
+    if (done) return '';
+    var left = HW.cancelLeft({ status: o.status, paid_at: o.paid_at, created_at: o.created_at });
+    if (o.status === 'new' && o.payment_status === 'paid' && left > 0) {
+      return '<div class="notice" role="note" style="text-align:left;margin:14px 0 0"><b>You can still cancel.</b> Cancel yourself within the next ' +
+        '<span id="cancelLeft">' + Math.ceil(left / 60000) + '</span> minutes for a full refund.' +
+        '<p class="form-msg err" id="cancelMsg" role="alert" hidden></p>' +
+        '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="cancel-order" data-n="' + esc(number) + '" data-e="' + esc(email) + '">Cancel this order</button></div></div>';
+    }
+    if (o.cancel_requested_at) {
+      return '<p class="form-msg ok" style="margin:14px 0 0">You’ve asked us to cancel this order. We’ll email you once we’ve checked it.</p>';
+    }
+    // Not a <form>: this sits inside the "find your order" form, and forms can't be nested.
+    return '<div class="form cancel-ask" style="margin:14px 0 0">' +
+      '<div class="cancel-fields"><p class="muted" style="font-size:13.5px;margin:0 0 8px">Need to cancel? The free cancellation time has passed, but if it hasn’t shipped yet we can usually still stop it.</p>' +
+      '<div class="fld"><label for="cx_reason">Reason <span class="opt">(optional)</span></label><input id="cx_reason" maxlength="200"></div>' +
+      '<button class="btn ghost sm" type="button" data-act="cancel-ask" data-n="' + esc(number) + '" data-e="' + esc(email) + '">Ask us to cancel</button></div>' +
+      '<p class="form-msg" role="status" hidden></p></div>';
+  }
+
+  HW.orderCancel = {
+    /* Free cancellation inside the window: refunds and cancels straight away. */
+    run: async function (btn) {
+      var number = btn.dataset.n, email = btn.dataset.e;
+      var msg = document.getElementById('cancelMsg');
+      if (!confirm('Cancel order ' + number + '? Your payment is refunded in full.')) return;
+      btn.disabled = true; var label = btn.textContent; btn.textContent = 'Cancelling…';
+      try {
+        var r = await HW.cancelOrder(number, email);
+        var last = u.session.get('hw:lastOrder', null);
+        if (last && last.order_number === number) { last.cancelled = true; last.paid = false; u.session.set('hw:lastOrder', last); }
+        u.toast(r.refunded ? 'Order cancelled — your refund is on its way' : 'Order cancelled');
+        HW.router.run({ scroll: false });
+      } catch (e) {
+        btn.disabled = false; btn.textContent = label;
+        if (msg) { msg.hidden = false; msg.className = 'form-msg err'; msg.textContent = e.message; }
+        else u.toast(e.message);
+      }
+    },
+    /* After the window: ask us to cancel. */
+    request: async function (btn) {
+      var box = btn.closest('.cancel-ask');
+      var msg = box.querySelector('.form-msg');
+      var number = btn.dataset.n, email = btn.dataset.e;
+      var reason = (box.querySelector('#cx_reason') || {}).value || '';
+      btn.disabled = true;
+      try {
+        var r = await HW.api.rpc('request_cancel', { p_number: number, p_email: email, p_reason: reason.trim() });
+        msg.hidden = false;
+        if (r && r.ok) {
+          msg.className = 'form-msg ok';
+          msg.textContent = 'Thanks — we’ve asked our team to cancel this order. We’ll email you. If it has already shipped, you can return it instead.';
+          box.querySelector('.cancel-fields').hidden = true;
+        } else {
+          msg.className = 'form-msg err';
+          msg.textContent = r && r.status === 'shipped' ? 'This order has already shipped, so it can’t be cancelled. You can return it — see our Refund Policy.'
+            : 'This order can’t be cancelled any more. Please contact us.';
+        }
+      } catch (e) {
+        msg.hidden = false; msg.className = 'form-msg err'; msg.textContent = e.message;
+      } finally { btn.disabled = false; }
+    }
+  };
+
   HW.track = {
     submit: async function (form) {
       var msg = form.querySelector('.form-msg'), btn = form.querySelector('button[type=submit]'), out = document.getElementById('trackResult');
@@ -147,7 +213,8 @@
           return;
         }
         var ended = o.status === 'refunded' || o.status === 'cancelled';
-        var reached = ended ? -1 : STEPS.findIndex(function (s) { return s[0] === o.status; });
+        var reached = ended ? -1 : ({ new: 0, accepted: 0, packed: 1, shipped: 2, delivered: 3 })[o.status];
+        if (reached == null) reached = 0;
         var link = HW.trackingUrl(o.carrier, o.tracking_number);
         out.innerHTML = '<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:18px">' +
           '<div class="sumrow"><span><b>' + esc(o.order_number) + '</b></span><span class="muted">Placed ' + esc(u.fmtDate(o.created_at)) + '</span></div>' +
@@ -159,10 +226,12 @@
           (o.tracking_number ? '<p style="margin:12px 0 6px"><b>Tracking:</b> ' + esc(o.carrier ? o.carrier + ' ' : '') +
             (link ? '<a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + esc(link) + '" target="_blank" rel="noopener noreferrer">' + esc(o.tracking_number) + '</a>' : esc(o.tracking_number)) + '</p>' : '') +
           (o.payment_status === 'unpaid' && o.status === 'new' ? '<p class="muted" style="font-size:13.5px">' + 'Payment hasn’t been received for this order yet.' + '</p>' : '') +
+          cancelBlock(o, no, email) +
           '<ul class="bullets" style="margin-top:10px">' + (o.items || []).map(function (i) {
             return '<li>' + esc(HW.seo.clip(i.name, 80)) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + ' × ' + i.qty + '</li>';
           }).join('') + '</ul>' +
           '<div class="sumrow total" style="margin:10px 0 0"><span>Total</span><span>' + u.money(o.total) + '</span></div></div>';
+        HW.countdown('cancelLeft', o.paid_at);
       } catch (e) {
         msg.hidden = false; msg.className = 'form-msg err'; msg.textContent = e.message;
       } finally { btn.disabled = false; }

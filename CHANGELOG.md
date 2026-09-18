@@ -11,6 +11,15 @@
 
 ## After launch
 
+### Cancellation window and accepting orders
+- A paid order now waits as **New** for a **30-minute cancellation window** (Admin › Storefront, 0–1440 minutes) instead of going straight to ShipStation.
+- **Customer:** a *Cancel this order* button with a live countdown on the order page and on Track your order. It refunds the payment in Stripe, frees the promo code and cancels the order (`POST /order/cancel`, order number + email, window checked on the server).
+- **After the window:** the customer can only *ask* us to cancel (`request_cancel`, needs number + email, never changes the status). The admin Orders tab lists these requests.
+- **Admin:** *Accept order & send to ShipStation* on a paid order, showing when the window ends (`POST /orders/accept`).
+- **Automatic:** `supabase/release-orders-cron.sql` schedules a 5-minute job that calls `POST /orders/release`, which accepts every paid order whose window has passed and sends it to ShipStation. The job needs no key: the route only ever accepts orders that are already due, and returns a bare count to anonymous callers.
+- Order status gains **accepted**; orders store `accepted_at`, `cancelled_at`, `cancel_requested_at` and `cancel_reason`; `track_order` returns `paid_at` and `cancel_requested_at`.
+- Tests: 68 server checks and an 11-step browser test of the whole cancel journey (inside window, after window, shipped, already requested).
+
 ### Payments server moved to Supabase Edge Functions
 - The Stripe/ShipStation/AI server code now runs as the Supabase Edge Function **hw** (`https://soydgxrrwozmiqzutypr.supabase.co/functions/v1/hw`), deployed with Verify JWT off. No Cloudflare account needed.
 - `tools/build-edge.js` generates `supabase/functions/hw/index.ts` from `ai-proxy.worker.js` (same code; a small Deno wrapper strips the `/hw` path prefix and supplies Supabase's built-in URL and keys). All 44 server tests pass both directly and through the Edge wrapper.

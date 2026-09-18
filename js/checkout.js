@@ -103,6 +103,31 @@
   };
 
   /* The payments server: the Supabase Edge Function "hw" unless the admin entered another address (e.g. a Cloudflare Worker). */
+  /* Minutes a customer can cancel a paid order themselves. */
+  HW.cancelMinutes = function () {
+    var n = Number(((HW.DB && HW.DB.settings) || {}).cancelMinutes);
+    return n >= 0 && n <= 1440 ? n : 30;
+  };
+  /* Milliseconds left in that window for an order (0 when it has passed). */
+  HW.cancelLeft = function (o) {
+    if (!o || o.status && o.status !== 'new') return 0;
+    var started = Date.parse(o.paid_at || o.created_at || '');
+    if (!started) return 0;
+    return Math.max(0, started + HW.cancelMinutes() * 60000 - Date.now());
+  };
+  HW.cancelOrder = async function (number, email) {
+    var res, data = {};
+    try {
+      res = await fetch(workerUrl() + '/order/cancel', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_number: number, email: email })
+      });
+      data = await res.json().catch(function () { return {}; });
+    } catch (e) { throw new Error('We couldn’t reach the store. Please try again.'); }
+    if (!res.ok) throw new Error(data.error || 'We couldn’t cancel this order. Please contact us.');
+    return data;
+  };
+
   function workerUrl() {
     var custom = String(((HW.DB && HW.DB.payments) || {}).workerUrl || '').trim().replace(/\/+$/, '');
     return custom || String((window.HW_CONFIG || {}).supabaseUrl || '').replace(/\/+$/, '') + '/functions/v1/hw';
@@ -215,18 +240,36 @@
     var payment = (function () { try { return new URLSearchParams(location.search).get('payment'); } catch (e) { return null; } })();
     if (payment === 'success' && !o.paid) {
       // Display only: the Stripe webhook is what marks the order paid in the database.
-      o.paid = true; delete o.payError; delete o.pay_token; u.session.set(LAST, o);
+      o.paid = true; o.paid_at = o.paid_at || new Date().toISOString();
+      delete o.payError; delete o.pay_token; u.session.set(LAST, o);
       u.session.set(DRAFT, {});
       HW.cart.clear();
     }
     var first = o.name ? ', ' + esc(o.name.split(' ')[0]) : '';
     var unpaid = HW.checkout.cardPayments() && !o.paid;
     var linkStyle = ' style="font-size:inherit;letter-spacing:0;text-transform:none"';
+    if (o.cancelled) {
+      return {
+        html: '<div class="wrap"><div class="confirm"><div class="weave-rule">' + HW.SVG.weave + '</div>' +
+          '<h1>Order cancelled</h1><p class="muted" style="margin:0">Order ' + esc(o.order_number) + ' has been cancelled and your payment refunded in full. Refunds usually reach your bank in 5–10 business days.</p>' +
+          '<p><a class="btn" href="' + HW.link('/') + '">Continue shopping</a></p></div></div>',
+        seo: { title: 'Order cancelled', noindex: true },
+        after: function () { var h = document.querySelector('.confirm h1'); if (h) { h.tabIndex = -1; h.focus(); } }
+      };
+    }
     var head = o.paid
       ? '<h1>Thank you' + first + '!</h1><p class="muted" style="margin:0">Your payment went through and your order is confirmed.</p>'
       : unpaid
         ? '<h1>Your order isn’t paid yet</h1><p class="muted" style="margin:0">' + (payment === 'cancelled' ? 'Payment was cancelled, so you haven’t been charged.' : 'We saved your order, but payment wasn’t completed.') + '</p>'
         : '<h1>Order ' + esc(o.order_number) + '</h1><p class="muted" style="margin:0">This order hasn’t been paid.</p>';
+    var left = o.paid && !o.cancelled ? HW.cancelLeft({ status: 'new', paid_at: o.paid_at || new Date().toISOString() }) : 0;
+    var cancelBox = left > 0
+      ? '<div class="notice" role="note" style="text-align:left"><b>Changed your mind?</b> You can cancel this order yourself for the next ' +
+        '<span id="cancelLeft">' + Math.ceil(left / 60000) + '</span> minutes and get a full refund. After that we start packing it, so please ' +
+        '<a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/track-your-order') + '">ask us to cancel</a> instead.' +
+        '<p class="form-msg err" id="cancelMsg" role="alert" hidden></p>' +
+        '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="cancel-order" data-n="' + esc(o.order_number) + '" data-e="' + esc(o.email) + '">Cancel this order</button></div></div>'
+      : '';
     var next = o.paid
       ? '<p>A receipt goes to <b>' + esc(o.email) + '</b>. Orders ship within ' + esc(m.shippingDays()) + ', and you can follow yours on Track your order.</p>'
       : unpaid
@@ -239,7 +282,7 @@
         '<div class="weave-rule">' + HW.SVG.weave + '</div>' +
         head +
         '<div class="ordno">Order ' + esc(o.order_number) + '</div>' +
-        next +
+        next + cancelBox +
         '<div class="panelbox">' + (o.items || []).map(function (l) {
           return '<div class="sumrow"><span>' + esc(HW.seo.clip(l.name, 60)) + (l.variant ? ' <span class="muted">(' + esc(l.variant) + ')</span>' : '') + ' × ' + l.qty + '</span><span>' + u.money(l.line_total) + '</span></div>';
         }).join('') +
@@ -252,7 +295,10 @@
         '<a class="btn ghost" href="' + HW.link('/page/track-your-order') + '">Track your order</a>' +
         '</div></div>',
       seo: { title: o.paid ? 'Order confirmed' : 'Payment needed', noindex: true },
-      after: function () { var h = document.querySelector('.confirm h1'); if (h) { h.tabIndex = -1; h.focus(); } }
+      after: function () {
+        var h = document.querySelector('.confirm h1'); if (h) { h.tabIndex = -1; h.focus(); }
+        HW.countdown('cancelLeft', o.paid_at);
+      }
     };
   };
 })(window.HW = window.HW || {});

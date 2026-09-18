@@ -74,6 +74,19 @@
     }
   };
 
+  /* Counts the cancellation window down, then re-renders the page so the button disappears. */
+  HW.countdown = function (id, paidAt) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    clearInterval(HW.countdown.timer);
+    HW.countdown.timer = setInterval(function () {
+      var left = HW.cancelLeft({ status: 'new', paid_at: paidAt || new Date().toISOString() });
+      if (!document.getElementById(id)) { clearInterval(HW.countdown.timer); return; }
+      if (left <= 0) { clearInterval(HW.countdown.timer); HW.router.run({ scroll: false }); return; }
+      document.getElementById(id).textContent = Math.ceil(left / 60000);
+    }, 10000);
+  };
+
   /* ================================================================ *
    * Wishlist
    * ================================================================ */

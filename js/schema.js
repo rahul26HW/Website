@@ -63,7 +63,7 @@
       newsletter: { couponCode: '', emailEndpoint: '' },
       shipping: { enabled: true, freeThreshold: 75, flatRate: 9.95 },
       social: { facebook: '', instagram: '', pinterest: '' },
-      payments: { stripe: false, workerUrl: '' },   // Stripe Checkout through the Cloudflare Worker (keys live in the worker)
+      payments: { stripe: false, workerUrl: '', cancelMinutes: 30 },   // Stripe Checkout through the Cloudflare Worker (keys live in the worker)
       snipcart: { enabled: false, apiKey: '', currency: 'usd', version: '3.7.1', mode: 'side', feedUrl: '' },
       videoBanner: { enabled: false, eyebrow: '', heading: '', body: '', ctaText: '', ctaLink: '', videoUrl: '', bg: '#2A2622' },
       features: [],
@@ -157,6 +157,9 @@
     delete d.subscribers;
     delete d.marketing;
 
+    // Minutes a customer may cancel a paid order themselves (0–1440).
+    var cm = Number((d.settings || {}).cancelMinutes);
+    d.settings.cancelMinutes = cm >= 0 && cm <= 1440 ? Math.round(cm) : 30;
     if (!isObj(d.thumbs)) d.thumbs = {};
     Object.keys(d.thumbs).forEach(function (k) { if (typeof d.thumbs[k] !== 'string' || !/^https:\/\//.test(d.thumbs[k])) delete d.thumbs[k]; });
 

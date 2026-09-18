@@ -3,13 +3,13 @@
   'use strict';
 
   var A = HW.A, u = HW.u, esc = u.esc;
-  var STATUSES = [['new', 'New'], ['packed', 'Packed'], ['shipped', 'Shipped'], ['delivered', 'Delivered'], ['refunded', 'Refunded'], ['cancelled', 'Cancelled']];
+  var STATUSES = [['new', 'New'], ['accepted', 'Accepted'], ['packed', 'Packed'], ['shipped', 'Shipped'], ['delivered', 'Delivered'], ['refunded', 'Refunded'], ['cancelled', 'Cancelled']];
   var PAYMENTS = [['unpaid', 'Unpaid'], ['paid', 'Paid'], ['refunded', 'Refunded']];
   var os = { filter: 'all', q: '', open: null, list: null };
   var ms = { list: null, open: null };
 
   function statusTag(s) {
-    var cls = { new: 'clay', packed: '', shipped: 'green', delivered: 'green', refunded: '', cancelled: '' }[s] || '';
+    var cls = { new: 'clay', accepted: '', packed: '', shipped: 'green', delivered: 'green', refunded: '', cancelled: '' }[s] || '';
     var label = (STATUSES.find(function (x) { return x[0] === s; }) || [s, s])[1];
     return A.ui.tag(label, cls);
   }
@@ -26,6 +26,7 @@
   }
 
   function orderList() {
+    var asked = (os.list || []).filter(function (o) { return o.cancel_requested_at && !/^(cancelled|refunded|shipped|delivered)$/.test(o.status); });
     if (!os.list) return '<h1>Orders</h1><p class="hint">Loading orders…</p>';
     var q = os.q.toLowerCase();
     var shown = os.list.filter(function (o) {
@@ -38,6 +39,8 @@
     return '<h1 class="h1row">Orders <span class="btnrow"><button class="btn ghost sm" type="button" data-a="orders-refresh">↻ Refresh</button><button class="btn ghost sm" type="button" data-a="orders-csv">⬇ Export CSV</button></span></h1>' +
       '<p class="sub">Orders from checkout' + (A.draft.snipcart.enabled ? ' and Snipcart' : '') + '. Newest first.' + ((A.draft.payments || {}).stripe ? ' “Unpaid” orders haven’t finished Stripe payment — don’t ship them.' : '') + '</p>' +
       (os.error ? '<p class="badmsg">Couldn’t load orders: ' + esc(os.error) + '</p>' : '') +
+      (asked.length ? '<div class="adwarn"><b>' + asked.length + ' cancellation request' + (asked.length > 1 ? 's' : '') + ':</b> ' +
+        asked.map(function (o) { return esc(o.order_number); }).join(', ') + ' — open the order to see why.</div>' : '') +
       '<section class="panel"><div class="toolbar"><div class="subnav">' +
       [['all', 'All']].concat(STATUSES).map(function (s) {
         return '<button type="button" class="chip' + (os.filter === s[0] ? ' active' : '') + '" data-a="orders-filter" data-f="' + s[0] + '" aria-pressed="' + (os.filter === s[0]) + '">' + s[1] + ' (' + counts[s[0]] + ')</button>';
@@ -102,16 +105,32 @@
       ? '<p style="margin:0 0 6px">✓ In ShipStation (order ' + esc(o.shipstation_order_id) + (o.shipstation_synced_at ? ', sent ' + esc(new Date(o.shipstation_synced_at).toLocaleString()) : '') + ')</p>'
       : '<p class="hint" style="margin:0 0 6px">Not in ShipStation yet.' + (o.payment_status === 'paid' ? '' : ' Paid orders are sent automatically.') + '</p>';
     var err = o.shipstation_error ? '<p class="badmsg" style="margin:0 0 6px">ShipStation said: ' + esc(o.shipstation_error) + '</p>' : '';
+    var mins = Number((A.draft.settings || {}).cancelMinutes);
+    mins = mins >= 0 && mins <= 1440 ? mins : 30;
+    var until = o.paid_at ? new Date(new Date(o.paid_at).getTime() + mins * 60000) : null;
+    var waiting = o.status === 'new' && o.payment_status === 'paid';
+    var accept = waiting
+      ? '<div class="adwarn" style="margin:0 0 10px">' +
+        (until && until > new Date()
+          ? 'The customer can still cancel this order themselves until <b>' + esc(until.toLocaleTimeString()) + '</b>. It goes to ShipStation by itself after that.'
+          : 'Waiting to be accepted — it goes to ShipStation by itself within a few minutes.') + '</div>' +
+        '<div class="btnrow"><button class="btn loom sm" type="button" data-a="order-accept">Accept order &amp; send to ShipStation</button></div>'
+      : '';
+    var asked = o.cancel_requested_at
+      ? '<div class="adwarn" style="margin:10px 0 0"><b>Customer asked to cancel</b> on ' + esc(new Date(o.cancel_requested_at).toLocaleString()) +
+        (o.cancel_reason ? ': “' + esc(o.cancel_reason) + '”' : '') +
+        (/^(shipped|delivered|cancelled|refunded)$/.test(o.status) ? '' : ' — if you agree, refund it in Stripe and set the status to Cancelled.') + '</div>'
+      : '';
     // Once shipped (or refunded) the order is final in ShipStation; sending it again would reset it to "awaiting shipment".
     var btn = /^(shipped|delivered|refunded)$/.test(o.status) ? ''
       : o.status === 'cancelled'
       ? (o.shipstation_order_id ? '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">Cancel in ShipStation</button></div>' : '')
       : '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">' + (o.shipstation_order_id ? 'Send to ShipStation again' : 'Send to ShipStation') + '</button>' +
-        (o.shipstation_order_id && /^(new|packed)$/.test(o.status) ? '<button class="btn ghost sm" type="button" data-a="order-sync">Get tracking from ShipStation</button>' : '') + '</div>';
+        (o.shipstation_order_id && /^(new|accepted|packed)$/.test(o.status) ? '<button class="btn ghost sm" type="button" data-a="order-sync">Get tracking from ShipStation</button>' : '') + '</div>';
     // ShipStation sends a ship date without a time (stored as midnight UTC), so show just the date then.
     var sd = o.shipped_at ? new Date(o.shipped_at) : null;
     var shippedText = sd ? (/T00:00:00(\.0+)?(Z|\+00:00)$/.test(o.shipped_at) ? sd.toLocaleDateString(undefined, { timeZone: 'UTC' }) : sd.toLocaleString()) : '';
-    return pay + ship + err + btn + (sd ? '<p class="hint">Shipped ' + esc(shippedText) + '</p>' : '');
+    return accept + pay + ship + err + btn + (sd ? '<p class="hint">Shipped ' + esc(shippedText) + '</p>' : '') + asked;
   }
 
   A.tabs.orders = {
@@ -169,6 +188,18 @@
     if (!r.error && r.data && r.data[0]) Object.assign(o, r.data[0]);
     A.render();
   };
+  A.actions['order-accept'] = async function (btn) {
+    var o = os.list.find(function (x) { return x.id === os.open; });
+    if (!confirm('Accept order ' + o.order_number + ' and send it to ShipStation now? The customer can no longer cancel it themselves.')) return;
+    btn.disabled = true; btn.textContent = 'Accepting…';
+    try {
+      var r = await A.workerCall('/orders/accept', { order_id: o.id });
+      u.toast(/^error/.test(String(r.shipstation)) ? 'Accepted, but ShipStation said: ' + r.shipstation : 'Accepted and sent to ShipStation');
+    } catch (e) { u.toast(e.message); }
+    var res = await A.sb.from('orders').select('*, order_items(*)').eq('id', o.id);
+    if (!res.error && res.data && res.data[0]) Object.assign(o, res.data[0]);
+    A.actions['order-open']({ dataset: { id: o.id } });
+  };
   A.actions['order-sync'] = async function (btn) {
     var o = os.list.find(function (x) { return x.id === os.open; });
     btn.disabled = true; btn.textContent = 'Checking…';
@@ -194,12 +225,12 @@
   };
   A.actions['orders-csv'] = function () {
     var data = [['order_number', 'created_at', 'status', 'payment_status', 'source', 'name', 'email', 'phone', 'address_line1', 'address_line2', 'city', 'state', 'zip', 'country',
-      'sku', 'item', 'variant', 'qty', 'unit_price', 'line_total', 'subtotal', 'discount', 'promo_code', 'shipping', 'tax', 'total', 'carrier', 'tracking_number', 'customer_note', 'paid_at', 'payment_ref', 'shipstation_order_id']];
+      'sku', 'item', 'variant', 'qty', 'unit_price', 'line_total', 'subtotal', 'discount', 'promo_code', 'shipping', 'tax', 'total', 'carrier', 'tracking_number', 'customer_note', 'paid_at', 'accepted_at', 'cancelled_at', 'cancel_requested_at', 'cancel_reason', 'payment_ref', 'shipstation_order_id']];
     (os.list || []).forEach(function (o) {
       var a = o.shipping_address || {};
       (o.order_items && o.order_items.length ? o.order_items : [{}]).forEach(function (i) {
         data.push([o.order_number, o.created_at, o.status, o.payment_status, o.source, o.name, o.email, o.phone, a.line1, a.line2, a.city, a.state, a.zip, a.country,
-          i.sku, i.name, i.variant, i.qty, i.unit_price, i.line_total, o.subtotal, o.discount, o.promo_code, o.shipping, o.tax, o.total, o.carrier, o.tracking_number, o.customer_note, o.paid_at, o.payment_ref, o.shipstation_order_id]);
+          i.sku, i.name, i.variant, i.qty, i.unit_price, i.line_total, o.subtotal, o.discount, o.promo_code, o.shipping, o.tax, o.total, o.carrier, o.tracking_number, o.customer_note, o.paid_at, o.accepted_at, o.cancelled_at, o.cancel_requested_at, o.cancel_reason, o.payment_ref, o.shipstation_order_id]);
       });
     });
     A.download('home-weavers-orders-' + A.today() + '.csv', A.toCsv(data), 'text/csv');
