@@ -265,7 +265,8 @@ Customers get branded emails for: order received (with the 30-minute cancel link
 Links in emails carry only the order number, never the customer's email address.
 
 ### Customer accounts
-- Customers open **Your account** (header, menu or footer), enter the email they used at checkout, and get a 6-digit code by email (from the same Resend setup as order emails). No passwords.
+- Customers open **Your account** (header, menu or footer), enter their email and get a 6-digit code by email (from the same Resend setup as order emails). The same step signs up new customers. No passwords.
+- New sign-ups share a daily limit (default 50 code emails a day, secret `LOGIN_NEW_PER_DAY`), so they can't use up the Resend quota your order emails need. Customers with orders are never limited.
 - They see all their orders with that email, tracking, and can cancel inside the free window. Checkout fills in their last address.
 - Guest checkout works exactly as before; an account is simply "the orders placed with this email".
 - Nothing to set up beyond `RESEND_API_KEY`. Optional secret `CUSTOMER_SESSION_SECRET` (any long random text) — changing it signs every customer out.

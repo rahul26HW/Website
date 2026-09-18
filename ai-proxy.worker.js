@@ -17,7 +17,7 @@
      POST /orders/accept        Accept one order now and send it to ShipStation           (admins only)
      POST /orders/release       Accept orders whose cancellation window has passed        (scheduled job)
      POST /email/test           Send a sample order email to the signed-in admin           (admins only)
-     POST /account/code         Customer sign-in: email a 6-digit code (only to emails that have ordered)
+     POST /account/code         Customer sign-in / sign-up: email a 6-digit code
      POST /account/verify       Customer sign-in: check the code → signed 30-day session (no passwords)
      POST /account/orders       Signed-in customer's own orders (Authorization: Bearer <session>)
      GET  /          Health check (lists which features are set up — never the keys)
@@ -874,7 +874,7 @@ function trackingLink(carrier, number) {
 
 const money = (n) => "$" + Number(n || 0).toFixed(2);
 
-function emailLayout(brand, site, title, bodyHtml) {
+function emailLayout(brand, site, title, bodyHtml, why) {
   const b = esc(brand);
   return `<!doctype html><html><body style="margin:0;background:#F7F4EF;font-family:Arial,Helvetica,sans-serif;color:#2A2622">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F4EF;padding:24px 12px"><tr><td align="center">
@@ -885,7 +885,7 @@ function emailLayout(brand, site, title, bodyHtml) {
 ${bodyHtml}
 </td></tr>
 <tr><td style="padding:16px 24px;border-top:1px solid #E6E0D6;font-size:12px;color:#6C6359">
-${site ? `<a href="${esc(site)}" style="color:#3A5A52">${esc(site.replace(/^https?:\/\//, "").replace(/\/$/, ""))}</a> · ` : ""}You’re getting this email because you placed an order with ${b}.
+${site ? `<a href="${esc(site)}" style="color:#3A5A52">${esc(site.replace(/^https?:\/\//, "").replace(/\/$/, ""))}</a> · ` : ""}${why ? esc(why) : `You’re getting this email because you placed an order with ${b}.`}
 </td></tr></table></td></tr></table></body></html>`;
 }
 
@@ -1000,16 +1000,19 @@ async function handleEmailTest(request, env, cors) {
 }
 
 /* ---------------------------------------------------------------- *
- * Customer accounts — sign in with a code sent by email. No passwords are stored anywhere.
- *   POST /account/code   { email }        → emails a 6-digit code, but only if that email has placed an order.
- *                                           The answer is the same either way, so nobody can test who shops here.
+ * Customer accounts — sign in (or sign up) with a code sent by email. No passwords are stored anywhere.
+ *   POST /account/code   { email }        → emails a 6-digit code. The same step creates the account for a new email,
+ *                                           and the answer is the same either way, so nobody can test who shops here.
+ *                                           New emails share a daily cap (LOGIN_NEW_PER_DAY, default 50) so sign-ups can
+ *                                           never use up the email quota that order emails need; customers with orders
+ *                                           are never capped.
  *   POST /account/verify { email, code }  → { token } — a signed 30-day session
  *   POST /account/orders  Authorization: Bearer <token> → that customer's orders + last address (for checkout)
  * Codes are kept only as keyed hashes in customer_login_codes (service role only) and deleted after a day.
  * ---------------------------------------------------------------- */
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const CODE_MINUTES = 10, CODE_TRIES = 5, SESSION_DAYS = 30;
-const CODES_PER_EMAIL_HOUR = 5, CODES_PER_IP_HOUR = 20;
+const CODES_PER_EMAIL_HOUR = 5, CODES_PER_IP_HOUR = 20, NEW_PER_DAY = 50;
 const PAID_STATES = "(authorized,paid,refunded,voided,failed)";
 
 const enc = new TextEncoder();
@@ -1045,34 +1048,40 @@ async function handleAccountCode(request, env, cors) {
       await countRows(env, "customer_login_codes?email=eq." + encodeURIComponent(email) + "&created_at=gt." + hourAgo) >= CODES_PER_EMAIL_HOUR) {
     return json({ error: "Too many codes asked for. Please try again in an hour." }, 429, cors);
   }
-  const sameAnswer = json({ ok: true }, 200, cors);
   const known = await db(env, "orders?email=eq." + encodeURIComponent(email) + "&payment_status=in." + PAID_STATES + "&select=id&limit=1");
   const isCustomer = Array.isArray(known) && known.length > 0;
-  // Unknown emails are counted too (with a hash nothing can match), so the limits can't be used to test addresses either.
+  if (!isCustomer) {
+    const cap = Number(env.LOGIN_NEW_PER_DAY) > 0 ? Number(env.LOGIN_NEW_PER_DAY) : NEW_PER_DAY;
+    const dayAgo = encodeURIComponent(new Date(Date.now() - 86400000).toISOString());
+    const recent = await db(env, "customer_login_codes?new_customer=eq.true&created_at=gt." + dayAgo + "&select=id&limit=" + cap);
+    if (Array.isArray(recent) && recent.length >= cap) {
+      return json({ error: "We can’t send more sign-up codes today. Please try again tomorrow — you can still check out as a guest." }, 429, cors);
+    }
+  }
   const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
   const rows = await db(env, "customer_login_codes", {
     method: "POST", headers: { Prefer: "return=representation" },
     body: JSON.stringify({
-      email, ip_hash: ipHash,
-      code_hash: isCustomer ? hexOf(await hmacBytes(key, "code:" + email + ":" + code)) : "none",
+      email, ip_hash: ipHash, new_customer: !isCustomer,
+      code_hash: hexOf(await hmacBytes(key, "code:" + email + ":" + code)),
       expires_at: new Date(Date.now() + CODE_MINUTES * 60000).toISOString(),
     }),
   });
-  if (!isCustomer) return sameAnswer;
   const data = await storeData(env);
   const brand = (data.brand && data.brand.name) || "Home Weavers";
   const site = String((data.settings && data.settings.siteUrl) || "").replace(/\/?$/, "/");
   const html = emailLayout(brand, site, "Your sign-in code",
-    `<p style="font-size:15px;line-height:1.6;margin:0 0 10px">Use this code to sign in and see your orders:</p>` +
+    `<p style="font-size:15px;line-height:1.6;margin:0 0 10px">Use this code to sign in to your ${esc(brand)} account${isCustomer ? " and see your orders" : ""}:</p>` +
     `<p style="font-size:32px;letter-spacing:.3em;font-weight:bold;margin:16px 0;font-family:Georgia,serif">${code}</p>` +
-    `<p style="font-size:14px;line-height:1.6;color:#6C6359;margin:0">It works for ${CODE_MINUTES} minutes. If you didn’t ask for it, you can ignore this email — nobody can sign in without the code.</p>`);
+    `<p style="font-size:14px;line-height:1.6;color:#6C6359;margin:0">It works for ${CODE_MINUTES} minutes. If you didn’t ask for it, you can ignore this email — nobody can sign in without the code.</p>`,
+    "You’re getting this email because someone asked to sign in to " + brand + " with this address.");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json", "Idempotency-Key": "login-" + ((rows && rows[0] && rows[0].id) || Date.now()) },
     body: JSON.stringify({ from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT, to: [email], subject: `${code} is your ${brand} sign-in code`, html, text: `Your ${brand} sign-in code is ${code}. It works for ${CODE_MINUTES} minutes. If you didn't ask for it, ignore this email.` }),
   });
   if (!res.ok) console.error("login email failed", res.status, (await res.text()).slice(0, 200));
-  return sameAnswer;
+  return json({ ok: true }, 200, cors);
 }
 
 async function handleAccountVerify(request, env, cors) {

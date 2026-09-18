@@ -1,5 +1,5 @@
 /* Home Weavers — customer account.
-   Sign in with a 6-digit code sent to the email used at checkout (no passwords anywhere), then see every order
+   Sign in or sign up with a 6-digit code sent by email (one step, no passwords anywhere), then see every order
    placed with that email, follow deliveries, cancel inside the free window, and check out with details filled in.
    Guest checkout is unchanged: an account is simply "the orders placed with this email". */
 (function (HW) {
@@ -68,7 +68,7 @@
 
     sendCode: async function (form, emailArg) {
       var email = emailArg || form.elements.email.value.trim();
-      if (!u.isEmail(email)) { say(form, 'Enter the email you used at checkout.'); form.elements.email && form.elements.email.focus(); return; }
+      if (!u.isEmail(email)) { say(form, 'Enter a valid email address.'); form.elements.email && form.elements.email.focus(); return; }
       var btn = form.querySelector('button[type=submit]'); btn.disabled = true; say(form, '');
       try {
         await post('/account/code', { email: email });
@@ -140,7 +140,8 @@
         if (orders === null) { u.toast('Please sign in again'); HW.router.run({ scroll: false }); return; }
         box.innerHTML = orders.length
           ? orders.map(orderCard).join('')
-          : '<div class="panelbox"><p style="margin:0">No orders with this email yet. When you check out with <b>' + esc(get().email) + '</b>, your orders show up here.</p></div>';
+          : '<div class="panelbox"><p style="margin:0 0 14px">Welcome! You don’t have any orders yet. When you check out with <b>' + esc(get().email) + '</b>, they show up here, and your details are filled in next time.</p>' +
+            '<a class="btn" href="' + HW.link('/') + '">Start shopping</a></div>';
         var open = orders.findIndex(function (o) { return HW.cancelLeft({ status: o.status, paid_at: o.paid_at, created_at: o.created_at }) > 0 && /^(paid|authorized)$/.test(o.payment_status); });
         if (open > -1) HW.countdown('cancelLeft' + open, orders[open].paid_at);
       } catch (e) {
@@ -161,24 +162,24 @@
     } else if (pending) {
       body = '<h1>Check your email</h1>' +
         '<form class="form panelbox" data-form="acct-code" novalidate aria-label="Enter your code">' +
-        '<p style="margin:0 0 12px">If <b>' + esc(pending) + '</b> has orders with us, we’ve just emailed it a 6-digit code. It works for 10 minutes — check your spam folder too.</p>' +
+        '<p style="margin:0 0 12px">We’ve emailed a 6-digit code to <b>' + esc(pending) + '</b>. It works for 10 minutes — check your spam folder too.</p>' +
         '<div class="fld"><label for="ac_code">6-digit code</label><input class="acct-code" id="ac_code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required></div>' +
         '<p class="form-msg" role="status" hidden></p>' +
         '<div class="btnrow"><button class="btn loom" type="submit">Sign in</button>' +
         '<button class="linkbtn" type="button" data-act="acct-resend">Send a new code</button>' +
         '<button class="linkbtn" type="button" data-act="acct-restart">Use a different email</button></div>' +
-        '<p class="muted" style="font-size:13px;margin:14px 0 0">No email? Make sure it’s the address you used at checkout. Your account appears after your first order.</p>' +
+        '<p class="muted" style="font-size:13px;margin:14px 0 0">No email after a minute? Check spam, check the address, or send a new code.</p>' +
         '</form>';
     } else {
       body = '<h1>Your account</h1>' +
-        '<p class="muted" style="margin:0 0 20px">See all your orders, follow deliveries and check out faster. There’s no password — we email you a one-time code.</p>' +
+        '<p class="muted" style="margin:0 0 20px">See all your orders, follow deliveries and check out faster. There’s no password — we email you a one-time code. New here? The same step creates your account.</p>' +
         '<form class="form panelbox" data-form="acct-email" novalidate aria-labelledby="acctHead">' +
-        '<h2 id="acctHead" style="font-size:24px;margin:0 0 4px;color:var(--ink)">Sign in</h2>' +
-        '<div class="fld"><label for="ac_email">Email you used at checkout</label><input id="ac_email" name="email" type="email" autocomplete="email" maxlength="254" required></div>' +
+        '<h2 id="acctHead" style="font-size:24px;margin:0 0 4px;color:var(--ink)">Sign in or create an account</h2>' +
+        '<div class="fld"><label for="ac_email">Email</label><input id="ac_email" name="email" type="email" autocomplete="email" maxlength="254" required></div>' +
         '<p class="form-msg" role="status" hidden></p>' +
         '<button class="btn loom" type="submit">Email me a code</button>' +
         '</form>' +
-        '<p class="muted" style="font-size:13.5px;margin:16px 0 0">No account needed to shop — guest checkout works as always. You can also <a class="link-u"' + linkStyle + ' href="' + HW.link('/page/track-your-order') + '">track one order</a> with its number and email.</p>';
+        '<p class="muted" style="font-size:13.5px;margin:16px 0 0">Already ordered as a guest? Use that email — your past orders appear automatically. No account needed to shop: guest checkout works as always, and you can <a class="link-u"' + linkStyle + ' href="' + HW.link('/page/track-your-order') + '">track one order</a> with its number and email.</p>';
     }
     return {
       html: '<div class="wrap">' + crumb + '<div class="acct">' + body + '</div></div>',

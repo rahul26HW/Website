@@ -83,8 +83,8 @@
         '<h1 id="coHead">Checkout</h1>' +
         '<div class="notice" role="note"><b>Secure card payment.</b> After you enter your details you’ll pay on Stripe’s secure page (card, Apple Pay or Google Pay). Your card is approved at checkout and only charged when we start preparing your order. Your card number goes only to Stripe — we never see or store it.</div>' +
         '<h2>Contact</h2>' +
-        (acct ? '<p class="muted" style="font-size:13.5px;margin:0 0 10px">Signed in as <b>' + esc(acct.email) + '</b>. Your details are filled in from your last order.</p>'
-          : '<p class="muted" style="font-size:13.5px;margin:0 0 10px">Checking out as a guest. Ordered before? <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/account') + '?next=checkout">Sign in</a> to fill in your details.</p>') +
+        (acct ? '<p class="muted" style="font-size:13.5px;margin:0 0 10px">Signed in as <b>' + esc(acct.email) + '</b>.' + (acct.profile ? ' Your details are filled in from your last order.' : ' This order will appear in your account.') + '</p>'
+          : '<p class="muted" style="font-size:13.5px;margin:0 0 10px">Checking out as a guest. <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/account') + '?next=checkout">Sign in or create an account</a> (optional) to see your orders later and check out faster.</p>') +
         field('email', 'Email', 'email', { ac: 'email', max: 254 }) +
         '<div class="row2">' + field('name', 'Full name', 'text', { ac: 'name', max: 120 }) + field('phone', 'Phone', 'tel', { ac: 'tel', optional: true, max: 40 }) + '</div>' +
         '<h2>Shipping address</h2>' +

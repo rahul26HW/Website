@@ -116,7 +116,7 @@
       '<div class="fld"><label for="tr_email">Email used at checkout</label><input id="tr_email" name="email" type="email" value="' + esc(last.email || '') + '" autocomplete="email" maxlength="254" required></div></div>' +
       '<p class="form-msg" role="status" hidden></p>' +
       '<button class="btn loom" type="submit">Track order</button>' +
-      '<p class="muted" style="font-size:13.5px;margin:14px 0 0">Ordered with us before? <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/account') + '">Sign in with your email</a> to see all your orders.</p>' +
+      '<p class="muted" style="font-size:13.5px;margin:14px 0 0">Have an account? <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/account') + '">Sign in</a> to see all your orders.</p>' +
       '<div id="trackResult" aria-live="polite"></div></form>';
   }
 

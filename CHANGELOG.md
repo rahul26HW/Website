@@ -11,6 +11,12 @@
 
 ## After launch
 
+### Customer sign-up
+- Anyone can create an account: "Sign in or create an account" takes any email and sends a 6-digit code — sign-up and sign-in are the same step, still no passwords. A new account shows "no orders yet"; orders placed with that email (as a guest before, or later) appear automatically.
+- New emails share a daily cap (50 codes a day, secret `LOGIN_NEW_PER_DAY` to change it) so sign-ups can never use up the email quota order emails need; customers who already have orders are never capped. The per-email (5/hour) and per-IP (20/hour) limits still apply.
+- Code emails say why they were sent ("someone asked to sign in … with this address").
+- 114 server tests (3 new), passing directly and through the Edge wrapper.
+
 ### Customer accounts (guest checkout unchanged)
 - **Your account** page (`/account`, header icon on desktop, menu and footer link everywhere): customers sign in with a 6-digit code emailed from orders@homeweavers.net. No passwords exist anywhere, and no Supabase Auth users are created for customers.
 - Signed in, they see every order placed with that email (including earlier guest orders): status, progress, tracking link, cancel inside the free window, or ask to cancel after it. Checkout fills in their details from their last order; "Sign out" clears everything on the device.

@@ -719,6 +719,7 @@ create table if not exists public.customer_login_codes (
   used_at     timestamptz,
   created_at  timestamptz not null default now()
 );
+alter table public.customer_login_codes add column if not exists new_customer boolean not null default false; -- sign-up (no orders yet): daily cap
 create index if not exists customer_login_codes_email_idx on public.customer_login_codes (email, created_at desc);
 create index if not exists customer_login_codes_ip_idx    on public.customer_login_codes (ip_hash, created_at desc);
 alter table public.customer_login_codes enable row level security;   -- no policies: closed to anon and authenticated
