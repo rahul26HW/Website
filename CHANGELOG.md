@@ -11,6 +11,12 @@
 
 ## After launch
 
+### Bulk products, swatches, photos (2026-09-18)
+- Admin › Products: **Export CSV** (one row per SKU; collections one row per color × size), **Import CSV** with a preview of every change and error before saving, and a **Template**. Import never deletes; blank cells keep current values; `none` clears a sale price or text field. Reads UTF-8 or Excel's Windows-1252 CSV.
+- Colour swatches on the product page and cards show the fabric photo (`…swatch…` or close-up image), falling back to the colour.
+- Long descriptions: first sentence or two on top, full text in a Description tab.
+- Category tiles fall back to a product photo; category and band photos set.
+
 ### QA audit fixes (report of 2026-09-18)
 - **Privacy / security**
   - The `store` table is admin-only. Shoppers read `public_store()`, which leaves out hidden products and every promo except the newsletter code. Other codes are checked one at a time with `check_promo()`.
