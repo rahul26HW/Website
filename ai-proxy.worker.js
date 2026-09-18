@@ -26,7 +26,12 @@
      POST /account/return       Signed-in customer: ask to return a shipped order
      POST /account/signout-all  Signed-in customer: end every session
      POST /account/delete       Signed-in customer: delete profile, addresses and email sign-up (orders are kept)
-     GET  /          Health check (lists which features are set up — never the keys)
+     POST /order/status         The placing browser checks its order's payment (order number + pay token)
+     POST /public/track | /public/cancel-request | /public/contact | /public/subscribe | /public/stock-alert
+                                Visitor forms, rate-limited per visitor (IP kept only as a keyed hash)
+     POST /account/signout      Ends this customer session on the server too
+     POST /admin/health         Which features are set up — never the keys                 (admins only)
+     GET  /          Health check: just "ok"
 
    "Admins only" = the request must carry the signed-in admin's Supabase
    session, and that email must be in the admins table. Anyone else gets 401.
@@ -57,7 +62,7 @@
    ===================================================================== */
 
 const CLAUDE_MODEL = "claude-opus-5";
-const DEFAULT_ORIGINS = ["https://rahul26hw.github.io", "http://localhost:8080"];
+const DEFAULT_ORIGINS = ["https://rahul26hw.github.io"]; // add more (e.g. a custom domain) with the ALLOWED_ORIGINS secret
 
 export default {
   async fetch(request, env) {
@@ -66,7 +71,7 @@ export default {
     const cors = corsHeaders(origin, env);
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
-    if (request.method === "GET" && url.pathname === "/") return json({ ok: true, service: "home-weavers-worker", features: features(env) }, 200, cors);
+    if (request.method === "GET" && url.pathname === "/") return json({ ok: true, service: "home-weavers-worker" }, 200, cors);
     if (request.method !== "POST") return json({ error: "Use POST" }, 405, cors);
 
     try {
@@ -83,6 +88,15 @@ export default {
         case "/shipstation/sync": return await handleShipstationSync(request, env, cors);
         case "/order/cancel": return await handleOrderCancel(request, env, cors);
         case "/order/placed": return await handleOrderPlaced(request, env, cors);
+        case "/order/status": return await handleOrderStatus(request, env, cors);
+        case "/public/track": case "/public/cancel-request": case "/public/contact": case "/public/subscribe": case "/public/stock-alert":
+          return await handlePublic(url.pathname.replace(/\/+$/, ""), request, env, cors);
+        case "/account/signout": return await handleAccountSignout(request, env, cors);
+        case "/admin/health": {
+          const denied = await requireAdmin(request, env);
+          if (denied) return json({ error: denied }, 401, cors);
+          return json({ ok: true, service: "home-weavers-worker", features: features(env) }, 200, cors);
+        }
         case "/orders/accept": return await handleOrderAccept(request, env, cors);
         case "/orders/release": return await handleOrderRelease(request, env, cors);
         case "/email/test": return await handleEmailTest(request, env, cors);
@@ -99,7 +113,7 @@ export default {
     } catch (e) {
       // Details go to the Cloudflare log. Only signed-in admins get them back; shoppers and webhooks get a plain message.
       console.error(url.pathname, e && e.stack ? e.stack : e);
-      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/email/test"].includes(url.pathname.replace(/\/+$/, ""));
+      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/email/test", "/admin/health"].includes(url.pathname.replace(/\/+$/, ""));
       return json({ error: adminRoute ? "Worker error: " + (e && e.message ? e.message : "unknown") : "Something went wrong. Please try again in a moment." }, 500, cors);
     }
   },
@@ -232,12 +246,13 @@ async function handleWelcome(request, env, cors) {
   if (!env.BREVO_API_KEY || !env.FROM_EMAIL || !env.SUPABASE_SERVICE_ROLE_KEY || !env.SUPABASE_URL) return json({ ok: false, error: "Welcome email isn’t set up" }, 501, cors);
   const body = await readJson(request);
   const email = String(body.email || "").trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ ok: false }, 400, cors);
+  if (!EMAIL_RE.test(email)) return json({ ok: false }, 400, cors);
 
+  // Only a fresh sign-up, and only once per address (claimed before sending, so repeats can't slip through).
   const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-  const q = env.SUPABASE_URL + "/rest/v1/subscribers?select=email,created_at&email=eq." + encodeURIComponent(email) + "&created_at=gte." + encodeURIComponent(since);
-  const found = await fetch(q, { headers: serviceHeaders(env) }).then((r) => r.json()).catch(() => []);
-  if (!Array.isArray(found) || !found.length) return json({ ok: true }, 200, cors); // quiet: nothing to send
+  const claim = await fetch(env.SUPABASE_URL + "/rest/v1/subscribers?email=eq." + encodeURIComponent(email) + "&created_at=gte." + encodeURIComponent(since) + "&welcome_sent_at=is.null",
+    { method: "PATCH", headers: Object.assign({ Prefer: "return=representation" }, serviceHeaders(env)), body: JSON.stringify({ welcome_sent_at: new Date().toISOString() }) }).then((r) => r.json()).catch(() => []);
+  if (!Array.isArray(claim) || !claim.length) return json({ ok: true }, 200, cors); // quiet: nothing to send
 
   const store = await fetch(env.SUPABASE_URL + "/rest/v1/store?id=eq.main&select=data", { headers: serviceHeaders(env) }).then((r) => r.json()).catch(() => []);
   const data = (store[0] && store[0].data) || {};
@@ -400,10 +415,14 @@ async function handleOrderCancel(request, env, cors) {
   const body = await readJson(request);
   const number = String(body.order_number || "").trim().toUpperCase();
   const email = String(body.email || "").trim().toLowerCase();
-  if (!/^[A-Z]{2,4}-\d{1,12}$/.test(number) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "Order not found" }, 404, cors);
+  if (!/^[A-Z]{2,4}-\d{1,12}$/.test(number) || !EMAIL_RE.test(email)) return json({ error: "Order not found" }, 404, cors);
+  if (await rateLimited(env, request, "cancel", 20, 3600)) return json({ error: "Too many tries. Please wait a while and try again." }, 429, cors);
 
   const order = await loadOrder(env, "order_number=eq." + encodeURIComponent(number) + "&email=eq." + encodeURIComponent(email));
   if (!order) return json({ error: "Order not found" }, 404, cors);
+  // Knowing the email isn't enough: the browser that placed it (pay token), the signed link in the order email,
+  // or the customer's signed-in account must ask.
+  if (!(await cancelAllowed(request, env, order, body))) return json({ error: "To cancel, use the link in your order email or sign in to your account.", needProof: true }, 403, cors);
   if (order.status === "cancelled") return json({ ok: true, already: true }, 200, cors);
 
   const minutes = await cancelMinutes(env);
@@ -413,6 +432,10 @@ async function handleOrderCancel(request, env, cors) {
     return json({ error: "This order can no longer be cancelled here.", tooLate: true, status: order.status }, 409, cors);
   }
 
+  // An unpaid order may still have its payment page open: close it so it can't be paid after cancelling.
+  if (order.payment_status === "unpaid" && /^cs_/.test(order.payment_ref || "") && env.STRIPE_SECRET_KEY) {
+    await stripe(env, "checkout/sessions/" + encodeURIComponent(order.payment_ref) + "/expire", {}).catch(() => {});
+  }
   // Money first: if Stripe fails, the order stays as it was.
   let refunded = false, voided = false;
   if (/^pi_/.test(order.payment_ref || "") && (order.payment_status === "authorized" || order.payment_status === "paid")) {
@@ -448,7 +471,11 @@ async function acceptOrder(env, order) {
       if (pi.status !== "succeeded") throw new Error("payment is " + pi.status);
       patch.payment_status = "paid";
     } catch (e) {
-      // The hold couldn't be charged (expired, card closed…): keep the order out of ShipStation.
+      if (!finalCaptureError(e)) {
+        // Stripe was busy or unreachable: leave it approved so the next run (or the admin) tries again.
+        return { ok: false, retry: true, order_number: order.order_number, error: "Stripe didn’t answer (" + e.message + "). It will be tried again." };
+      }
+      // The hold can't be charged (declined, expired, card closed…): keep the order out of ShipStation.
       await patchOrder(env, "id=eq." + order.id + "&status=eq.new", {
         payment_status: "failed",
         admin_note: (order.admin_note ? order.admin_note + "\n" : "") + "⚠ Charging the card failed: " + String(e.message).slice(0, 200),
@@ -478,7 +505,7 @@ async function handleOrderAccept(request, env, cors) {
   if (order.status !== "new") return json({ error: "This order was already accepted." }, 409, cors);
   if (!/^(authorized|paid|cod)$/.test(order.payment_status)) return json({ error: "This order isn’t paid, so it can’t be accepted." }, 409, cors);
   const r = await acceptOrder(env, order);
-  return json(r, r.error ? 402 : 200, cors);
+  return json(r, r.retry ? 503 : r.error ? 402 : 200, cors);
 }
 
 /* POST /orders/release — the scheduled job (and admins). Accepts every paid order whose window has passed. */
@@ -491,7 +518,7 @@ async function handleOrderRelease(request, env, cors) {
   if (!trusted && auth) trusted = !(await requireAdmin(request, env));
   const minutes = await cancelMinutes(env);
   const cutoff = new Date(Date.now() - minutes * 60000).toISOString();
-  const due = await db(env, "orders?status=eq.new&payment_status=in.(authorized,paid,cod)&paid_at=lt." + encodeURIComponent(cutoff) + "&select=*,order_items(*)&order=paid_at.asc&limit=50");
+  const due = await db(env, "orders?status=eq.new&payment_status=in.(authorized,paid,cod)&cancel_requested_at=is.null&review_reason=is.null&paid_at=lt." + encodeURIComponent(cutoff) + "&select=*,order_items(*)&order=paid_at.asc&limit=50");
   const results = [];
   for (const order of Array.isArray(due) ? due : []) results.push(await acceptOrder(env, order));
   const accepted = results.filter((r) => r.ok).length;
@@ -519,8 +546,18 @@ function formEncode(obj, prefix, out = []) {
 async function stripeGet(env, path) {
   const res = await fetch("https://api.stripe.com/v1/" + path, { headers: { Authorization: "Bearer " + env.STRIPE_SECRET_KEY } });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data.error && data.error.message) || "Stripe error " + res.status);
+  if (!res.ok) throw stripeError(res, data);
   return data;
+}
+
+function stripeError(res, data) {
+  const e = new Error((data.error && data.error.message) || "Stripe error " + res.status);
+  e.status = res.status; e.type = data.error && data.error.type; e.code = data.error && data.error.code;
+  return e;
+}
+/* A capture that can never succeed (declined, or the hold is gone) — anything else is worth retrying. */
+function finalCaptureError(e) {
+  return e.status === 402 || e.type === "card_error" || e.code === "payment_intent_unexpected_state" || e.code === "charge_expired_for_capture";
 }
 
 async function stripe(env, path, params, idempotencyKey) {
@@ -528,7 +565,7 @@ async function stripe(env, path, params, idempotencyKey) {
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
   const res = await fetch("https://api.stripe.com/v1/" + path, { method: "POST", headers, body: formEncode(params) });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data.error && data.error.message) || "Stripe error " + res.status);
+  if (!res.ok) throw stripeError(res, data);
   return data;
 }
 
@@ -554,6 +591,8 @@ async function handleCheckoutSession(request, env, cors) {
   if (!items.length || items.reduce((s, i) => s + cents(i.unit_price) * i.qty, 0) !== cents(order.subtotal)) {
     return json({ error: "This order’s total doesn’t add up. Please contact us." }, 409, cors);
   }
+  // A second tab must not be able to put a second hold on the card: close the previous payment page first.
+  if (/^cs_/.test(order.payment_ref || "")) await stripe(env, "checkout/sessions/" + encodeURIComponent(order.payment_ref) + "/expire", {}).catch(() => {});
   const site = await siteUrl(env);
   const orderPage = site + "order/" + encodeURIComponent(order.order_number);
   const currency = order.currency || "usd";
@@ -638,23 +677,36 @@ async function handleStripeWebhook(request, env) {
     if (!held && !captured) return json({ ok: true, waiting: (pi && pi.status) || obj.payment_status });
     const order = await loadOrder(env, "id=eq." + orderId);
     if (!order) return json({ ok: true, ignored: "order missing" });
-    if (order.payment_status === "unpaid") {
-      const amount = held ? pi.amount_capturable : obj.amount_total;
-      const mismatch = amount !== cents(order.total);
-      const rows = await patchOrder(env, "id=eq." + orderId + "&payment_status=eq.unpaid", {
-        payment_status: held ? "authorized" : "paid",
-        paid_at: new Date().toISOString(),
-        payment_ref: obj.payment_intent || obj.id,
-        payment_livemode: !!obj.livemode,
-        status: order.status === "cancelled" ? "new" : order.status,
-        admin_note: mismatch
-          ? (order.admin_note ? order.admin_note + "\n" : "") + "⚠ Stripe " + (held ? "authorized" : "charged") + " $" + (amount / 100).toFixed(2) + " but the order total is $" + Number(order.total).toFixed(2) + ". Check before shipping."
-          : order.admin_note,
-      });
-      if (Array.isArray(rows) && rows[0]) {
-        Object.assign(order, rows[0]);
-        await sendOrderEmail(env, "received", order);
+    const piId = obj.payment_intent || "";
+    if (piId && order.payment_ref === piId) return json({ ok: true, duplicate: true });
+    // This payment can't belong to the order any more: it was cancelled, or another payment already went through
+    // (for example a second tab). Give the money back instead of reviving or double-charging the order.
+    if (order.status !== "new" || order.payment_status !== "unpaid") {
+      if (piId) {
+        try {
+          if (held) await stripe(env, "payment_intents/" + encodeURIComponent(piId) + "/cancel", { cancellation_reason: "duplicate" }, "void-extra-" + piId);
+          else if (captured) await stripe(env, "refunds", { payment_intent: piId, reason: "duplicate" }, "refund-extra-" + piId);
+        } catch (e) { console.error("couldn't release extra payment", piId, e.message); }
+        await patchOrder(env, "id=eq." + orderId, { admin_note: (order.admin_note ? order.admin_note + "\n" : "") + "⚠ An extra Stripe payment (" + piId + ") arrived after this order was " + (order.status === "cancelled" ? "cancelled" : "paid") + "; it was " + (held ? "released" : "refunded") + " automatically." }).catch(() => {});
       }
+      return json({ ok: true, released: piId || null });
+    }
+    const amount = held ? pi.amount_capturable : obj.amount_total;
+    const mismatch = amount !== cents(order.total);
+    const rows = await patchOrder(env, "id=eq." + orderId + "&payment_status=eq.unpaid&status=eq.new", {
+      payment_status: held ? "authorized" : "paid",
+      paid_at: new Date().toISOString(),
+      payment_ref: piId || obj.id,
+      payment_livemode: !!obj.livemode,
+      // A mismatch keeps the order away from automatic acceptance until a person looks at it.
+      review_reason: mismatch ? "Stripe " + (held ? "approved" : "charged") + " $" + (amount / 100).toFixed(2) + " but the order total is $" + Number(order.total).toFixed(2) : null,
+      admin_note: mismatch
+        ? (order.admin_note ? order.admin_note + "\n" : "") + "⚠ Stripe " + (held ? "authorized" : "charged") + " $" + (amount / 100).toFixed(2) + " but the order total is $" + Number(order.total).toFixed(2) + ". Check before shipping."
+        : order.admin_note,
+    });
+    if (Array.isArray(rows) && rows[0]) {
+      Object.assign(order, rows[0]);
+      await sendOrderEmail(env, "received", order);
     }
     // The order now waits as "new" until it is accepted (see /orders/accept and /orders/release),
     // so the customer still has their cancellation window before anything reaches the warehouse.
@@ -677,8 +729,17 @@ async function handleStripeWebhook(request, env) {
   }
 
   if (event.type === "charge.refunded" && obj.payment_intent && obj.refunded) {
-    const rows = await patchOrder(env, "payment_ref=eq." + encodeURIComponent(obj.payment_intent) + "&payment_status=neq.refunded", { payment_status: "refunded" });
-    if (Array.isArray(rows) && rows[0]) await sendOrderEmail(env, "refunded", rows[0], { amount: (obj.amount_refunded || 0) / 100 });
+    // Fully refunded in Stripe: stop it from shipping if it hasn't left yet.
+    const order = await loadOrder(env, "payment_ref=eq." + encodeURIComponent(obj.payment_intent));
+    if (!order || order.payment_status === "refunded") return json({ ok: true });
+    const shipped = /^(shipped|delivered)$/.test(order.status);
+    const rows = await patchOrder(env, "id=eq." + order.id + "&payment_status=neq.refunded", Object.assign({ payment_status: "refunded" },
+      shipped ? { admin_note: (order.admin_note ? order.admin_note + "\n" : "") + "Refunded in Stripe after it shipped." } : { status: "refunded" }));
+    if (Array.isArray(rows) && rows[0]) {
+      const fresh = Object.assign({}, order, rows[0]);
+      if (!shipped && fresh.shipstation_order_id && features(env).shipstation) await pushToShipstation(env, Object.assign({}, fresh, { status: "cancelled" })).catch(() => {});
+      await sendOrderEmail(env, "refunded", fresh, { amount: (obj.amount_refunded || 0) / 100 });
+    }
     return json({ ok: true });
   }
   return json({ ok: true, ignored: event.type });
@@ -929,7 +990,7 @@ function buildOrderEmail(kind, order, data, extra = {}) {
   const site = String((data.settings && data.settings.siteUrl) || "").replace(/\/?$/, "/");
   const minutes = Number((data.settings || {}).cancelMinutes);
   const windowMin = minutes >= 0 && minutes <= 1440 ? minutes : 30;
-  const trackUrl = site + "page/track-your-order?order=" + encodeURIComponent(order.order_number);
+  const trackUrl = site + "page/track-your-order?order=" + encodeURIComponent(order.order_number) + (extra.cancelToken ? "&c=" + extra.cancelToken : "");
   const first = String(order.name || "").split(" ")[0];
   const hi = `<p style="font-size:15px;line-height:1.6;margin:0 0 10px">Hi ${esc(first || "there")},</p>`;
   const p = (t) => `<p style="font-size:15px;line-height:1.6;margin:0 0 10px">${t}</p>`;
@@ -995,7 +1056,9 @@ async function sendOrderEmail(env, kind, order, extra) {
   if (!env.RESEND_API_KEY || !order || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(order.email || "")) return false;
   try {
     const data = await storeData(env);
-    const msg = buildOrderEmail(kind, order, data, extra);
+    const ex = Object.assign({}, extra || {});
+    if (kind === "received" && order.id && !String(order.id).startsWith("test-")) ex.cancelToken = await cancelToken(env, order.id);
+    const msg = buildOrderEmail(kind, order, data, ex);
     if (!msg) return false;
     const replyTo = env.EMAIL_REPLY_TO || (data.contact && data.contact.email) || undefined;
     const res = await fetch("https://api.resend.com/emails", {
@@ -1040,7 +1103,8 @@ async function handleEmailTest(request, env, cors) {
  *   POST /account/orders  Authorization: Bearer <token> → that customer's orders + last address (for checkout)
  * Codes are kept only as keyed hashes in customer_login_codes (service role only) and deleted after a day.
  * ---------------------------------------------------------------- */
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+// Plain ASCII addresses only (letters, digits and . _ % + ' -), a real domain and a 2–24 letter ending.
+const EMAIL_RE = /^[A-Za-z0-9._%+'-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,24}$/;
 const CODE_MINUTES = 10, CODE_TRIES = 5, SESSION_DAYS = 30;
 const CODES_PER_EMAIL_HOUR = 5, CODES_PER_IP_HOUR = 20, NEW_PER_DAY = 50;
 const PAID_STATES = "(authorized,paid,refunded,voided,failed,cod)";
@@ -1057,7 +1121,11 @@ async function accountKey(env) {
   return env.CUSTOMER_SESSION_SECRET || hexOf(await hmacBytes(String(env.SUPABASE_SERVICE_ROLE_KEY || ""), "hw-customer-session-v1"));
 }
 function clientIp(request) {
-  return String(request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const cf = request.headers.get("cf-connecting-ip");
+  if (cf) return cf.trim();
+  // The last address is the one our own proxy added; earlier ones can be typed in by the visitor.
+  const xff = String(request.headers.get("x-forwarded-for") || "").split(",").map((x) => x.trim()).filter(Boolean);
+  return xff.length ? xff[xff.length - 1] : "";
 }
 async function countRows(env, path) {
   const rows = await db(env, path + "&select=id&limit=100");
@@ -1088,9 +1156,8 @@ async function handleAccountCode(request, env, cors) {
     return json({ error: "Too many codes asked for. Please try again in an hour." }, 429, cors);
   }
   const isCustomer = Array.isArray(known) && known.length > 0;
-  if (!isCustomer && Array.isArray(recentNew) && recentNew.length >= cap) {
-    return json({ error: "We can’t send more sign-up codes today. Please try again tomorrow — you can still check out as a guest." }, 429, cors);
-  }
+  // Past the daily sign-up cap, answer exactly as usual but send nothing: the reply never reveals who is a customer.
+  if (!isCustomer && Array.isArray(recentNew) && recentNew.length >= cap) return json({ ok: true }, 200, cors);
 
   const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
   const id = crypto.randomUUID();
@@ -1129,6 +1196,9 @@ async function handleAccountVerify(request, env, cors) {
   const wrong = (extra) => json(Object.assign({ error: "That code isn’t right or has expired. Check it, or ask for a new one." }, extra || {}), 400, cors);
   if (!EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) return wrong();
   const now = new Date().toISOString();
+  // At most 20 wrong codes per email per day, across all codes.
+  const today = await db(env, "customer_login_codes?email=eq." + encodeURIComponent(email) + "&created_at=gt." + encodeURIComponent(new Date(Date.now() - 86400000).toISOString()) + "&select=attempts&limit=100");
+  if (Array.isArray(today) && today.reduce((n, x) => n + (Number(x.attempts) || 0), 0) >= 20) return json({ error: "Too many tries today. Please try again tomorrow." }, 429, cors);
   const rows = await db(env, "customer_login_codes?email=eq." + encodeURIComponent(email) + "&used_at=is.null&expires_at=gt." + encodeURIComponent(now) + "&select=id,code_hash,attempts&order=created_at.desc&limit=1");
   const row = Array.isArray(rows) && rows[0];
   if (!row) return wrong();
@@ -1232,10 +1302,14 @@ async function customerSession(request, env) {
   let p;
   try { p = JSON.parse(atob(m[1].replace(/-/g, "+").replace(/_/g, "/"))); } catch { return null; }
   if (!p || !EMAIL_RE.test(p.e || "") || !(Number(p.x) * 1000 > Date.now())) return null;
-  const rows = await db(env, "customer_profiles?email=eq." + encodeURIComponent(p.e) + "&select=first_name,last_name,phone,addresses,signed_out_at&limit=1");
+  const [rows, revoked] = await Promise.all([
+    db(env, "customer_profiles?email=eq." + encodeURIComponent(p.e) + "&select=first_name,last_name,phone,addresses,signed_out_at&limit=1"),
+    p.n ? db(env, "customer_revoked?n=eq." + encodeURIComponent(String(p.n)) + "&select=n&limit=1") : [],
+  ]);
+  if (Array.isArray(revoked) && revoked.length) return null; // signed out
   const profile = Array.isArray(rows) && rows[0] ? rows[0] : null;
   if (profile && profile.signed_out_at && !(Number(p.i || 0) > Date.parse(profile.signed_out_at))) return null;
-  return { email: p.e, profile };
+  return { email: p.e, profile, nonce: String(p.n || ""), exp: Number(p.x) };
 }
 const signedOut = (cors) => json({ error: "Please sign in again.", signedOut: true }, 401, cors);
 
@@ -1416,4 +1490,96 @@ async function handleOrderPlaced(request, env, cors) {
   if (Date.now() - Date.parse(order.created_at) > 3600000) return json({ ok: true, skipped: true }, 200, cors);
   await sendOrderEmail(env, "received", order);
   return json({ ok: true }, 200, cors);
+}
+
+/* ---------------------------------------------------------------- *
+ * Rate limits for visitor forms: a keyed hash of the IP (never the IP itself) per bucket, kept a day.
+ * ---------------------------------------------------------------- */
+async function rateLimited(env, request, bucket, max, windowSec) {
+  if (!features(env).database) return false;
+  const key = hexOf(await hmacBytes(await accountKey(env), "rl:" + clientIp(request))).slice(0, 32);
+  const since = encodeURIComponent(new Date(Date.now() - windowSec * 1000).toISOString());
+  const rows = await db(env, "rate_hits?bucket=eq." + bucket + "&key=eq." + key + "&at=gt." + since + "&select=at&limit=" + max);
+  if (Array.isArray(rows) && rows.length >= max) return true;
+  await db(env, "rate_hits", { method: "POST", body: JSON.stringify({ bucket, key }) });
+  if (Math.random() < 0.05) await db(env, "rate_hits?at=lt." + encodeURIComponent(new Date(Date.now() - 86400000).toISOString()), { method: "DELETE" }).catch(() => {});
+  return false;
+}
+
+/* The signed "cancel" part of the link in the order email (only this server can make one). */
+async function cancelToken(env, orderId) {
+  return b64url(await hmacBytes(await accountKey(env), "cancel:" + orderId)).slice(0, 32);
+}
+async function cancelAllowed(request, env, order, body) {
+  if (body.pay_token && UUID.test(String(body.pay_token)) && safeEqual(String(order.pay_token), String(body.pay_token))) return true;
+  if (body.cancel_token && safeEqual(String(body.cancel_token), await cancelToken(env, order.id))) return true;
+  if (/^Bearer\s/.test(request.headers.get("Authorization") || "")) {
+    const s = await customerSession(request, env).catch(() => null);
+    if (s && s.email === order.email) return true;
+  }
+  return false;
+}
+
+/* POST /order/status { order_number, pay_token } — lets the confirmation page check the payment instead of trusting the URL. */
+async function handleOrderStatus(request, env, cors) {
+  if (!features(env).database) return json({ error: "Not available" }, 501, cors);
+  const body = await readJson(request);
+  const number = String(body.order_number || "").trim().toUpperCase();
+  const token = String(body.pay_token || "");
+  if (!/^[A-Z]{2,4}-\d{1,12}$/.test(number) || !UUID.test(token)) return json({ error: "Order not found" }, 404, cors);
+  const rows = await db(env, "orders?order_number=eq." + encodeURIComponent(number) + "&pay_token=eq." + encodeURIComponent(token) + "&select=status,payment_status,payment_method,paid_at,total&limit=1");
+  const o = Array.isArray(rows) && rows[0];
+  if (!o) return json({ error: "Order not found" }, 404, cors);
+  return json({ ok: true, status: o.status, payment_status: o.payment_status, payment_method: o.payment_method, paid_at: o.paid_at, total: o.total }, 200, cors);
+}
+
+/* POST /account/signout — this session stops working everywhere, not just on this device. */
+async function handleAccountSignout(request, env, cors) {
+  if (!features(env).database) return json({ ok: true }, 200, cors);
+  const s = await customerSession(request, env);
+  if (s && s.nonce) {
+    await db(env, "customer_revoked?on_conflict=n", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ n: s.nonce.slice(0, 64), exp: new Date(s.exp * 1000).toISOString() }) }).catch(() => {});
+    await db(env, "customer_revoked?exp=lt." + encodeURIComponent(new Date().toISOString()), { method: "DELETE" }).catch(() => {});
+  }
+  return json({ ok: true }, 200, cors);
+}
+
+/* ---------------------------------------------------------------- *
+ * Visitor forms (were direct database calls; now rate-limited here). Errors keep the database's codes.
+ * ---------------------------------------------------------------- */
+const PUBLIC_LIMITS = { "/public/track": 30, "/public/cancel-request": 10, "/public/contact": 5, "/public/subscribe": 5, "/public/stock-alert": 10 };
+async function handlePublic(path, request, env, cors) {
+  if (!features(env).database) return json({ error: "Not available right now." }, 501, cors);
+  const body = await readJson(request);
+  if (path === "/public/contact" && str(body.website, 200)) return json({ ok: true }, 200, cors); // honeypot: pretend it worked
+  if (await rateLimited(env, request, path.slice(8), PUBLIC_LIMITS[path], 3600)) return json({ error: "Too many tries. Please wait a while and try again.", code: "RATE_LIMIT" }, 429, cors);
+  const rpc = (fn, args) => db(env, "rpc/" + fn, { method: "POST", body: JSON.stringify(args) });
+  const email = String(body.email || "").trim().toLowerCase();
+  const fail = (e) => {
+    const code = (/(?:Database error \d+: )?([A-Z_]{4,40})/.exec(String(e && e.message)) || [])[1] || "ERROR";
+    return json({ error: code, code }, code === "RATE_LIMIT" ? 429 : 400, cors);
+  };
+  if (path !== "/public/track" && path !== "/public/cancel-request" && !EMAIL_RE.test(email)) return json({ error: "INVALID_EMAIL", code: "INVALID_EMAIL" }, 400, cors);
+  try {
+    if (path === "/public/track") {
+      const order = await rpc("track_order", { p_number: str(body.number, 20), p_email: str(body.email, 254) });
+      return json({ ok: true, order: order || null }, 200, cors);
+    }
+    if (path === "/public/cancel-request") {
+      return json(await rpc("request_cancel", { p_number: str(body.number, 20), p_email: str(body.email, 254), p_reason: str(body.reason, 500) }), 200, cors);
+    }
+    if (path === "/public/contact") {
+      const name = str(body.name, 120), message = String(body.message == null ? "" : body.message).slice(0, 5000).trim();
+      if (!name || !message) return json({ error: "Please fill in your name and message.", code: "INVALID" }, 400, cors);
+      await db(env, "contact_messages", { method: "POST", body: JSON.stringify({ name, email, phone: str(body.phone, 40) || null, subject: str(body.subject, 200) || null, message }) });
+      return json({ ok: true }, 200, cors);
+    }
+    if (path === "/public/subscribe") {
+      return json(await rpc("subscribe", { p_email: email, p_source: str(body.source, 40) || "newsletter" }), 200, cors);
+    }
+    if (path === "/public/stock-alert") {
+      return json(await rpc("request_stock_alert", { p_email: email, p_product_id: str(body.product_id, 80), p_sku: str(body.sku, 80), p_product_name: str(body.product_name, 300) }), 200, cors);
+    }
+  } catch (e) { return fail(e); }
+  return json({ error: "Not found" }, 404, cors);
 }

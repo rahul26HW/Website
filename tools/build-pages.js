@@ -45,7 +45,7 @@ async function loadStore(file) {
   return json.data || json.store || json;
 }
 
-const text = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+const text = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/[•▪●◦]/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
 const clip = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : s; };
 const attr = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -82,8 +82,10 @@ async function main() {
       description: p.seoDescription || text(m.pageText(p.body)).replace(/[#*\[\]()|-]/g, ' ') });
   });
 
-  require('./csp.js').write('index.html'); // keep the inline-script hashes current before copying
-  require('./csp.js').write('404.html');
+  // Keep the inline-script hashes current before copying. Snipcart's hosts are allowed only while it is switched on.
+  const cspOpts = { snipcart: !!(data.snipcart && data.snipcart.enabled && String(data.snipcart.apiKey || '').trim()) };
+  require('./csp.js').write('index.html', cspOpts);
+  require('./csp.js').write('404.html', cspOpts);
   const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   DIRS.forEach(function (d) { fs.rmSync(path.join(ROOT, d), { recursive: true, force: true }); });
 
@@ -99,6 +101,9 @@ async function main() {
       // Files sit one folder down, so relative links need "../".
       .replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|tel:)/g, '$1../')
       .replace(/<title>[^<]*<\/title>/, '<title>' + attr(title) + '</title>')
+      // Real heading and text in the HTML itself, for crawlers that don't run scripts (the app replaces it on load).
+      .replace('<div class="loading" aria-live="polite">Loading…</div>', '<div class="loading"><div><h1 style="font-size:28px;margin:0 0 10px">' + attr(clip(pg.title, 90)) + '</h1>' +
+        '<p style="max-width:560px;margin:0 auto 14px">' + attr(desc) + '</p><p aria-live="polite">Loading…</p></div></div>')
       .replace(/(<meta name="description" content=")[^"]*"/, '$1' + attr(desc) + '"')
       .replace(/(<meta property="og:type" content=")[^"]*"/, '$1' + (pg.type || 'website') + '"')
       .replace(/(<meta property="og:title" content=")[^"]*"/, '$1' + attr(title) + '"')

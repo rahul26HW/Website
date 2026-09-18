@@ -81,7 +81,8 @@ drop policy if exists "public read store"   on public.store;
 drop policy if exists "admins insert store" on public.store;
 drop policy if exists "admins update store" on public.store;
 drop policy if exists "admins delete store" on public.store;
-create policy "public read store"   on public.store for select to anon, authenticated using (true);
+-- Shoppers read the store through public_store() (no promo codes, no draft products); only admins read the row.
+create policy "public read store"   on public.store for select to authenticated using ((select public.is_admin()));
 create policy "admins insert store" on public.store for insert to authenticated with check ((select public.is_admin()));
 create policy "admins update store" on public.store for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 create policy "admins delete store" on public.store for delete to authenticated using ((select public.is_admin()));
@@ -177,7 +178,7 @@ end $$;
 create table if not exists public.subscribers (
   id         uuid primary key default gen_random_uuid(),
   email      text not null unique
-             check (email = lower(email) and length(email) <= 254 and email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
+             check (email = lower(email) and length(email) <= 254 and email ~ '^[A-Za-z0-9._%+''-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,24}$'),
   code       text,
   source     text not null default 'newsletter' check (length(source) <= 40),
   created_at timestamptz not null default now()
@@ -204,7 +205,7 @@ create trigger subscribers_before_insert before insert on public.subscribers
 drop policy if exists "visitors subscribe"         on public.subscribers;
 drop policy if exists "admins read subscribers"    on public.subscribers;
 drop policy if exists "admins delete subscribers"  on public.subscribers;
-create policy "visitors subscribe"        on public.subscribers for insert to anon, authenticated with check (true);
+-- (was: public insert policy "visitors subscribe" — sign-ups now arrive through the Edge Function)
 create policy "admins read subscribers"   on public.subscribers for select to authenticated using ((select public.is_admin()));
 create policy "admins delete subscribers" on public.subscribers for delete to authenticated using ((select public.is_admin()));
 
@@ -214,7 +215,7 @@ create or replace function public.subscribe(p_email text, p_source text default 
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_email text := lower(trim(coalesce(p_email,'')));
 begin
-  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_email) > 254 then
+  if v_email !~ '^[A-Za-z0-9._%+''-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,24}$' or length(v_email) > 254 then
     raise exception 'INVALID_EMAIL' using errcode = '22023';
   end if;
   insert into public.subscribers (email, source)
@@ -231,7 +232,7 @@ end $$;
 create table if not exists public.stock_alerts (
   id           uuid primary key default gen_random_uuid(),
   email        text not null
-               check (email = lower(email) and length(email) <= 254 and email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
+               check (email = lower(email) and length(email) <= 254 and email ~ '^[A-Za-z0-9._%+''-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,24}$'),
   product_id   text not null check (length(product_id) <= 80),
   product_name text check (length(product_name) <= 300),
   sku          text not null default '' check (length(sku) <= 80),
@@ -256,7 +257,7 @@ drop policy if exists "visitors add alerts"   on public.stock_alerts;
 drop policy if exists "admins read alerts"    on public.stock_alerts;
 drop policy if exists "admins update alerts"  on public.stock_alerts;
 drop policy if exists "admins delete alerts"  on public.stock_alerts;
-create policy "visitors add alerts"  on public.stock_alerts for insert to anon, authenticated with check (notified_at is null);
+-- (was: public insert policy "visitors add alerts" — sign-ups now arrive through the Edge Function)
 create policy "admins read alerts"   on public.stock_alerts for select to authenticated using ((select public.is_admin()));
 create policy "admins update alerts" on public.stock_alerts for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 create policy "admins delete alerts" on public.stock_alerts for delete to authenticated using ((select public.is_admin()));
@@ -266,7 +267,7 @@ create or replace function public.request_stock_alert(p_email text, p_product_id
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_email text := lower(trim(coalesce(p_email,'')));
 begin
-  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_email) > 254 then
+  if v_email !~ '^[A-Za-z0-9._%+''-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,24}$' or length(v_email) > 254 then
     raise exception 'INVALID_EMAIL' using errcode = '22023';
   end if;
   if coalesce(trim(p_product_id),'') = '' or length(p_product_id) > 80 then
@@ -285,7 +286,7 @@ end $$;
 create table if not exists public.contact_messages (
   id         uuid primary key default gen_random_uuid(),
   name       text not null check (length(trim(name)) between 1 and 120),
-  email      text not null check (length(email) <= 254 and email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
+  email      text not null check (length(email) <= 254 and email ~ '^[A-Za-z0-9._%+''-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,24}$'),
   phone      text check (length(phone) <= 40),
   subject    text check (length(subject) <= 200),
   message    text not null check (length(trim(message)) between 1 and 5000),
@@ -316,7 +317,7 @@ drop policy if exists "visitors send messages" on public.contact_messages;
 drop policy if exists "admins read messages"   on public.contact_messages;
 drop policy if exists "admins update messages" on public.contact_messages;
 drop policy if exists "admins delete messages" on public.contact_messages;
-create policy "visitors send messages" on public.contact_messages for insert to anon, authenticated with check (true);
+-- (was: public insert policy "visitors send messages" — sign-ups now arrive through the Edge Function)
 create policy "admins read messages"   on public.contact_messages for select to authenticated using ((select public.is_admin()));
 create policy "admins update messages" on public.contact_messages for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 create policy "admins delete messages" on public.contact_messages for delete to authenticated using ((select public.is_admin()));
@@ -374,6 +375,7 @@ alter table public.orders add column if not exists cancel_reason         text;
 alter table public.orders add column if not exists return_requested_at   timestamptz; -- customer asked to return (from their account)
 alter table public.orders add column if not exists return_reason         text;
 alter table public.orders add column if not exists payment_method        text not null default 'card'; -- card (Stripe) | cod
+alter table public.orders add column if not exists review_reason         text;          -- set when an order needs a person (e.g. Stripe amount mismatch); never auto-released
 alter table public.orders add column if not exists cod_fee               numeric(10,2) not null default 0;
 alter table public.orders drop constraint if exists orders_payment_method_check;
 alter table public.orders add constraint orders_payment_method_check check (payment_method in ('card','cod'));
@@ -477,6 +479,8 @@ declare
   v_promo     jsonb;
   v_code      text := nullif(trim(coalesce(p_order->>'promoCode','')), '');
   v_method    text := case when p_order->>'paymentMethod' = 'cod' then 'cod' else 'card' end;
+  v_held      numeric;
+  v_state     text := upper(trim(coalesce(p_order->'address'->>'state','')));
   v_fee       numeric := 0;
   v_order_id  uuid;
   v_token     uuid;
@@ -484,7 +488,7 @@ declare
   k           text;
 begin
   -- Contact + address
-  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_email) > 254 then
+  if v_email !~ '^[A-Za-z0-9._%+''-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,24}$' or length(v_email) > 254 then
     raise exception 'INVALID_EMAIL' using errcode = '22023';
   end if;
   if length(v_name) < 1 or length(v_name) > 120 then
@@ -494,7 +498,15 @@ begin
      or coalesce(trim(v_addr->>'state'),'') = '' or coalesce(trim(v_addr->>'zip'),'') = '' then
     raise exception 'INVALID_ADDRESS' using errcode = '22023';
   end if;
-  if jsonb_typeof(p_order->'items') <> 'array'
+  -- We ship within the United States only (states, DC, territories and military addresses).
+  if upper(coalesce(nullif(trim(v_addr->>'country'),''), 'US')) <> 'US' then
+    raise exception 'SHIPPING_COUNTRY' using errcode = '22023';
+  end if;
+  if v_state <> all (array['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','PR','GU','VI','AS','MP','AA','AE','AP'])
+     or trim(v_addr->>'zip') !~ '^\d{5}(-\d{4})?$' then
+    raise exception 'INVALID_ADDRESS' using errcode = '22023';
+  end if;
+  if coalesce(jsonb_typeof(p_order->'items'), '') <> 'array'
      or jsonb_array_length(p_order->'items') = 0
      or jsonb_array_length(p_order->'items') > 50 then
     raise exception 'EMPTY_CART' using errcode = '22023';
@@ -573,18 +585,15 @@ begin
         (select i from jsonb_array_elements_text(coalesce(v_prod->'images','[]'::jsonb)) i where i <> '' limit 1));
     end if;
 
-    if v_price is null or v_price < 0 then
+    v_unit := case when v_sale is not null and v_sale > 0 and v_sale < v_price then v_sale else v_price end;
+    -- A missing or $0 price is a catalog mistake, never a free item.
+    if v_price is null or v_price <= 0 or v_unit is null or v_unit <= 0 then
       raise exception 'PRICE_MISSING' using errcode = '22023';
     end if;
-    v_unit := case when v_sale is not null and v_sale >= 0 and v_sale < v_price then v_sale else v_price end;
 
-    -- Stock: a tracked SKU uses the inventory count; otherwise the inStock flag.
+    -- Stock: a tracked SKU is checked after the loop (with a lock); otherwise the inStock flag.
     v_need := jsonb_set(v_need, array[v_sku], to_jsonb(coalesce(public._num(v_need->>v_sku), 0) + v_qty));
-    if v_inv ? v_sku then
-      if coalesce(public._num(v_inv->>v_sku), 0) < public._num(v_need->>v_sku) then
-        raise exception 'OUT_OF_STOCK:%', v_prod->>'name' using errcode = '22023';
-      end if;
-    elsif not v_instock then
+    if not (v_inv ? v_sku) and not v_instock then
       raise exception 'OUT_OF_STOCK:%', v_prod->>'name' using errcode = '22023';
     end if;
 
@@ -595,6 +604,23 @@ begin
       'line_total', round(v_unit * v_qty, 2), 'image', left(v_image, 1000));
 
     v_prod := null; v_color := null; v_size := null;
+  end loop;
+
+  -- Tracked stock: the count in the admin minus what open orders already hold (paid, card-approved, cash on
+  -- delivery, or unpaid for under 35 minutes), until the admin deducts it. One lock per SKU, taken in a fixed
+  -- order, so two shoppers can't both buy the last one.
+  for k in select key from jsonb_each(v_need) order by key loop
+    if v_inv ? k then
+      perform pg_advisory_xact_lock(hashtext('stock:' || k));
+      select coalesce(sum(i.qty), 0) into v_held
+        from public.order_items i join public.orders o on o.id = i.order_id
+       where i.sku = k and o.status not in ('cancelled','refunded') and not o.stock_deducted
+         and (o.payment_status in ('authorized','paid','cod')
+              or (o.payment_status = 'unpaid' and o.created_at > now() - interval '35 minutes'));
+      if coalesce(public._num(v_inv->>k), 0) - v_held < public._num(v_need->>k) then
+        raise exception 'OUT_OF_STOCK:%', (select l->>'name' from jsonb_array_elements(v_lines) l where l->>'sku' = k limit 1) using errcode = '22023';
+      end if;
+    end if;
   end loop;
 
   -- Promo code
@@ -614,14 +640,18 @@ begin
     if coalesce(public._num(v_promo->>'minOrder'), 0) > v_sub then
       raise exception 'PROMO_MIN_ORDER' using errcode = '22023';
     end if;
+    -- Only real orders use up a code: paid / approved / cash on delivery / refunded, or unpaid for under 35 minutes.
     if coalesce(public._num(v_promo->>'usageLimit'), 0) > 0
-       and (select count(*) from public.promo_redemptions r where lower(r.promo_code) = lower(v_code))
+       and (select count(*) from public.promo_redemptions r join public.orders o on o.id = r.order_id
+             where lower(r.promo_code) = lower(v_code) and o.status <> 'cancelled'
+               and (o.payment_status in ('authorized','paid','cod','refunded') or o.created_at > now() - interval '35 minutes'))
            >= public._num(v_promo->>'usageLimit') then
       raise exception 'PROMO_USED_UP' using errcode = '22023';
     end if;
     if coalesce(v_promo->>'oncePerCustomer','false') = 'true'
-       and exists (select 1 from public.promo_redemptions r
-                    where lower(r.promo_code) = lower(v_code) and r.email = v_email) then
+       and exists (select 1 from public.promo_redemptions r join public.orders o on o.id = r.order_id
+                    where lower(r.promo_code) = lower(v_code) and r.email = v_email and o.status <> 'cancelled'
+                      and (o.payment_status in ('authorized','paid','cod','refunded') or o.created_at > now() - interval '35 minutes')) then
       raise exception 'PROMO_ALREADY_USED' using errcode = '22023';
     end if;
     v_discount := case when v_promo->>'type' = 'percent'
@@ -642,7 +672,11 @@ begin
   if v_method = 'cod' and v_total > coalesce(nullif(public._num(v_store->'payments'->>'codMax'), 0), 500) then
     raise exception 'COD_LIMIT' using errcode = '22023';
   end if;
-  v_number := 'HW-' || nextval('public.order_number_seq');
+  -- Random order numbers: they don't reveal how many orders the store takes, and can't be walked one by one.
+  loop
+    v_number := 'HW-' || (1000000 + floor(random() * 9000000))::bigint;
+    exit when not exists (select 1 from public.orders o where o.order_number = v_number);
+  end loop;
 
   insert into public.orders (order_number, email, name, phone, shipping_address,
                              subtotal, discount, shipping, total, promo_code, customer_note,
@@ -652,9 +686,9 @@ begin
             'line1',   left(trim(v_addr->>'line1'), 200),
             'line2',   left(coalesce(trim(v_addr->>'line2'),''), 200),
             'city',    left(trim(v_addr->>'city'), 100),
-            'state',   left(trim(v_addr->>'state'), 100),
+            'state',   v_state,
             'zip',     left(trim(v_addr->>'zip'), 20),
-            'country', left(coalesce(nullif(trim(v_addr->>'country'),''), 'US'), 60)),
+            'country', 'US'),
           round(v_sub,2), round(v_discount,2), round(v_ship,2), round(v_total,2),
           case when v_code is not null then upper(v_promo->>'code') end,
           left(nullif(trim(p_order->>'note'),''), 1000),
@@ -773,6 +807,63 @@ alter table public.customer_profiles enable row level security;      -- no polic
 
 
 -- ---------------------------------------------------------------------
+-- 10c. Rate limits and signed-out customer sessions (Edge Function only).
+-- ---------------------------------------------------------------------
+create table if not exists public.rate_hits (
+  bucket text not null check (length(bucket) <= 40),
+  key    text not null check (length(key) <= 64),   -- a keyed hash of the visitor's IP, never the IP
+  at     timestamptz not null default now()
+);
+create index if not exists rate_hits_idx on public.rate_hits (bucket, key, at desc);
+alter table public.rate_hits enable row level security;           -- no policies: service role only
+
+create table if not exists public.customer_revoked (
+  n   text primary key check (length(n) <= 64),    -- the session's random id
+  exp timestamptz not null
+);
+alter table public.customer_revoked enable row level security;    -- no policies: service role only
+
+alter table public.subscribers add column if not exists welcome_sent_at timestamptz;
+
+-- ---------------------------------------------------------------------
+-- 10d. What shoppers may read: the store without promo codes (except the one advertised to newsletter
+--      sign-ups) and without draft products. The site and the published copy (store.json) both use this.
+-- ---------------------------------------------------------------------
+create or replace function public.public_store()
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_data jsonb; v_at timestamptz; v_code text;
+begin
+  select s.data, s.updated_at into v_data, v_at from public.store s where s.id = 'main';
+  if v_data is null then return null; end if;
+  v_code := upper(coalesce(v_data->'newsletter'->>'couponCode', ''));
+  v_data := v_data
+    || jsonb_build_object('products', coalesce((select jsonb_agg(p) from jsonb_array_elements(coalesce(v_data->'products', '[]'::jsonb)) p
+                                                 where coalesce(p->>'hidden', 'false') <> 'true'), '[]'::jsonb))
+    || jsonb_build_object('promos', coalesce((select jsonb_agg(jsonb_build_object('id', p->'id', 'code', p->'code', 'type', p->'type', 'value', p->'value',
+                                                 'minOrder', p->'minOrder', 'active', p->'active', 'startsAt', p->'startsAt', 'endsAt', p->'endsAt'))
+                                               from jsonb_array_elements(coalesce(v_data->'promos', '[]'::jsonb)) p
+                                              where v_code <> '' and upper(p->>'code') = v_code and coalesce(p->>'active', 'false') = 'true'), '[]'::jsonb));
+  return jsonb_build_object('data', v_data, 'updated_at', v_at);
+end $$;
+
+create or replace function public.public_store_version()
+returns timestamptz language sql stable security definer set search_path = '' as $$
+  select s.updated_at from public.store s where s.id = 'main';
+$$;
+
+-- One code at a time for the cart (never a list). Usage limits and "once per customer" stay private.
+create or replace function public.check_promo(p_code text)
+returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object('code', p->'code', 'type', p->'type', 'value', p->'value', 'minOrder', p->'minOrder',
+                            'active', true, 'startsAt', p->'startsAt', 'endsAt', p->'endsAt')
+    from public.store s, jsonb_array_elements(coalesce(s.data->'promos', '[]'::jsonb)) p
+   where s.id = 'main' and length(trim(coalesce(p_code, ''))) between 1 and 40
+     and lower(p->>'code') = lower(trim(p_code)) and coalesce(p->>'active', 'false') = 'true'
+   limit 1;
+$$;
+
+
+-- ---------------------------------------------------------------------
 -- 11. Privileges — least privilege for the public API roles.
 --     RLS above decides WHICH rows; these grants decide WHICH actions.
 -- ---------------------------------------------------------------------
@@ -785,17 +876,13 @@ revoke all on public.admins, public.store, public.store_private, public.subscrib
   from anon, authenticated;
 revoke all on sequence public.order_number_seq from anon, authenticated;
 
-grant select on public.store to anon, authenticated;              -- writes go through save_store()
+grant select on public.store to authenticated;                    -- admins only (policy); writes go through save_store(); shoppers use public_store()
 grant select on public.store_private to authenticated;            -- writes go through save_private()
 grant select on public.admins to authenticated;
 
-grant insert (email, source) on public.subscribers to anon, authenticated;
+-- Sign-ups, stock alerts and messages arrive through the Edge Function (rate-limited per visitor), not directly.
 grant select, delete on public.subscribers to authenticated;
-
-grant insert (email, product_id, product_name, sku) on public.stock_alerts to anon, authenticated;
 grant select, update, delete on public.stock_alerts to authenticated;
-
-grant insert (name, email, phone, subject, message) on public.contact_messages to anon, authenticated;
 grant select, update, delete on public.contact_messages to authenticated;
 
 grant select, update on public.orders to authenticated;
@@ -808,7 +895,10 @@ grant all on public.orders, public.order_items, public.promo_redemptions to serv
 grant usage, select on sequence public.order_number_seq to service_role;
 grant select, insert, update, delete on public.customer_login_codes to service_role;
 grant select, insert, update, delete on public.customer_profiles to service_role;
-grant insert, delete on public.subscribers to service_role;       -- Your account › Notifications: email updates on/off
+grant insert, update, delete on public.subscribers to service_role; -- Your account › Notifications; welcome email sent once
+grant insert (name, email, phone, subject, message) on public.contact_messages to service_role;
+grant select, insert, delete on public.rate_hits, public.customer_revoked to service_role;
+revoke all on public.rate_hits, public.customer_revoked from anon, authenticated;
 
 -- Functions: lock everything, then open only what each role needs.
 revoke all on function public._num(text)                         from public, anon, authenticated;
@@ -825,16 +915,27 @@ revoke all on function public.track_order(text, text)            from public;
 revoke all on function public.subscribe(text, text)              from public;
 revoke all on function public.request_stock_alert(text, text, text, text) from public;
 revoke all on function public.request_cancel(text, text, text)            from public;
+revoke all on function public.public_store()                      from public;
+revoke all on function public.public_store_version()              from public;
+revoke all on function public.check_promo(text)                   from public;
+-- Earlier versions let visitors call these directly; now only the Edge Function may.
+revoke execute on function public.track_order(text, text)          from anon, authenticated;
+revoke execute on function public.subscribe(text, text)            from anon, authenticated;
+revoke execute on function public.request_stock_alert(text, text, text, text) from anon, authenticated;
+revoke execute on function public.request_cancel(text, text, text)           from anon, authenticated;
 
 grant execute on function public.is_admin()                       to anon, authenticated;
 grant execute on function public.save_store(jsonb, timestamptz)   to authenticated;
 grant execute on function public.save_private(jsonb, timestamptz) to authenticated;
 grant execute on function public.place_order(jsonb)               to anon, authenticated;
-grant execute on function public.track_order(text, text)          to anon, authenticated;
-grant execute on function public.subscribe(text, text)            to anon, authenticated;
-grant execute on function public.request_stock_alert(text, text, text, text) to anon, authenticated;
-grant execute on function public.request_cancel(text, text, text)           to anon, authenticated;
+grant execute on function public.public_store()                   to anon, authenticated, service_role;
+grant execute on function public.public_store_version()           to anon, authenticated, service_role;
+grant execute on function public.check_promo(text)                to anon, authenticated, service_role;
 grant execute on function public.place_order(jsonb)               to service_role;
+grant execute on function public.track_order(text, text)          to service_role;
+grant execute on function public.subscribe(text, text)            to service_role;
+grant execute on function public.request_stock_alert(text, text, text, text) to service_role;
+grant execute on function public.request_cancel(text, text, text)           to service_role;
 
 
 -- ---------------------------------------------------------------------

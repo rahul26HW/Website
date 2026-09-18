@@ -19,7 +19,8 @@ function supabaseUrl() {
   return u;
 }
 
-function policy(html) {
+function policy(html, opts) {
+  const snip = !!(opts && opts.snipcart);
   const hashes = [];
   html.replace(/<script>([\s\S]*?)<\/script>/g, (all, body) => {
     hashes.push("'sha256-" + crypto.createHash('sha256').update(body, 'utf8').digest('base64') + "'");
@@ -28,16 +29,16 @@ function policy(html) {
   const sb = supabaseUrl();
   return [
     "default-src 'self'",
-    // Snipcart (only loads when switched on in the admin).
-    "script-src 'self' " + hashes.join(' ') + ' https://cdn.snipcart.com',
-    "style-src 'self' 'unsafe-inline' https://cdn.snipcart.com",
-    "font-src 'self' https://cdn.snipcart.com",
+    // Snipcart hosts are listed only while Snipcart is switched on in the admin (node tools/csp.js --snipcart).
+    "script-src 'self' " + hashes.join(' ') + (snip ? ' https://cdn.snipcart.com' : ''),
+    "style-src 'self' 'unsafe-inline'" + (snip ? ' https://cdn.snipcart.com' : ''),
+    "font-src 'self'" + (snip ? ' https://cdn.snipcart.com' : ''),
     // Product photos live in Supabase Storage; admins may also paste image links from other https sites.
     "img-src 'self' data: blob: https:",
     "media-src 'self' https:",
-    // Database, the Cloudflare worker (Stripe, ShipStation, AI) and Snipcart. A worker on a custom domain must be added here.
-    "connect-src 'self' " + sb + ' https://*.workers.dev https://app.snipcart.com https://payment.snipcart.com data: blob:',
-    'frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://*.snipcart.com',
+    // Database and the Edge Function (Stripe, ShipStation, email, AI) both live on the Supabase project.
+    "connect-src 'self' " + sb + (snip ? ' https://app.snipcart.com https://payment.snipcart.com' : '') + ' data: blob:',
+    'frame-src https://www.youtube-nocookie.com https://player.vimeo.com' + (snip ? ' https://*.snipcart.com' : ''),
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -45,11 +46,11 @@ function policy(html) {
   ].join('; ');
 }
 
-function write(file) {
+function write(file, opts) {
   const full = path.join(ROOT, file);
   let html = fs.readFileSync(full, 'utf8');
   html = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, '').replace(/<meta name="referrer"[^>]*>\n?/, '');
-  const tags = '<meta http-equiv="Content-Security-Policy" content="' + policy(html) + '">\n' +
+  const tags = '<meta http-equiv="Content-Security-Policy" content="' + policy(html, opts) + '">\n' +
     '<meta name="referrer" content="strict-origin-when-cross-origin">\n';
   // Must come before the first inline script.
   html = html.replace(/(<meta charset="utf-8">\n)/, '$1' + tags);
@@ -58,7 +59,8 @@ function write(file) {
 }
 
 if (require.main === module) {
-  ['index.html', '404.html'].forEach(write);
+  const opts = { snipcart: process.argv.includes('--snipcart') };
+  ['index.html', '404.html'].forEach(function (f) { write(f, opts); });
   console.log('Content Security Policy updated in index.html and 404.html.');
 }
 module.exports = { write };
