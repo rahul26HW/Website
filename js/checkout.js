@@ -79,7 +79,7 @@
         '<form class="form" data-form="checkout" novalidate aria-labelledby="coHead">' +
         '<nav class="crumb" aria-label="Breadcrumb"><a href="' + HW.link('/') + '">Home</a> &nbsp;/&nbsp; <span aria-current="page">Checkout</span></nav>' +
         '<h1 id="coHead">Checkout</h1>' +
-        '<div class="notice" role="note"><b>Secure card payment.</b> After you enter your details you’ll pay on Stripe’s secure page. Your card number goes only to Stripe — we never see or store it.</div>' +
+        '<div class="notice" role="note"><b>Secure card payment.</b> After you enter your details you’ll pay on Stripe’s secure page (card, Apple Pay or Google Pay). Your card is approved at checkout and only charged when we start preparing your order. Your card number goes only to Stripe — we never see or store it.</div>' +
         '<h2>Contact</h2>' +
         field('email', 'Email', 'email', { ac: 'email', max: 254 }) +
         '<div class="row2">' + field('name', 'Full name', 'text', { ac: 'name', max: 120 }) + field('phone', 'Phone', 'tel', { ac: 'tel', optional: true, max: 40 }) + '</div>' +
@@ -251,21 +251,21 @@
     if (o.cancelled) {
       return {
         html: '<div class="wrap"><div class="confirm"><div class="weave-rule">' + HW.SVG.weave + '</div>' +
-          '<h1>Order cancelled</h1><p class="muted" style="margin:0">Order ' + esc(o.order_number) + ' has been cancelled and your payment refunded in full. Refunds usually reach your bank in 5–10 business days.</p>' +
+          '<h1>Order cancelled</h1><p class="muted" style="margin:0">Order ' + esc(o.order_number) + ' has been cancelled and you haven’t been charged. The temporary hold on your card is released; depending on your bank it disappears within minutes to a few days.</p>' +
           '<p><a class="btn" href="' + HW.link('/') + '">Continue shopping</a></p></div></div>',
         seo: { title: 'Order cancelled', noindex: true },
         after: function () { var h = document.querySelector('.confirm h1'); if (h) { h.tabIndex = -1; h.focus(); } }
       };
     }
     var head = o.paid
-      ? '<h1>Thank you' + first + '!</h1><p class="muted" style="margin:0">Your payment went through and your order is confirmed.</p>'
+      ? '<h1>Thank you' + first + '!</h1><p class="muted" style="margin:0">Your order is placed and your card is approved. You’re charged when we start preparing it.</p>'
       : unpaid
         ? '<h1>Your order isn’t paid yet</h1><p class="muted" style="margin:0">' + (payment === 'cancelled' ? 'Payment was cancelled, so you haven’t been charged.' : 'We saved your order, but payment wasn’t completed.') + '</p>'
         : '<h1>Order ' + esc(o.order_number) + '</h1><p class="muted" style="margin:0">This order hasn’t been paid.</p>';
     var left = o.paid && !o.cancelled ? HW.cancelLeft({ status: 'new', paid_at: o.paid_at || new Date().toISOString() }) : 0;
     var cancelBox = left > 0
       ? '<div class="notice" role="note" style="text-align:left"><b>Changed your mind?</b> You can cancel this order yourself for the next ' +
-        '<span id="cancelLeft">' + Math.ceil(left / 60000) + '</span> minutes and get a full refund. After that we start packing it, so please ' +
+        '<span id="cancelLeft">' + Math.ceil(left / 60000) + '</span> minutes and you won’t be charged. After that we start preparing it, so please ' +
         '<a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/track-your-order') + '">ask us to cancel</a> instead.' +
         '<p class="form-msg err" id="cancelMsg" role="alert" hidden></p>' +
         '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="cancel-order" data-n="' + esc(o.order_number) + '" data-e="' + esc(o.email) + '">Cancel this order</button></div></div>'

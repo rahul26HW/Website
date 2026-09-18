@@ -225,7 +225,7 @@ Supabase provides the database address and keys to the function automatically.
 2. **Developers** → **API keys** → **Secret key** → **Reveal**. You'll use it (`sk_test_…`) in Step 3.
 3. **Developers** → **Webhooks** → **Add endpoint**:
    - **Endpoint URL:** `https://soydgxrrwozmiqzutypr.supabase.co/functions/v1/hw/stripe`
-   - **Events:** `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`, `charge.refunded`
+   - **Events:** `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`, `charge.refunded`, `payment_intent.canceled`
    - **Add endpoint** → **Signing secret** → **Reveal** (`whsec_…`).
 4. Optional: **Settings** → **Customer emails** → turn on **Successful payments**, so Stripe emails receipts.
 
@@ -265,8 +265,9 @@ Customers get branded emails for: order received (with the 30-minute cancel link
 Links in emails carry only the order number, never the customer's email address.
 
 ### Cancellation window and accepting orders
-- After payment an order waits as **New**. For the first **30 minutes** (Admin › Storefront › *Free cancellation window*) the customer can cancel it themselves on the order page or on **Track your order**. The payment is refunded automatically.
-- You can **Accept order & send to ShipStation** at any time (Admin › Orders › the order).
+- After payment an order waits as **New**. For the first **30 minutes** (Admin › Storefront › *Free cancellation window*) the customer can cancel it themselves on the order page or on **Track your order**.
+- **Card now, charge later:** checkout only *approves* the card (card, Apple Pay, Google Pay). The card is charged when the order is accepted. A cancel inside the window just releases the hold, so it costs you no Stripe fee. If the charge fails when accepting, the order is marked **Charge failed** and is not sent to ShipStation.
+- You can **Accept, charge card & send to ShipStation** at any time (Admin › Orders › the order).
 - Otherwise a scheduled job accepts it automatically when the window ends and sends it to ShipStation. Set the job up once: Supabase → **SQL Editor** → paste `supabase/release-orders-cron.sql` → **Run**. It runs every 5 minutes.
 - After the window the customer can only **ask** to cancel. Requests appear at the top of Admin › Orders. If it hasn't shipped, refund it in Stripe and set the status to **Cancelled** (and **Cancel in ShipStation**).
 

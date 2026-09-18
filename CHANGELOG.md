@@ -11,6 +11,14 @@
 
 ## After launch
 
+### Card approved at checkout, charged on accept
+- Stripe Checkout takes cards only (Apple Pay and Google Pay show up automatically as card wallets). No pay-later or bank methods.
+- The card is authorized at checkout and captured when the order is accepted (by the admin button or the scheduled job after the 30-minute window). Cancelling inside the window releases the hold: no charge and no Stripe fee.
+- New payment states: **Card held** (authorized), **Hold released** (voided), **Charge failed**. A failed charge is flagged on the order and never goes to ShipStation.
+- Stripe webhook also listens for `payment_intent.canceled` (hold expired or released in Stripe).
+- Storefront, emails, order page and tracking page say "you won't be charged" instead of "refunded".
+- 91 server tests (12 new), passing directly and through the Edge wrapper; browser flows updated.
+
 ### Customer emails
 - Branded order emails from **Home Weavers <orders@homeweavers.net>** through Resend (secret `RESEND_API_KEY`), replies to the store contact email: received (with the self-cancel window), accepted/preparing, shipped (carrier tracking link), cancelled (with refund amount), and refunds made in Stripe.
 - Sent once per step: only when the order actually changes (no repeats on duplicate Stripe or ShipStation notices; a customer cancel doesn't also trigger a Stripe-refund email). A failed email is logged and never blocks the order.

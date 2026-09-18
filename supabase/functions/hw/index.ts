@@ -401,29 +401,50 @@ async function handleOrderCancel(request, env, cors) {
     return json({ error: "This order can no longer be cancelled here.", tooLate: true, status: order.status }, 409, cors);
   }
 
-  // Money back first: if the refund fails the order stays as it was.
-  let refunded = false;
-  if (order.payment_status === "paid" && /^pi_/.test(order.payment_ref || "")) {
-    if (!env.STRIPE_SECRET_KEY) return json({ error: "Refunds aren’t set up. Please contact us." }, 501, cors);
-    await stripe(env, "refunds", { payment_intent: order.payment_ref, reason: "requested_by_customer" }, "refund-" + order.id);
-    refunded = true;
+  // Money first: if Stripe fails, the order stays as it was.
+  let refunded = false, voided = false;
+  if (/^pi_/.test(order.payment_ref || "") && (order.payment_status === "authorized" || order.payment_status === "paid")) {
+    if (!env.STRIPE_SECRET_KEY) return json({ error: "Card payments aren’t set up. Please contact us." }, 501, cors);
+    if (order.payment_status === "authorized") {
+      // Nothing was charged yet: releasing the hold costs no Stripe fee.
+      await stripe(env, "payment_intents/" + encodeURIComponent(order.payment_ref) + "/cancel", { cancellation_reason: "requested_by_customer" }, "void-" + order.id);
+      voided = true;
+    } else {
+      await stripe(env, "refunds", { payment_intent: order.payment_ref, reason: "requested_by_customer" }, "refund-" + order.id);
+      refunded = true;
+    }
   }
   const rows = await patchOrder(env, "id=eq." + order.id + "&status=eq.new", {
     status: "cancelled",
     cancelled_at: new Date().toISOString(),
-    payment_status: refunded ? "refunded" : order.payment_status,
+    payment_status: voided ? "voided" : refunded ? "refunded" : order.payment_status,
     cancel_reason: String(body.reason || "").slice(0, 500) || null,
   });
   if (!Array.isArray(rows) || !rows.length) return json({ error: "This order can no longer be cancelled here.", tooLate: true }, 409, cors);
   await db(env, "promo_redemptions?order_id=eq." + order.id, { method: "DELETE" }).catch(() => {});
   if (order.shipstation_order_id && features(env).shipstation) await pushToShipstation(env, { ...order, status: "cancelled" }).catch(() => {});
-  await sendOrderEmail(env, "cancelled", Object.assign({}, order, rows[0]), { refunded });
-  return json({ ok: true, refunded }, 200, cors);
+  await sendOrderEmail(env, "cancelled", Object.assign({}, order, rows[0]), { refunded, voided });
+  return json({ ok: true, refunded, voided }, 200, cors);
 }
 
-/* Moves one paid order to "accepted" and sends it to ShipStation. */
+/* Charges a held card (if any), moves the order to "accepted" and sends it to ShipStation. */
 async function acceptOrder(env, order) {
-  const rows = await patchOrder(env, "id=eq." + order.id + "&status=eq.new", { status: "accepted", accepted_at: new Date().toISOString() });
+  const patch = { status: "accepted", accepted_at: new Date().toISOString() };
+  if (order.payment_status === "authorized") {
+    try {
+      const pi = await stripe(env, "payment_intents/" + encodeURIComponent(order.payment_ref) + "/capture", {}, "capture-" + order.id);
+      if (pi.status !== "succeeded") throw new Error("payment is " + pi.status);
+      patch.payment_status = "paid";
+    } catch (e) {
+      // The hold couldn't be charged (expired, card closed…): keep the order out of ShipStation.
+      await patchOrder(env, "id=eq." + order.id + "&status=eq.new", {
+        payment_status: "failed",
+        admin_note: (order.admin_note ? order.admin_note + "\n" : "") + "⚠ Charging the card failed: " + String(e.message).slice(0, 200),
+      }).catch(() => {});
+      return { ok: false, order_number: order.order_number, error: "Charging the card failed: " + e.message };
+    }
+  }
+  const rows = await patchOrder(env, "id=eq." + order.id + "&status=eq.new", patch);
   if (!Array.isArray(rows) || !rows.length) return { ok: false, skipped: order.order_number };
   const fresh = Object.assign({}, order, rows[0]);
   let shipstation = null;
@@ -443,7 +464,9 @@ async function handleOrderAccept(request, env, cors) {
   const order = await loadOrder(env, "id=eq." + body.order_id);
   if (!order) return json({ error: "Order not found" }, 404, cors);
   if (order.status !== "new") return json({ error: "This order was already accepted." }, 409, cors);
-  return json(await acceptOrder(env, order), 200, cors);
+  if (!/^(authorized|paid)$/.test(order.payment_status)) return json({ error: "This order isn’t paid, so it can’t be accepted." }, 409, cors);
+  const r = await acceptOrder(env, order);
+  return json(r, r.error ? 402 : 200, cors);
 }
 
 /* POST /orders/release — the scheduled job (and admins). Accepts every paid order whose window has passed. */
@@ -456,7 +479,7 @@ async function handleOrderRelease(request, env, cors) {
   if (!trusted && auth) trusted = !(await requireAdmin(request, env));
   const minutes = await cancelMinutes(env);
   const cutoff = new Date(Date.now() - minutes * 60000).toISOString();
-  const due = await db(env, "orders?status=eq.new&payment_status=eq.paid&paid_at=lt." + encodeURIComponent(cutoff) + "&select=*,order_items(*)&order=paid_at.asc&limit=50");
+  const due = await db(env, "orders?status=eq.new&payment_status=in.(authorized,paid)&paid_at=lt." + encodeURIComponent(cutoff) + "&select=*,order_items(*)&order=paid_at.asc&limit=50");
   const results = [];
   for (const order of Array.isArray(due) ? due : []) results.push(await acceptOrder(env, order));
   const accepted = results.filter((r) => r.ok).length;
@@ -481,6 +504,13 @@ function formEncode(obj, prefix, out = []) {
   return out.join("&");
 }
 
+async function stripeGet(env, path) {
+  const res = await fetch("https://api.stripe.com/v1/" + path, { headers: { Authorization: "Bearer " + env.STRIPE_SECRET_KEY } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data.error && data.error.message) || "Stripe error " + res.status);
+  return data;
+}
+
 async function stripe(env, path, params, idempotencyKey) {
   const headers = { Authorization: "Bearer " + env.STRIPE_SECRET_KEY, "Content-Type": "application/x-www-form-urlencoded" };
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
@@ -503,7 +533,7 @@ async function handleCheckoutSession(request, env, cors) {
 
   const order = await loadOrder(env, "order_number=eq." + encodeURIComponent(number));
   if (!order || !safeEqual(order.pay_token, token)) return json({ error: "Order not found" }, 404, cors);
-  if (order.payment_status === "paid") return json({ error: "This order is already paid.", paid: true }, 409, cors);
+  if (order.payment_status === "paid" || order.payment_status === "authorized") return json({ error: "This order is already paid.", paid: true }, 409, cors);
   if (order.status !== "new" || order.payment_status !== "unpaid") return json({ error: "This order can’t be paid online. Please contact us." }, 409, cors);
   if (Date.now() - new Date(order.created_at).getTime() > 7 * 24 * 3600 * 1000) return json({ error: "This order is too old to pay online. Please place it again." }, 409, cors);
 
@@ -517,13 +547,17 @@ async function handleCheckoutSession(request, env, cors) {
 
   const params = {
     mode: "payment",
+    // Cards only; Apple Pay and Google Pay appear on supported devices as card wallets.
+    payment_method_types: ["card"],
     customer_email: order.email,
     client_reference_id: order.order_number,
     success_url: orderPage + "?payment=success",
     cancel_url: orderPage + "?payment=cancelled",
     expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
     metadata: { order_id: order.id, order_number: order.order_number },
-    payment_intent_data: { description: "Order " + order.order_number, metadata: { order_id: order.id, order_number: order.order_number } },
+    // Authorize now, charge when the order is accepted: a cancellation inside the free window
+    // just releases the hold, so neither the customer nor the store pays anything.
+    payment_intent_data: { capture_method: "manual", description: "Order " + order.order_number, metadata: { order_id: order.id, order_number: order.order_number } },
     line_items: items.map((i) => ({
       quantity: i.qty,
       price_data: {
@@ -583,20 +617,25 @@ async function handleStripeWebhook(request, env) {
   const orderId = obj.metadata && obj.metadata.order_id;
 
   if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
-    if (obj.payment_status !== "paid") return json({ ok: true, waiting: obj.payment_status });
     if (!UUID.test(orderId || "")) return json({ ok: true, ignored: "no order" });
+    // With authorize-only payments the session says "unpaid" while the card is held, so ask Stripe.
+    const pi = obj.payment_intent ? await stripeGet(env, "payment_intents/" + encodeURIComponent(obj.payment_intent)) : null;
+    const held = !!pi && pi.status === "requires_capture";
+    const captured = pi ? pi.status === "succeeded" : obj.payment_status === "paid";
+    if (!held && !captured) return json({ ok: true, waiting: (pi && pi.status) || obj.payment_status });
     const order = await loadOrder(env, "id=eq." + orderId);
     if (!order) return json({ ok: true, ignored: "order missing" });
-    if (order.payment_status !== "paid") {
-      const mismatch = obj.amount_total !== cents(order.total);
-      const rows = await patchOrder(env, "id=eq." + orderId + "&payment_status=neq.paid", {
-        payment_status: "paid",
+    if (order.payment_status === "unpaid") {
+      const amount = held ? pi.amount_capturable : obj.amount_total;
+      const mismatch = amount !== cents(order.total);
+      const rows = await patchOrder(env, "id=eq." + orderId + "&payment_status=eq.unpaid", {
+        payment_status: held ? "authorized" : "paid",
         paid_at: new Date().toISOString(),
         payment_ref: obj.payment_intent || obj.id,
         payment_livemode: !!obj.livemode,
         status: order.status === "cancelled" ? "new" : order.status,
         admin_note: mismatch
-          ? (order.admin_note ? order.admin_note + "\n" : "") + "⚠ Stripe charged $" + (obj.amount_total / 100).toFixed(2) + " but the order total is $" + Number(order.total).toFixed(2) + ". Check before shipping."
+          ? (order.admin_note ? order.admin_note + "\n" : "") + "⚠ Stripe " + (held ? "authorized" : "charged") + " $" + (amount / 100).toFixed(2) + " but the order total is $" + Number(order.total).toFixed(2) + ". Check before shipping."
           : order.admin_note,
       });
       if (Array.isArray(rows) && rows[0]) {
@@ -616,6 +655,12 @@ async function handleStripeWebhook(request, env) {
     const cancelled = Array.isArray(rows) && rows.length > 0;
     if (cancelled) await db(env, "promo_redemptions?order_id=eq." + orderId, { method: "DELETE" });
     return json({ ok: true, cancelled });
+  }
+
+  if (event.type === "payment_intent.canceled" && obj.id) {
+    // The card hold was released outside our cancel flow (for example it expired after 7 days).
+    const rows = await patchOrder(env, "payment_ref=eq." + encodeURIComponent(obj.id) + "&payment_status=eq.authorized", { payment_status: "voided" });
+    return json({ ok: true, voided: Array.isArray(rows) ? rows.length : 0 });
   }
 
   if (event.type === "charge.refunded" && obj.payment_intent && obj.refunded) {
@@ -877,10 +922,12 @@ function buildOrderEmail(kind, order, data, extra = {}) {
   if (kind === "received") {
     subject = `We’ve got your order ${order.order_number}`;
     title = "Thank you for your order";
-    body = hi + p(`Your payment went through and we’ve received order <b>${num}</b>.`) +
+    body = hi + (order.payment_status === "authorized"
+        ? p(`We’ve received order <b>${num}</b>. Your card is approved for <b>${money(order.total)}</b>; you’ll only be charged when we start preparing your order.`)
+        : p(`Your payment went through and we’ve received order <b>${num}</b>.`)) +
       (windowMin > 0 ? p(`Changed your mind? You can cancel it yourself for the next <b>${windowMin} minutes</b> and get a full refund. After that we start preparing it.`) : "") +
       itemsTable(order) + button(trackUrl, windowMin > 0 ? "View or cancel your order" : "View your order");
-    text = `Thank you for your order ${order.order_number} (${money(order.total)}).` + (windowMin > 0 ? ` You can cancel within ${windowMin} minutes: ${trackUrl}` : ` Track it: ${trackUrl}`);
+    text = `Thank you for your order ${order.order_number} (${money(order.total)}).` + (order.payment_status === "authorized" ? " Your card is approved; you'll be charged when we start preparing it." : "") + (windowMin > 0 ? ` You can cancel within ${windowMin} minutes: ${trackUrl}` : ` Track it: ${trackUrl}`);
   } else if (kind === "accepted") {
     subject = `Your order ${order.order_number} is being prepared`;
     title = "We’re preparing your order";
@@ -899,9 +946,10 @@ function buildOrderEmail(kind, order, data, extra = {}) {
     subject = `Order ${order.order_number} is cancelled`;
     title = "Your order is cancelled";
     body = hi + p(`We’ve cancelled order <b>${num}</b> as you asked.`) +
+      (extra.voided ? p(`You haven’t been charged. The temporary hold of <b>${money(order.total)}</b> on your card has been released; depending on your bank it disappears within minutes to a few days.`) : "") +
       (extra.refunded ? p(`Your payment of <b>${money(order.total)}</b> has been refunded to your original payment method. It usually shows up in 5–10 business days.`) : "") +
       p(`We hope to see you again soon.`);
-    text = `Order ${order.order_number} is cancelled.` + (extra.refunded ? ` ${money(order.total)} has been refunded; allow 5–10 business days.` : "");
+    text = `Order ${order.order_number} is cancelled.` + (extra.voided ? " You haven't been charged; the card hold has been released." : "") + (extra.refunded ? ` ${money(order.total)} has been refunded; allow 5–10 business days.` : "");
   } else if (kind === "refunded") {
     subject = `Refund for order ${order.order_number}`;
     title = "Your refund is on its way";

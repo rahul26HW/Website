@@ -343,8 +343,7 @@ create table if not exists public.orders (
   promo_code       text,
   status           text not null default 'new'
                    check (status in ('new','packed','shipped','delivered','refunded')),
-  payment_status   text not null default 'unpaid'
-                   check (payment_status in ('unpaid','paid','refunded')),
+  payment_status   text not null default 'unpaid',
   source           text not null default 'checkout' check (source in ('checkout','snipcart')),
   external_id      text unique,
   tracking_number  text,
@@ -372,6 +371,10 @@ alter table public.orders add column if not exists accepted_at           timesta
 alter table public.orders add column if not exists cancelled_at          timestamptz;
 alter table public.orders add column if not exists cancel_requested_at   timestamptz; -- customer asked to cancel after the window
 alter table public.orders add column if not exists cancel_reason         text;
+-- authorized = card held, charged when the order is accepted; voided = hold released (never charged); failed = charging failed.
+alter table public.orders drop constraint if exists orders_payment_status_check;
+alter table public.orders add constraint orders_payment_status_check
+  check (payment_status in ('unpaid','authorized','paid','refunded','voided','failed'));
 alter table public.orders drop constraint if exists orders_status_check;
 alter table public.orders add constraint orders_status_check
   check (status in ('new','accepted','packed','shipped','delivered','refunded','cancelled'));

@@ -135,9 +135,9 @@
     var done = /^(shipped|delivered|cancelled|refunded)$/.test(o.status);
     if (done) return '';
     var left = HW.cancelLeft({ status: o.status, paid_at: o.paid_at, created_at: o.created_at });
-    if (o.status === 'new' && o.payment_status === 'paid' && left > 0) {
+    if (o.status === 'new' && /^(paid|authorized)$/.test(o.payment_status) && left > 0) {
       return '<div class="notice" role="note" style="text-align:left;margin:14px 0 0"><b>You can still cancel.</b> Cancel yourself within the next ' +
-        '<span id="cancelLeft">' + Math.ceil(left / 60000) + '</span> minutes for a full refund.' +
+        '<span id="cancelLeft">' + Math.ceil(left / 60000) + '</span> minutes' + (o.payment_status === 'authorized' ? ' — you won’t be charged.' : ' for a full refund.') +
         '<p class="form-msg err" id="cancelMsg" role="alert" hidden></p>' +
         '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="cancel-order" data-n="' + esc(number) + '" data-e="' + esc(email) + '">Cancel this order</button></div></div>';
     }
@@ -153,17 +153,17 @@
   }
 
   HW.orderCancel = {
-    /* Free cancellation inside the window: refunds and cancels straight away. */
+    /* Free cancellation inside the window: releases the card hold (or refunds) and cancels straight away. */
     run: async function (btn) {
       var number = btn.dataset.n, email = btn.dataset.e;
       var msg = document.getElementById('cancelMsg');
-      if (!confirm('Cancel order ' + number + '? Your payment is refunded in full.')) return;
+      if (!confirm('Cancel order ' + number + '? You won’t be charged (or you’re refunded in full).')) return;
       btn.disabled = true; var label = btn.textContent; btn.textContent = 'Cancelling…';
       try {
         var r = await HW.cancelOrder(number, email);
         var last = u.session.get('hw:lastOrder', null);
         if (last && last.order_number === number) { last.cancelled = true; last.paid = false; u.session.set('hw:lastOrder', last); }
-        u.toast(r.refunded ? 'Order cancelled — your refund is on its way' : 'Order cancelled');
+        u.toast(r.voided ? 'Order cancelled — you haven’t been charged' : r.refunded ? 'Order cancelled — your refund is on its way' : 'Order cancelled');
         HW.router.run({ scroll: false });
       } catch (e) {
         btn.disabled = false; btn.textContent = label;
