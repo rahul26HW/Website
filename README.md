@@ -255,6 +255,12 @@ Secrets take effect within a minute; you don't need to redeploy.
 4. Also test closing the Stripe page: the order page offers **Pay securely** again.
 5. To go live: switch Stripe out of test mode, add a **live** webhook endpoint (same URL and events), then replace the `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` secrets with the live values. **Check server** then shows "live mode".
 
+### Cancellation window and accepting orders
+- After payment an order waits as **New**. For the first **30 minutes** (Admin › Storefront › *Free cancellation window*) the customer can cancel it themselves on the order page or on **Track your order**. The payment is refunded automatically.
+- You can **Accept order & send to ShipStation** at any time (Admin › Orders › the order).
+- Otherwise a scheduled job accepts it automatically when the window ends and sends it to ShipStation. Set the job up once: Supabase → **SQL Editor** → paste `supabase/release-orders-cron.sql` → **Run**. It runs every 5 minutes.
+- After the window the customer can only **ask** to cancel. Requests appear at the top of Admin › Orders. If it hasn't shipped, refund it in Stripe and set the status to **Cancelled** (and **Cancel in ShipStation**).
+
 ### Updating the server code
 The function is built from `ai-proxy.worker.js`. After changing that file:
 1. Run `node tools/build-edge.js`. It writes `supabase/functions/hw/index.ts`.

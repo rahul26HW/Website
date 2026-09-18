@@ -729,6 +729,8 @@ grant select, update on public.orders to authenticated;
 grant select on public.order_items, public.promo_redemptions to authenticated;
 
 -- service_role (used only by the Cloudflare Worker: Snipcart, Stripe and ShipStation webhooks)
+-- The Edge Function reads the catalog (site address, cancellation window) and the subscriber list.
+grant select on public.store, public.subscribers to service_role;
 grant all on public.orders, public.order_items, public.promo_redemptions to service_role;
 grant usage, select on sequence public.order_number_seq to service_role;
 

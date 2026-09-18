@@ -18,6 +18,7 @@
 - **Admin:** *Accept order & send to ShipStation* on a paid order, showing when the window ends (`POST /orders/accept`).
 - **Automatic:** `supabase/release-orders-cron.sql` schedules a 5-minute job that calls `POST /orders/release`, which accepts every paid order whose window has passed and sends it to ShipStation. The job needs no key: the route only ever accepts orders that are already due, and returns a bare count to anonymous callers.
 - Order status gains **accepted**; orders store `accepted_at`, `cancelled_at`, `cancel_requested_at` and `cancel_reason`; `track_order` returns `paid_at` and `cancel_requested_at`.
+- Live check: an order past its window was accepted by `/orders/release` and reached ShipStation; an order inside its window was cancelled by the customer route; cancelling an accepted order was refused; a cancellation request was recorded and shown in the admin. The server role was missing read access to `store` (needed for the window setting and site address); granted in `supabase-setup.sql` and live.
 - Tests: 68 server checks and an 11-step browser test of the whole cancel journey (inside window, after window, shipped, already requested).
 
 ### Payments server moved to Supabase Edge Functions
