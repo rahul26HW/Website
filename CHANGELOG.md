@@ -11,6 +11,19 @@
 
 ## After launch
 
+### Sign-in page and Continue with Google
+- New sign-in page (`/account/login`, and any account page while signed out): split screen like TEENUD's — brand panel on the left, form on the right; the store header and footer are hidden there. "Continue with Google", then "or", then email (6-digit code). No password field, by design.
+- **Continue with Google** without any Google script on the site: the button goes to Google's own page (OpenID Connect) and comes back with a signed ID token; the server checks Google's RSA signature, the client ID, issuer, expiry, verified email and a one-time nonce, and the browser checks a one-time state. The token is removed from the address bar immediately. First Google sign-in fills an empty name. Only a public Client ID is needed (Admin › Storefront › Customer accounts); the button stays hidden until it's set.
+- After signing in you land where you were going (the account section you opened, or checkout).
+- 15 new server tests (forged signature, other app's token, wrong issuer, expired, replayed nonce, unverified email, alg none, unknown key, junk) and an 18-step browser test.
+
+### Cash on delivery (off by default) and payment switches
+- Admin › Storefront › **Payment methods**: on/off switches for **Card payments (Stripe)** and **Cash on delivery**, COD fee (≤ $50) and largest COD order.
+- Checkout shows the methods that are on; with both, a choice with the total and button updating live. COD orders skip Stripe, are confirmed at once with the same free cancellation window, then go to ShipStation as *Cash on delivery — collect $X* (fee as its own line). Emails say to have the cash ready; the account panel and admin show "Cash on delivery"; admin marks it Paid when collected.
+- Database: `orders.payment_method` (card | cod), `orders.cod_fee`, payment status `cod`; `place_order` accepts `paymentMethod`, enforces the switches, fee cap, order cap and 3 COD orders per email per day. New Edge route `/order/placed` sends the COD "we've got your order" email (needs the order's pay token).
+- 10 new server tests, 12 database tests, 14-step checkout browser test.
+
+
 ### Customer panel (Your account)
 - Sidebar with profile card (initials, name, email) and eight sections, in the store's own style: **Overview** (greeting, counts for orders / wishlist / addresses, recent orders with photos), **Orders** (full cards: items, address, progress, tracking, payment summary, Track / Return / Cancel; a page per order), **Wishlist**, **Addresses** (add, edit, remove, default — the default fills in checkout; one click saves the last order's address), **Payment methods** (explains cards are never stored; Stripe, Apple Pay, Google Pay), **Notifications** (order updates list with unread count and "Mark all read"; email offers on/off, order emails always on), **Returns** (pick order, items and reason; saved on the order, emails the customer and the store; shown in Admin › Orders), **Settings** (name, phone; no password — "Sign out on all devices"; delete account).
 - Header shows the customer's initials when signed in. Every section has its own address (`/account/orders`, `/account/returns`, …) that answers 200 and is never indexed.

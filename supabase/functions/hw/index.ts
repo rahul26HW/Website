@@ -20,11 +20,13 @@
      POST /shipstation/webhook  ShipStation SHIP_NOTIFY / FULFILLMENT_SHIPPED → saves carrier + tracking number
      POST /shipstation/sync     Look an order up in ShipStation and save its tracking  (admins only)
      POST /order/cancel         Customer cancels inside the free window: refund + cancel  (order number + email)
+     POST /order/placed         Cash-on-delivery order just placed → "we've got your order" email (order number + pay token)
      POST /orders/accept        Accept one order now and send it to ShipStation           (admins only)
      POST /orders/release       Accept orders whose cancellation window has passed        (scheduled job)
      POST /email/test           Send a sample order email to the signed-in admin           (admins only)
      POST /account/code         Customer sign-in / sign-up: email a 6-digit code
      POST /account/verify       Customer sign-in: check the code → signed 30-day session (no passwords)
+     POST /account/google       Customer sign-in with Google: checks Google's signed ID token → the same session
      POST /account/orders       Signed-in customer's orders, profile, saved addresses (Authorization: Bearer <session>)
      POST /account/profile      Signed-in customer: name, phone, saved addresses, email updates on/off
      POST /account/return       Signed-in customer: ask to return a shipped order
@@ -86,11 +88,13 @@ const handler = {
         case "/shipstation/webhook": return await handleShipstationWebhook(request, env);
         case "/shipstation/sync": return await handleShipstationSync(request, env, cors);
         case "/order/cancel": return await handleOrderCancel(request, env, cors);
+        case "/order/placed": return await handleOrderPlaced(request, env, cors);
         case "/orders/accept": return await handleOrderAccept(request, env, cors);
         case "/orders/release": return await handleOrderRelease(request, env, cors);
         case "/email/test": return await handleEmailTest(request, env, cors);
         case "/account/code": return await handleAccountCode(request, env, cors);
         case "/account/verify": return await handleAccountVerify(request, env, cors);
+        case "/account/google": return await handleAccountGoogle(request, env, cors);
         case "/account/orders": return await handleAccountOrders(request, env, cors);
         case "/account/profile": return await handleAccountProfile(request, env, cors);
         case "/account/return": return await handleAccountReturn(request, env, cors);
@@ -437,7 +441,7 @@ async function handleOrderCancel(request, env, cors) {
   if (!Array.isArray(rows) || !rows.length) return json({ error: "This order can no longer be cancelled here.", tooLate: true }, 409, cors);
   await db(env, "promo_redemptions?order_id=eq." + order.id, { method: "DELETE" }).catch(() => {});
   if (order.shipstation_order_id && features(env).shipstation) await pushToShipstation(env, { ...order, status: "cancelled" }).catch(() => {});
-  await sendOrderEmail(env, "cancelled", Object.assign({}, order, rows[0]), { refunded, voided });
+  await sendOrderEmail(env, "cancelled", Object.assign({}, order, rows[0]), { refunded, voided, cod: order.payment_method === "cod" });
   return json({ ok: true, refunded, voided }, 200, cors);
 }
 
@@ -478,7 +482,7 @@ async function handleOrderAccept(request, env, cors) {
   const order = await loadOrder(env, "id=eq." + body.order_id);
   if (!order) return json({ error: "Order not found" }, 404, cors);
   if (order.status !== "new") return json({ error: "This order was already accepted." }, 409, cors);
-  if (!/^(authorized|paid)$/.test(order.payment_status)) return json({ error: "This order isn’t paid, so it can’t be accepted." }, 409, cors);
+  if (!/^(authorized|paid|cod)$/.test(order.payment_status)) return json({ error: "This order isn’t paid, so it can’t be accepted." }, 409, cors);
   const r = await acceptOrder(env, order);
   return json(r, r.error ? 402 : 200, cors);
 }
@@ -493,7 +497,7 @@ async function handleOrderRelease(request, env, cors) {
   if (!trusted && auth) trusted = !(await requireAdmin(request, env));
   const minutes = await cancelMinutes(env);
   const cutoff = new Date(Date.now() - minutes * 60000).toISOString();
-  const due = await db(env, "orders?status=eq.new&payment_status=in.(authorized,paid)&paid_at=lt." + encodeURIComponent(cutoff) + "&select=*,order_items(*)&order=paid_at.asc&limit=50");
+  const due = await db(env, "orders?status=eq.new&payment_status=in.(authorized,paid,cod)&paid_at=lt." + encodeURIComponent(cutoff) + "&select=*,order_items(*)&order=paid_at.asc&limit=50");
   const results = [];
   for (const order of Array.isArray(due) ? due : []) results.push(await acceptOrder(env, order));
   const accepted = results.filter((r) => r.ok).length;
@@ -548,6 +552,7 @@ async function handleCheckoutSession(request, env, cors) {
   const order = await loadOrder(env, "order_number=eq." + encodeURIComponent(number));
   if (!order || !safeEqual(order.pay_token, token)) return json({ error: "Order not found" }, 404, cors);
   if (order.payment_status === "paid" || order.payment_status === "authorized") return json({ error: "This order is already paid.", paid: true }, 409, cors);
+  if (order.payment_method === "cod") return json({ error: "This order is cash on delivery — nothing to pay online." }, 409, cors);
   if (order.status !== "new" || order.payment_status !== "unpaid") return json({ error: "This order can’t be paid online. Please contact us." }, 409, cors);
   if (Date.now() - new Date(order.created_at).getTime() > 7 * 24 * 3600 * 1000) return json({ error: "This order is too old to pay online. Please place it again." }, 409, cors);
 
@@ -702,7 +707,8 @@ async function shipstation(env, path, init = {}) {
 
 function shipstationOrder(order) {
   const a = order.shipping_address || {};
-  const paid = order.payment_status === "paid";
+  const cod = order.payment_method === "cod" && order.payment_status !== "paid";
+  const paid = order.payment_status === "paid" || cod;
   const items = (order.order_items || []).map((i) => ({
     lineItemKey: i.id,
     sku: i.sku || undefined,
@@ -715,6 +721,8 @@ function shipstationOrder(order) {
   if (Number(order.discount) > 0) {
     items.push({ lineItemKey: "discount", name: "Discount" + (order.promo_code ? " (" + order.promo_code + ")" : ""), quantity: 1, unitPrice: -Number(order.discount), adjustment: true });
   }
+  if (Number(order.cod_fee) > 0) items.push({ lineItemKey: "cod-fee", name: "Cash on delivery fee", quantity: 1, unitPrice: Number(order.cod_fee), adjustment: true });
+  const codNote = cod ? "CASH ON DELIVERY — collect " + money(order.total) + " from the customer." : "";
   return {
     orderNumber: order.order_number,
     orderKey: order.id, // ShipStation updates the same order when this is sent again
@@ -729,11 +737,12 @@ function shipstationOrder(order) {
       postalCode: a.zip || "", country: String(a.country || "US").slice(0, 2).toUpperCase(), phone: order.phone || "", residential: true,
     },
     items,
-    amountPaid: paid ? Number(order.total) : 0,
+    amountPaid: paid && !cod ? Number(order.total) : 0,
+    paymentMethod: order.payment_method === "cod" ? "Cash on delivery" : "Credit card",
     taxAmount: Number(order.tax || 0),
     shippingAmount: Number(order.shipping || 0),
     customerNotes: order.customer_note || undefined,
-    internalNotes: order.admin_note || undefined,
+    internalNotes: [codNote, order.admin_note].filter(Boolean).join("\n") || undefined,
     advancedOptions: { source: "Home Weavers website" },
   };
 }
@@ -936,12 +945,14 @@ function buildOrderEmail(kind, order, data, extra = {}) {
   if (kind === "received") {
     subject = `We’ve got your order ${order.order_number}`;
     title = "Thank you for your order";
-    body = hi + (order.payment_status === "authorized"
+    body = hi + (order.payment_method === "cod" && order.payment_status !== "paid"
+        ? p(`We’ve received order <b>${num}</b>. You’ll pay <b>${money(order.total)}</b> in cash when it’s delivered${Number(order.cod_fee) > 0 ? ` (this includes a ${money(order.cod_fee)} cash-on-delivery fee)` : ""}.`)
+        : order.payment_status === "authorized"
         ? p(`We’ve received order <b>${num}</b>. Your card is approved for <b>${money(order.total)}</b>; you’ll only be charged when we start preparing your order.`)
         : p(`Your payment went through and we’ve received order <b>${num}</b>.`)) +
-      (windowMin > 0 ? p(`Changed your mind? You can cancel it yourself for the next <b>${windowMin} minutes</b>` + (order.payment_status === "authorized" ? " and you won’t be charged." : " and get a full refund.") + " After that we start preparing it.") : "") +
+      (windowMin > 0 ? p(`Changed your mind? You can cancel it yourself for the next <b>${windowMin} minutes</b>` + (order.payment_method === "cod" ? "." : order.payment_status === "authorized" ? " and you won’t be charged." : " and get a full refund.") + " After that we start preparing it.") : "") +
       itemsTable(order) + button(trackUrl, windowMin > 0 ? "View or cancel your order" : "View your order");
-    text = `Thank you for your order ${order.order_number} (${money(order.total)}).` + (order.payment_status === "authorized" ? " Your card is approved; you'll be charged when we start preparing it." : "") + (windowMin > 0 ? ` You can cancel within ${windowMin} minutes: ${trackUrl}` : ` Track it: ${trackUrl}`);
+    text = `Thank you for your order ${order.order_number} (${money(order.total)}).` + (order.payment_method === "cod" ? " Pay in cash when it's delivered." : order.payment_status === "authorized" ? " Your card is approved; you'll be charged when we start preparing it." : "") + (windowMin > 0 ? ` You can cancel within ${windowMin} minutes: ${trackUrl}` : ` Track it: ${trackUrl}`);
   } else if (kind === "accepted") {
     subject = `Your order ${order.order_number} is being prepared`;
     title = "We’re preparing your order";
@@ -954,12 +965,14 @@ function buildOrderEmail(kind, order, data, extra = {}) {
     title = "Your order is on its way";
     body = hi + p(`Order <b>${num}</b> has shipped${order.carrier ? " with <b>" + esc(order.carrier) + "</b>" : ""}.`) +
       p(`Tracking number: <b>${esc(order.tracking_number || "")}</b>`) +
+      (order.payment_method === "cod" && order.payment_status !== "paid" ? p(`Please have <b>${money(order.total)}</b> ready in cash for the delivery.`) : "") +
       (link ? button(link, "Track your package") : button(trackUrl, "Track your order"));
     text = `Order ${order.order_number} has shipped${order.carrier ? " with " + order.carrier : ""}. Tracking: ${order.tracking_number || ""} ${link || trackUrl}`;
   } else if (kind === "cancelled") {
     subject = `Order ${order.order_number} is cancelled`;
     title = "Your order is cancelled";
     body = hi + p(`We’ve cancelled order <b>${num}</b> as you asked.`) +
+      (extra.cod ? p(`It was cash on delivery, so there’s nothing to pay.`) : "") +
       (extra.voided ? p(`You haven’t been charged. The temporary hold of <b>${money(order.total)}</b> on your card has been released; depending on your bank it disappears within minutes to a few days.`) : "") +
       (extra.refunded ? p(`Your payment of <b>${money(order.total)}</b> has been refunded to your original payment method. It usually shows up in 5–10 business days.`) : "") +
       p(`We hope to see you again soon.`);
@@ -1036,7 +1049,7 @@ async function handleEmailTest(request, env, cors) {
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const CODE_MINUTES = 10, CODE_TRIES = 5, SESSION_DAYS = 30;
 const CODES_PER_EMAIL_HOUR = 5, CODES_PER_IP_HOUR = 20, NEW_PER_DAY = 50;
-const PAID_STATES = "(authorized,paid,refunded,voided,failed)";
+const PAID_STATES = "(authorized,paid,refunded,voided,failed,cod)";
 
 const enc = new TextEncoder();
 const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -1133,10 +1146,86 @@ async function handleAccountVerify(request, env, cors) {
   if (!safeEqual(row.code_hash, hexOf(await hmacBytes(key, "code:" + email + ":" + code)))) return wrong({ triesLeft: Math.max(0, CODE_TRIES - row.attempts - 1) });
   const used = await db(env, "customer_login_codes?id=eq." + row.id + "&used_at=is.null", { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ used_at: now }) });
   if (!Array.isArray(used) || !used.length) return wrong();
+  return json(Object.assign({ ok: true }, await issueSession(env, email)), 200, cors);
+}
+
+/* A signed 30-day customer session for an email that has just proved it's theirs. */
+async function issueSession(env, email) {
   const exp = Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400;
   const payload = b64url(enc.encode(JSON.stringify({ e: email, x: exp, i: Date.now(), n: b64url(crypto.getRandomValues(new Uint8Array(9))) })));
-  const token = payload + "." + b64url(await hmacBytes(key, "session:" + payload));
-  return json({ ok: true, token, email, expires: new Date(exp * 1000).toISOString() }, 200, cors);
+  const token = payload + "." + b64url(await hmacBytes(await accountKey(env), "session:" + payload));
+  return { token, email, expires: new Date(exp * 1000).toISOString() };
+}
+
+/* ---------------------------------------------------------------- *
+ * POST /account/google { id_token, nonce } — "Continue with Google".
+ * The site sends the shopper to Google's own page (OpenID Connect, no Google script on our pages) and gets back an
+ * ID token signed by Google. Here we check Google's signature, that the token was made for OUR client ID, that it's
+ * fresh, that Google verified the email, and that it carries the one-time nonce this browser started with.
+ * The client ID is public: Admin › Storefront › Customer accounts (or the secret GOOGLE_CLIENT_ID).
+ * ---------------------------------------------------------------- */
+const GOOGLE_ISSUERS = ["accounts.google.com", "https://accounts.google.com"];
+const GOOGLE_CERTS = "https://www.googleapis.com/oauth2/v3/certs";
+let googleKeyCache = { at: 0, keys: [] };
+const b64urlBytes = (str) => {
+  const s64 = String(str).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(s64 + "===".slice((s64.length + 3) % 4)), (c) => c.charCodeAt(0));
+};
+const b64urlJson = (str) => JSON.parse(new TextDecoder().decode(b64urlBytes(str)));
+
+async function googleKeys(force) {
+  if (!force && googleKeyCache.keys.length && Date.now() - googleKeyCache.at < 3600000) return googleKeyCache.keys;
+  const res = await fetch(GOOGLE_CERTS);
+  if (!res.ok) throw new Error("Couldn’t reach Google. Please try again.");
+  const data = await res.json();
+  googleKeyCache = { at: Date.now(), keys: Array.isArray(data.keys) ? data.keys : [] };
+  return googleKeyCache.keys;
+}
+
+/* Returns the token's claims, or throws with a shopper-friendly message. */
+async function verifyGoogleToken(jwt, clientId) {
+  const bad = new Error("Google sign-in didn’t work. Please try again.");
+  const parts = String(jwt || "").split(".");
+  if (parts.length !== 3 || parts.some((x) => !/^[A-Za-z0-9_-]+$/.test(x))) throw bad;
+  let header, claims;
+  try { header = b64urlJson(parts[0]); claims = b64urlJson(parts[1]); } catch { throw bad; }
+  if (!header || header.alg !== "RS256" || !header.kid) throw bad;
+  let jwk = (await googleKeys()).find((k) => k.kid === header.kid);
+  if (!jwk) jwk = (await googleKeys(true)).find((k) => k.kid === header.kid); // Google rotates keys
+  if (!jwk || jwk.kty !== "RSA") throw bad;
+  const key = await crypto.subtle.importKey("jwk", { kty: "RSA", n: jwk.n, e: jwk.e, alg: "RS256", ext: true }, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  const valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, b64urlBytes(parts[2]), enc.encode(parts[0] + "." + parts[1]));
+  if (!valid) throw bad;
+  const now = Math.floor(Date.now() / 1000);
+  const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+  if (!GOOGLE_ISSUERS.includes(claims.iss) || !aud.includes(clientId) || (claims.azp && claims.azp !== clientId)) throw bad;
+  if (!(Number(claims.exp) > now - 60) || Number(claims.iat) > now + 300) throw new Error("That Google sign-in has expired. Please try again.");
+  return claims;
+}
+
+async function handleAccountGoogle(request, env, cors) {
+  if (!features(env).database) return json({ error: "Sign-in isn’t available right now." }, 501, cors);
+  const data = await storeData(env);
+  const clientId = String(env.GOOGLE_CLIENT_ID || (data.settings && data.settings.googleClientId) || "").trim();
+  if (!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(clientId)) return json({ error: "Google sign-in isn’t set up yet. Use your email instead." }, 501, cors);
+  const body = await readJson(request);
+  let claims;
+  try { claims = await verifyGoogleToken(body.id_token, clientId); } catch (e) { return json({ error: e.message }, 401, cors); }
+  const nonce = String(body.nonce || "");
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(nonce) || !safeEqual(String(claims.nonce || ""), nonce)) return json({ error: "Google sign-in didn’t work. Please try again." }, 401, cors);
+  const email = String(claims.email || "").trim().toLowerCase();
+  if (!EMAIL_RE.test(email) || email.length > 254) return json({ error: "Google didn’t share an email address." }, 400, cors);
+  if (claims.email_verified !== true && claims.email_verified !== "true") return json({ error: "Your Google email isn’t verified yet. Use your email instead." }, 400, cors);
+  // First Google sign-in: fill in an empty name from the Google profile (never overwrite what the customer typed).
+  const rows = await db(env, "customer_profiles?email=eq." + encodeURIComponent(email) + "&select=first_name,last_name&limit=1");
+  const cur = Array.isArray(rows) && rows[0];
+  if (!cur || (!cur.first_name && !cur.last_name)) {
+    const first = str(claims.given_name, 60), last = str(claims.family_name, 60);
+    if (first || last) {
+      await db(env, "customer_profiles?on_conflict=email", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ email, first_name: first || null, last_name: last || null }) }).catch(() => {});
+    }
+  }
+  return json(Object.assign({ ok: true, via: "google" }, await issueSession(env, email)), 200, cors);
 }
 
 /* A valid customer session → { email, profile } (profile may be null), or null.
@@ -1167,7 +1256,7 @@ async function handleAccountOrders(request, env, cors) {
   const s = await customerSession(request, env);
   if (!s) return signedOut(cors);
   // Only what the customer needs to see: no internal ids, notes, payment references or tokens.
-  const cols = "order_number,created_at,paid_at,accepted_at,shipped_at,cancelled_at,status,payment_status,subtotal,discount,shipping,tax,total,promo_code," +
+  const cols = "order_number,created_at,paid_at,accepted_at,shipped_at,cancelled_at,status,payment_status,payment_method,cod_fee,subtotal,discount,shipping,tax,total,promo_code," +
     "carrier,tracking_number,cancel_requested_at,return_requested_at,return_reason,name,phone,shipping_address,order_items(name,variant,qty,unit_price,image,line_total)";
   const [rows, subs] = await Promise.all([
     db(env, "orders?email=eq." + encodeURIComponent(s.email) + "&payment_status=in." + PAID_STATES + "&select=" + cols + "&order=created_at.desc&limit=50"),
@@ -1185,7 +1274,7 @@ async function handleAccountOrders(request, env, cors) {
 }
 
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
-const str = (v, max) => String(v == null ? "" : v).replace(/[ -]/g, " ").trim().slice(0, max);
+const str = (v, max) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max);
 
 /* One saved address, checked and trimmed; throws a shopper-friendly message. */
 function cleanAddress(a, i) {
@@ -1314,6 +1403,25 @@ async function notifyStore(env, subject, text) {
     if (!res.ok) console.error("store email failed", res.status);
     return res.ok;
   } catch (e) { console.error("store email failed", e && e.message); return false; }
+}
+
+/* ---------------------------------------------------------------- *
+ * POST /order/placed { order_number, pay_token } — a cash-on-delivery order was just placed (card orders get this
+ * email from the Stripe webhook instead). The pay token is only known to the browser that placed the order.
+ * Sent once: Resend's idempotency key is the same as for the card flow.
+ * ---------------------------------------------------------------- */
+async function handleOrderPlaced(request, env, cors) {
+  if (!features(env).database) return json({ ok: true }, 200, cors);
+  const body = await readJson(request);
+  const number = String(body.order_number || "").trim().toUpperCase();
+  const token = String(body.pay_token || "");
+  if (!/^[A-Z]{2,4}-\d{1,12}$/.test(number) || !UUID.test(token)) return json({ error: "Order not found" }, 404, cors);
+  const order = await loadOrder(env, "order_number=eq." + encodeURIComponent(number) + "&pay_token=eq." + encodeURIComponent(token));
+  if (!order) return json({ error: "Order not found" }, 404, cors);
+  if (order.payment_method !== "cod" || order.status !== "new") return json({ ok: true, skipped: true }, 200, cors);
+  if (Date.now() - Date.parse(order.created_at) > 3600000) return json({ ok: true, skipped: true }, 200, cors);
+  await sendOrderEmail(env, "received", order);
+  return json({ ok: true }, 200, cors);
 }
 
 

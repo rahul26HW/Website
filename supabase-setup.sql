@@ -373,10 +373,14 @@ alter table public.orders add column if not exists cancel_requested_at   timesta
 alter table public.orders add column if not exists cancel_reason         text;
 alter table public.orders add column if not exists return_requested_at   timestamptz; -- customer asked to return (from their account)
 alter table public.orders add column if not exists return_reason         text;
+alter table public.orders add column if not exists payment_method        text not null default 'card'; -- card (Stripe) | cod
+alter table public.orders add column if not exists cod_fee               numeric(10,2) not null default 0;
+alter table public.orders drop constraint if exists orders_payment_method_check;
+alter table public.orders add constraint orders_payment_method_check check (payment_method in ('card','cod'));
 -- authorized = card held, charged when the order is accepted; voided = hold released (never charged); failed = charging failed.
 alter table public.orders drop constraint if exists orders_payment_status_check;
 alter table public.orders add constraint orders_payment_status_check
-  check (payment_status in ('unpaid','authorized','paid','refunded','voided','failed'));
+  check (payment_status in ('unpaid','authorized','paid','refunded','voided','failed','cod'));
 alter table public.orders drop constraint if exists orders_status_check;
 alter table public.orders add constraint orders_status_check
   check (status in ('new','accepted','packed','shipped','delivered','refunded','cancelled'));
@@ -472,6 +476,8 @@ declare
   v_sh        jsonb;
   v_promo     jsonb;
   v_code      text := nullif(trim(coalesce(p_order->>'promoCode','')), '');
+  v_method    text := case when p_order->>'paymentMethod' = 'cod' then 'cod' else 'card' end;
+  v_fee       numeric := 0;
   v_order_id  uuid;
   v_token     uuid;
   v_number    text;
@@ -497,9 +503,21 @@ begin
   select s.data into v_store from public.store s where s.id = 'main';
   v_inv := coalesce(v_store->'inventory', '{}'::jsonb);
 
-  -- No orders without online payment: checkout only opens when Stripe is switched on in the admin.
-  if coalesce(v_store->'payments'->>'stripe', 'false') <> 'true' then
+  -- Only the payment methods switched on in Admin › Storefront › Payment methods.
+  if v_method = 'card' and coalesce(v_store->'payments'->>'stripe', 'false') <> 'true' then
     raise exception 'CHECKOUT_CLOSED' using errcode = '22023';
+  end if;
+  if v_method = 'cod' then
+    if coalesce(v_store->'payments'->>'cod', 'false') <> 'true' then
+      raise exception 'COD_UNAVAILABLE' using errcode = '22023';
+    end if;
+    -- Cash on delivery can't be checked up front, so keep it small: 3 open COD orders per email per day.
+    if (select count(*) from public.orders o
+         where o.email = v_email and o.payment_method = 'cod' and o.status <> 'cancelled'
+           and o.created_at > now() - interval '1 day') >= 3 then
+      raise exception 'TOO_MANY_ORDERS' using errcode = '22023';
+    end if;
+    v_fee := least(greatest(coalesce(public._num(v_store->'payments'->>'codFee'), 0), 0), 50);
   end if;
   -- Stop one address from piling up unpaid orders.
   if (select count(*) from public.orders o
@@ -620,11 +638,15 @@ begin
     v_ship := coalesce(public._num(v_sh->>'flatRate'), 9.95);
   end if;
 
-  v_total  := greatest(v_sub - v_discount, 0) + v_ship;
+  v_total  := greatest(v_sub - v_discount, 0) + v_ship + v_fee;
+  if v_method = 'cod' and v_total > coalesce(nullif(public._num(v_store->'payments'->>'codMax'), 0), 500) then
+    raise exception 'COD_LIMIT' using errcode = '22023';
+  end if;
   v_number := 'HW-' || nextval('public.order_number_seq');
 
   insert into public.orders (order_number, email, name, phone, shipping_address,
-                             subtotal, discount, shipping, total, promo_code, customer_note)
+                             subtotal, discount, shipping, total, promo_code, customer_note,
+                             payment_method, cod_fee, payment_status, paid_at)
   values (v_number, v_email, v_name, left(nullif(trim(p_order->>'phone'),''), 40),
           jsonb_build_object(
             'line1',   left(trim(v_addr->>'line1'), 200),
@@ -635,7 +657,10 @@ begin
             'country', left(coalesce(nullif(trim(v_addr->>'country'),''), 'US'), 60)),
           round(v_sub,2), round(v_discount,2), round(v_ship,2), round(v_total,2),
           case when v_code is not null then upper(v_promo->>'code') end,
-          left(nullif(trim(p_order->>'note'),''), 1000))
+          left(nullif(trim(p_order->>'note'),''), 1000),
+          -- A COD order is confirmed straight away (paid_at starts the free cancellation window); cash is collected on delivery.
+          v_method, round(v_fee,2), case when v_method = 'cod' then 'cod' else 'unpaid' end,
+          case when v_method = 'cod' then now() end)
   returning id, pay_token into v_order_id, v_token;
 
   insert into public.order_items (order_id, product_id, sku, name, variant, unit_price, qty, line_total, image)
@@ -652,6 +677,8 @@ begin
     'order_number', v_number, 'email', v_email, 'pay_token', v_token,
     'subtotal', round(v_sub,2), 'discount', round(v_discount,2),
     'shipping', round(v_ship,2), 'total', round(v_total,2),
+    'payment_method', v_method, 'cod_fee', round(v_fee,2),
+    'paid_at', case when v_method = 'cod' then now() end,
     'items', v_lines);
 end $$;
 

@@ -27,7 +27,14 @@
       (opts.inputmode ? ' inputmode="' + opts.inputmode + '"' : '') + (opts.pattern ? ' pattern="' + opts.pattern + '"' : '') + (opts.max ? ' maxlength="' + opts.max + '"' : '') + req + '></div>';
   }
 
-  function summaryHTML(t) {
+  function codFee() { var p = (HW.DB && HW.DB.payments) || {}; return Number(p.codFee) || 0; }
+  function method(form) {
+    var el = (form || document).querySelector('input[name=pay]:checked') || (form || document).querySelector('input[name=pay]');
+    return el ? el.value : 'card';
+  }
+
+  function summaryHTML(t, pay) {
+    var fee = pay === 'cod' ? codFee() : 0;
     return '<h2>Order summary</h2>' + t.lines.map(function (l) {
       return '<div class="co-line"><div class="thumb"><img src="' + esc(HW.asset(HW.m.thumb(l.image))) + '" alt="" width="56" height="56" loading="lazy"><span class="qty" aria-label="Quantity ' + l.qty + '">' + l.qty + '</span></div>' +
         '<div><div class="nm">' + esc(l.name) + '</div>' + (l.variant ? '<div class="vr">' + esc(l.variant) + '</div>' : '') + '</div>' +
@@ -38,8 +45,9 @@
       (t.discount > 0 ? '<div class="sumrow"><span class="disc">Discount (' + esc(t.promo.code) + ')</span><span class="disc">−' + u.money(t.discount) + '</span></div>' : '') +
       (t.promo && !t.promoValid ? '<div class="promo-note err" style="margin:0 0 8px">' + esc(t.promoNote) + '</div>' : '') +
       '<div class="sumrow"><span>Shipping</span><span>' + (t.ship ? u.money(t.ship) : 'Free') + '</span></div>' +
-      '<div class="sumrow total"><span>Total</span><span>' + u.money(t.total) + '</span></div></div>' +
-      '<p class="muted" style="font-size:12.5px;margin:0">Ships in ' + esc(m.shippingDays()) + '. Final total is confirmed when you ' + (HW.checkout.cardPayments() ? 'continue to payment' : 'place the order') + '.</p>';
+      (fee ? '<div class="sumrow"><span>Cash on delivery fee</span><span>' + u.money(fee) + '</span></div>' : '') +
+      '<div class="sumrow total"><span>Total</span><span>' + u.money(t.total + fee) + '</span></div></div>' +
+      '<p class="muted" style="font-size:12.5px;margin:0">Ships in ' + esc(m.shippingDays()) + '. Final total is confirmed when you ' + (pay === 'cod' ? 'place the order' : 'continue to payment') + '.</p>';
   }
 
   HW.views = HW.views || {};
@@ -62,8 +70,8 @@
       };
     }
     var anyOut = t.lines.some(function (l) { return !l.inStock; });
-    var card = HW.checkout.cardPayments();
-    if (!card) {
+    var card = HW.checkout.cardPayments(), cod = HW.checkout.codPayments();
+    if (!card && !cod) {
       // Orders are only taken with online payment (no pay-later / cash on delivery).
       var c = HW.DB.contact || {};
       return {
@@ -75,13 +83,23 @@
       };
     }
     if (HW.account) HW.account.prefillCheckout(DRAFT);
+    var saved = (u.session.get(DRAFT, {}) || {}).pay;
+    var pay = card && cod ? (saved === 'cod' ? 'cod' : 'card') : cod ? 'cod' : 'card';
+    var pmax = Number(((HW.DB && HW.DB.payments) || {}).codMax) || 500;
+    var codDesc = 'Pay in cash when your order is delivered' + (codFee() ? ' · ' + u.money(codFee()) + ' fee' : '') + ' · orders up to ' + u.money(pmax) + '.';
+    var cardDesc = 'Card, Apple Pay or Google Pay on Stripe’s secure page. Your card is approved now and charged when we start preparing your order.';
+    var payBlock = card && cod
+      ? '<h2>Payment</h2><fieldset class="paychoice"><legend class="sr-only">How would you like to pay?</legend>' +
+        '<label class="payopt"><input type="radio" name="pay" value="card"' + (pay === 'card' ? ' checked' : '') + '><span><b>Card, Apple Pay or Google Pay</b><span class="muted">' + cardDesc + '</span></span></label>' +
+        '<label class="payopt"><input type="radio" name="pay" value="cod"' + (pay === 'cod' ? ' checked' : '') + '><span><b>Cash on delivery</b><span class="muted">' + codDesc + '</span></span></label></fieldset>'
+      : cod ? '<h2>Payment</h2><div class="notice" role="note"><b>Cash on delivery.</b> ' + codDesc + '<input type="hidden" name="pay" value="cod"></div>' : '';
     var acct = HW.account && HW.account.get();
     return {
       html: '<div class="wrap"><div class="checkout">' +
         '<form class="form" data-form="checkout" novalidate aria-labelledby="coHead">' +
         '<nav class="crumb" aria-label="Breadcrumb"><a href="' + HW.link('/') + '">Home</a> &nbsp;/&nbsp; <span aria-current="page">Checkout</span></nav>' +
         '<h1 id="coHead">Checkout</h1>' +
-        '<div class="notice" role="note"><b>Secure card payment.</b> After you enter your details you’ll pay on Stripe’s secure page (card, Apple Pay or Google Pay). Your card is approved at checkout and only charged when we start preparing your order. Your card number goes only to Stripe — we never see or store it.</div>' +
+        (card && !cod ? '<div class="notice" role="note"><b>Secure card payment.</b> After you enter your details you’ll pay on Stripe’s secure page (card, Apple Pay or Google Pay). Your card is approved at checkout and only charged when we start preparing your order. Your card number goes only to Stripe — we never see or store it.</div>' : '') +
         '<h2>Contact</h2>' +
         (acct ? '<p class="muted" style="font-size:13.5px;margin:0 0 10px">Signed in as <b>' + esc(acct.email) + '</b>.' + (acct.profile ? ' Your details are filled in from your last order.' : ' This order will appear in your account.') + '</p>'
           : '<p class="muted" style="font-size:13.5px;margin:0 0 10px">Checking out as a guest. <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/account') + '?next=checkout">Sign in or create an account</a> (optional) to see your orders later and check out faster.</p>') +
@@ -95,16 +113,21 @@
         field('zip', 'ZIP code', 'text', { ac: 'postal-code', inputmode: 'numeric', pattern: '\\d{5}(-\\d{4})?', max: 10 }) + '</div>' +
         '<p class="muted" style="font-size:13px;margin:0">We currently ship within the United States.</p>' +
         field('note', 'Order note', 'textarea', { optional: true }) +
+        payBlock +
         '<p class="form-msg" id="coMsg" role="alert" hidden></p>' +
-        '<button class="btn loom block" type="submit"' + (anyOut ? ' disabled' : '') + '>Continue to payment · ' + u.money(t.total) + '</button>' +
+        '<button class="btn loom block" id="coSubmit" type="submit"' + (anyOut ? ' disabled' : '') + '>' + submitLabel(pay, t) + '</button>' +
         (anyOut ? '<p class="muted" style="font-size:13px">Remove out-of-stock items from your cart to continue.</p>' : '') +
         '<p class="muted" style="font-size:12.5px;margin:0">By continuing you agree to our <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/terms-of-service') + '">Terms</a> and <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/privacy-policy') + '">Privacy Policy</a>.</p>' +
         '</form>' +
-        '<aside class="co-summary" id="coSummary" aria-label="Order summary">' + summaryHTML(t) + '</aside>' +
+        '<aside class="co-summary" id="coSummary" aria-label="Order summary">' + summaryHTML(t, pay) + '</aside>' +
         '</div></div>',
       seo: { title: 'Checkout', noindex: true }
     };
   };
+
+  function submitLabel(pay, t) {
+    return pay === 'cod' ? 'Place order · ' + u.money(t.total + codFee()) + ' cash on delivery' : 'Continue to payment · ' + u.money(t.total);
+  }
 
   /* The payments server: the Supabase Edge Function "hw" unless the admin entered another address (e.g. a Cloudflare Worker). */
   /* Minutes a customer can cancel a paid order themselves. */
@@ -141,6 +164,18 @@
 
   HW.checkout = {
     states: function () { return STATES; },
+    /* Cash on delivery is on (Admin › Storefront › Payment methods) and Snipcart is off. */
+    codPayments: function () {
+      var p = (HW.DB && HW.DB.payments) || {};
+      return p.cod === true && /^https:\/\//.test(workerUrl()) && !(HW.snip && HW.snip.enabled());
+    },
+    /* Switching between card and cash on delivery updates the button and the total. */
+    payChanged: function (form) {
+      var t = HW.cart.totals(), pay = method(form);
+      var b = document.getElementById('coSubmit'); if (b) b.textContent = submitLabel(pay, t);
+      var s = document.getElementById('coSummary'); if (s) s.innerHTML = summaryHTML(t, pay);
+      HW.checkout.saveDraft(form);
+    },
     /* Card payments are on when the admin turned Stripe on and gave a worker address (and Snipcart is off). */
     cardPayments: function () {
       var p = (HW.DB && HW.DB.payments) || {};
@@ -173,7 +208,11 @@
     },
     saveDraft: function (form) {
       var d = {};
-      u.qsa('input,select,textarea', form).forEach(function (el) { if (el.name && el.name !== 'email_confirm') d[el.name] = el.value; });
+      u.qsa('input,select,textarea', form).forEach(function (el) {
+        if (!el.name || el.name === 'email_confirm') return;
+        if (el.type === 'radio') { if (el.checked) d[el.name] = el.value; return; }
+        d[el.name] = el.value;
+      });
       u.session.set(DRAFT, d);
     },
     submit: async function (form) {
@@ -195,8 +234,8 @@
         if (errors[0].el) errors[0].el.focus();
         return;
       }
-      var t = HW.cart.totals();
-      if (!t.lines.length || !HW.checkout.cardPayments()) { HW.router.navigate('/checkout'); return; }
+      var t = HW.cart.totals(), pay = method(form);
+      if (!t.lines.length || !(pay === 'cod' ? HW.checkout.codPayments() : HW.checkout.cardPayments())) { HW.router.navigate('/checkout'); return; }
       if (t.promo && !t.promoValid) { msg.hidden = false; msg.className = 'form-msg err'; msg.textContent = t.promoNote + ' Remove the code from your cart to continue.'; return; }
 
       btn.disabled = true;
@@ -209,10 +248,22 @@
             email: get('email'), name: get('name'), phone: get('phone'), note: get('note'),
             address: { line1: get('line1'), line2: get('line2'), city: get('city'), state: get('state'), zip: get('zip'), country: 'US' },
             promoCode: t.promo && t.promoValid ? t.promo.code : '',
+            paymentMethod: pay,
             items: t.lines.map(function (l) { return { productId: l.id, colorId: l.colorId, sizeId: l.sizeId, qty: l.qty }; })
           }
         });
         result.name = get('name');
+        if (result.payment_method === 'cod') {
+          // Nothing to pay online: the order is confirmed now. Ask the server for the "we've got your order" email.
+          result.paid = true; result.cod = true; result.paid_at = result.paid_at || new Date().toISOString();
+          u.session.set(LAST, result);
+          u.session.set(DRAFT, {});
+          HW.cart.clear();
+          fetch(workerUrl() + '/order/placed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order_number: result.order_number, pay_token: result.pay_token }) }).catch(function () {});
+          if (HW.account) HW.account.invalidate();
+          HW.router.navigate('/order/' + encodeURIComponent(result.order_number));
+          return;
+        }
         u.session.set(LAST, result);
         // The cart stays until Stripe confirms payment, so a shopper who backs out can still change it.
         btn.textContent = 'Opening secure payment…';
@@ -227,7 +278,7 @@
         if (e.code && /^(OUT_OF_STOCK|PRODUCT_NOT_FOUND|VARIANT_NOT_FOUND|PROMO_)/.test(e.code)) {
           // Stock or promo changed: refresh the catalog so the summary shows the truth.
           HW.reloadStore && HW.reloadStore().then(function () {
-            var s = document.getElementById('coSummary'); if (s) s.innerHTML = summaryHTML(HW.cart.totals());
+            var s = document.getElementById('coSummary'); if (s) s.innerHTML = summaryHTML(HW.cart.totals(), pay);
           });
         }
       }
@@ -258,21 +309,21 @@
     if (o.cancelled) {
       return {
         html: '<div class="wrap"><div class="confirm"><div class="weave-rule">' + HW.SVG.weave + '</div>' +
-          '<h1>Order cancelled</h1><p class="muted" style="margin:0">Order ' + esc(o.order_number) + ' has been cancelled and you haven’t been charged. The temporary hold on your card is released; depending on your bank it disappears within minutes to a few days.</p>' +
+          '<h1>Order cancelled</h1><p class="muted" style="margin:0">Order ' + esc(o.order_number) + (o.cod ? ' has been cancelled. It was cash on delivery, so there’s nothing to pay.' : ' has been cancelled and you haven’t been charged. The temporary hold on your card is released; depending on your bank it disappears within minutes to a few days.') + '</p>' +
           '<p><a class="btn" href="' + HW.link('/') + '">Continue shopping</a></p></div></div>',
         seo: { title: 'Order cancelled', noindex: true },
         after: function () { var h = document.querySelector('.confirm h1'); if (h) { h.tabIndex = -1; h.focus(); } }
       };
     }
     var head = o.paid
-      ? '<h1>Thank you' + first + '!</h1><p class="muted" style="margin:0">Your order is placed and your card is approved. You’re charged when we start preparing it.</p>'
+      ? '<h1>Thank you' + first + '!</h1><p class="muted" style="margin:0">' + (o.cod ? 'Your order is placed. Please have <b>' + u.money(o.total) + '</b> ready in cash when it’s delivered.' : 'Your order is placed and your card is approved. You’re charged when we start preparing it.') + '</p>'
       : unpaid
         ? '<h1>Your order isn’t paid yet</h1><p class="muted" style="margin:0">' + (payment === 'cancelled' ? 'Payment was cancelled, so you haven’t been charged.' : 'We saved your order, but payment wasn’t completed.') + '</p>'
         : '<h1>Order ' + esc(o.order_number) + '</h1><p class="muted" style="margin:0">This order hasn’t been paid.</p>';
     var left = o.paid && !o.cancelled ? HW.cancelLeft({ status: 'new', paid_at: o.paid_at || new Date().toISOString() }) : 0;
     var cancelBox = left > 0
       ? '<div class="notice" role="note" style="text-align:left"><b>Changed your mind?</b> You can cancel this order yourself for the next ' +
-        '<span id="cancelLeft">' + Math.ceil(left / 60000) + '</span> minutes and you won’t be charged. After that we start preparing it, so please ' +
+        '<span id="cancelLeft">' + Math.ceil(left / 60000) + '</span> minutes' + (o.cod ? '' : ' and you won’t be charged') + '. After that we start preparing it, so please ' +
         '<a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/track-your-order') + '">ask us to cancel</a> instead.' +
         '<p class="form-msg err" id="cancelMsg" role="alert" hidden></p>' +
         '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="cancel-order" data-n="' + esc(o.order_number) + '" data-e="' + esc(o.email) + '">Cancel this order</button></div></div>'
@@ -297,6 +348,7 @@
         '<div class="sumrow"><span>Subtotal</span><span>' + u.money(o.subtotal) + '</span></div>' +
         (o.discount > 0 ? '<div class="sumrow"><span class="disc">Discount</span><span class="disc">−' + u.money(o.discount) + '</span></div>' : '') +
         '<div class="sumrow"><span>Shipping</span><span>' + (o.shipping > 0 ? u.money(o.shipping) : 'Free') + '</span></div>' +
+        (Number(o.cod_fee) > 0 ? '<div class="sumrow"><span>Cash on delivery fee</span><span>' + u.money(o.cod_fee) + '</span></div>' : '') +
         '<div class="sumrow total" style="margin-bottom:0"><span>Total</span><span>' + u.money(o.total) + '</span></div></div>' +
         '<a class="btn" href="' + HW.link('/') + '">Continue shopping</a> ' +
         '<a class="btn ghost" href="' + HW.link('/page/track-your-order') + '">Track your order</a>' +

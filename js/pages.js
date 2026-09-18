@@ -137,9 +137,9 @@
     var done = /^(shipped|delivered|cancelled|refunded)$/.test(o.status);
     if (done) return '';
     var left = HW.cancelLeft({ status: o.status, paid_at: o.paid_at, created_at: o.created_at });
-    if (o.status === 'new' && /^(paid|authorized)$/.test(o.payment_status) && left > 0) {
+    if (o.status === 'new' && /^(paid|authorized|cod)$/.test(o.payment_status) && left > 0) {
       return '<div class="notice" role="note" style="text-align:left;margin:14px 0 0"><b>You can still cancel.</b> Cancel yourself within the next ' +
-        '<span id="cancelLeft' + key + '">' + Math.ceil(left / 60000) + '</span> minutes' + (o.payment_status === 'authorized' ? ' — you won’t be charged.' : ' for a full refund.') +
+        '<span id="cancelLeft' + key + '">' + Math.ceil(left / 60000) + '</span> minutes' + (o.payment_status === 'authorized' ? ' — you won’t be charged.' : o.payment_status === 'cod' ? ' — nothing to pay.' : ' for a full refund.') +
         '<p class="form-msg err" id="cancelMsg' + key + '" role="alert" hidden></p>' +
         '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="cancel-order" data-n="' + esc(number) + '" data-e="' + esc(email) + '">Cancel this order</button></div></div>';
     }

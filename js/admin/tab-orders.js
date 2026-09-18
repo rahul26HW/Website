@@ -4,7 +4,7 @@
 
   var A = HW.A, u = HW.u, esc = u.esc;
   var STATUSES = [['new', 'New'], ['accepted', 'Accepted'], ['packed', 'Packed'], ['shipped', 'Shipped'], ['delivered', 'Delivered'], ['refunded', 'Refunded'], ['cancelled', 'Cancelled']];
-  var PAYMENTS = [['unpaid', 'Unpaid'], ['authorized', 'Card held'], ['paid', 'Paid'], ['refunded', 'Refunded'], ['voided', 'Hold released'], ['failed', 'Charge failed']];
+  var PAYMENTS = [['unpaid', 'Unpaid'], ['cod', 'Cash on delivery'], ['authorized', 'Card held'], ['paid', 'Paid'], ['refunded', 'Refunded'], ['voided', 'Hold released'], ['failed', 'Charge failed']];
   var os = { filter: 'all', q: '', open: null, list: null };
   var ms = { list: null, open: null };
 
@@ -100,8 +100,10 @@
     var ref = o.payment_ref || '';
     var stripeLink = /^pi_/.test(ref) ? 'https://dashboard.stripe.com/' + (o.payment_livemode === false ? 'test/' : '') + 'payments/' + ref : '';
     var refLink = ref ? ' · ' + (stripeLink ? '<a href="' + esc(stripeLink) + '" target="_blank" rel="noopener">View in Stripe</a>' : '<code>' + esc(ref) + '</code>') : '';
-    var pay = o.payment_status === 'paid'
-      ? '<p style="margin:0 0 6px">✓ Paid' + (o.paid_at ? ' ' + esc(new Date(o.paid_at).toLocaleString()) : '') + refLink + '</p>'
+    var pay = o.payment_status === 'cod'
+      ? '<p style="margin:0 0 6px"><b>Cash on delivery</b> — collect <b>' + u.money(o.total) + '</b>' + (Number(o.cod_fee) ? ' (includes ' + u.money(o.cod_fee) + ' fee)' : '') + ' when it’s delivered. Once the cash is in, set Payment to <b>Paid</b>.</p>'
+      : o.payment_status === 'paid'
+      ? '<p style="margin:0 0 6px">✓ Paid' + (o.payment_method === 'cod' ? ' (cash on delivery)' : '') + (o.paid_at ? ' ' + esc(new Date(o.paid_at).toLocaleString()) : '') + refLink + '</p>'
       : o.payment_status === 'authorized'
         ? '<p style="margin:0 0 6px">Card approved, not charged yet — it’s charged when the order is accepted' + refLink + '</p>'
       : o.payment_status === 'voided'
@@ -113,12 +115,12 @@
         : '<p class="hint" style="margin:0 0 6px">' + (/^cs_/.test(ref) ? 'The customer opened the Stripe payment page but hasn’t paid yet.' : 'No online payment.') + '</p>';
     var ship = o.shipstation_order_id
       ? '<p style="margin:0 0 6px">✓ In ShipStation (order ' + esc(o.shipstation_order_id) + (o.shipstation_synced_at ? ', sent ' + esc(new Date(o.shipstation_synced_at).toLocaleString()) : '') + ')</p>'
-      : '<p class="hint" style="margin:0 0 6px">Not in ShipStation yet.' + (/^(paid|authorized)$/.test(o.payment_status) ? '' : ' Paid orders are sent automatically.') + '</p>';
+      : '<p class="hint" style="margin:0 0 6px">Not in ShipStation yet.' + (/^(paid|authorized|cod)$/.test(o.payment_status) ? '' : ' Paid orders are sent automatically.') + '</p>';
     var err = o.shipstation_error ? '<p class="badmsg" style="margin:0 0 6px">ShipStation said: ' + esc(o.shipstation_error) + '</p>' : '';
     var mins = Number((A.draft.settings || {}).cancelMinutes);
     mins = mins >= 0 && mins <= 1440 ? mins : 30;
     var until = o.paid_at ? new Date(new Date(o.paid_at).getTime() + mins * 60000) : null;
-    var waiting = o.status === 'new' && /^(paid|authorized)$/.test(o.payment_status);
+    var waiting = o.status === 'new' && /^(paid|authorized|cod)$/.test(o.payment_status);
     var accept = waiting
       ? '<div class="adwarn" style="margin:0 0 10px">' +
         (until && until > new Date()

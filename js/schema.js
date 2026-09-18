@@ -49,6 +49,7 @@
         showEmptyCategories: false,
         lowStockThreshold: 5,
         siteUrl: '',                  // e.g. https://nitish463.github.io/Website/ (used for canonical + sitemap)
+        googleClientId: '',           // public OAuth client ID for "Continue with Google" (blank hides the button)
         sizeGuide: DEFAULT_SIZE_GUIDE // shown from product pages with sizes; blank hides the link
       },
       hero: { autoplay: true, interval: 5000, slides: [] },
@@ -63,7 +64,7 @@
       newsletter: { couponCode: '', emailEndpoint: '' },
       shipping: { enabled: true, freeThreshold: 75, flatRate: 9.95 },
       social: { facebook: '', instagram: '', pinterest: '' },
-      payments: { stripe: false, workerUrl: '', cancelMinutes: 30 },   // Stripe Checkout through the Cloudflare Worker (keys live in the worker)
+      payments: { stripe: false, cod: false, codFee: 0, codMax: 500, workerUrl: '', cancelMinutes: 30 },   // Stripe Checkout through the Cloudflare Worker (keys live in the worker)
       snipcart: { enabled: false, apiKey: '', currency: 'usd', version: '3.7.1', mode: 'side', feedUrl: '' },
       videoBanner: { enabled: false, eyebrow: '', heading: '', body: '', ctaText: '', ctaLink: '', videoUrl: '', bg: '#2A2622' },
       features: [],
@@ -160,6 +161,13 @@
     // Minutes a customer may cancel a paid order themselves (0–1440).
     var cm = Number((d.settings || {}).cancelMinutes);
     d.settings.cancelMinutes = cm >= 0 && cm <= 1440 ? Math.round(cm) : 30;
+    // Cash on delivery: fee $0–50, largest order $1–5,000 (the database applies the same limits).
+    if (!isObj(d.payments)) d.payments = {};
+    d.payments.cod = d.payments.cod === true;
+    var cf = Number(d.payments.codFee); d.payments.codFee = cf >= 0 && cf <= 50 ? Math.round(cf * 100) / 100 : 0;
+    var cx = Number(d.payments.codMax); d.payments.codMax = cx >= 1 && cx <= 5000 ? Math.round(cx) : 500;
+    var gid = String(d.settings.googleClientId || '').trim();
+    d.settings.googleClientId = /^[\w.-]+\.apps\.googleusercontent\.com$/.test(gid) ? gid : '';
     if (!isObj(d.thumbs)) d.thumbs = {};
     Object.keys(d.thumbs).forEach(function (k) { if (typeof d.thumbs[k] !== 'string' || !/^https:\/\//.test(d.thumbs[k])) delete d.thumbs[k]; });
 

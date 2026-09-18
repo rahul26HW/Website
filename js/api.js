@@ -31,6 +31,8 @@
       PROMO_USED_UP: 'That promo code has reached its usage limit.',
       PROMO_ALREADY_USED: 'You’ve already used that promo code.',
       CHECKOUT_CLOSED: 'Checkout is closed right now. Please try again later.',
+      COD_UNAVAILABLE: 'Cash on delivery isn’t available right now. Please choose another way to pay.',
+      COD_LIMIT: 'This order is above our cash-on-delivery limit. Please pay by card, or split it into smaller orders.',
       TOO_MANY_ORDERS: 'You’ve started several orders in the last hour. Please pay for an open order or try again later.',
       RATE_LIMIT: 'You’ve sent a few messages already. Please wait a few minutes and try again.'
     };

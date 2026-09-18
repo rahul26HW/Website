@@ -30,6 +30,7 @@
 
     if (route.name === 'admin') { enterAdmin(); return; }
     document.body.classList.remove('admin-mode');
+    document.body.classList.remove('auth-page');
 
     var viewFn = HW.views[route.name] || HW.views.notfound;
     var view;
@@ -113,6 +114,7 @@
     'acct-restart': function () { HW.account.restart(); },
     'acct-resend': function (el) { HW.account.resend(el); },
     'acct-signout-all': function (el) { HW.account.signOutAll(el); },
+    'acct-google': function () { HW.account.google(); },
     'acct-delete': function (el) { HW.account.remove(el); },
     'acct-read': function () { HW.account.markRead(); },
     'acct-addr-new': function () { HW.account.addr.edit(); },
@@ -166,6 +168,7 @@
       else if (el.dataset.act === 'cf-num') HW.catalog.num(el);
       else if (el.dataset.act === 'sort') HW.catalog.sort(el);
       else if (el.dataset.act === 'acct-sub') HW.account.subscribe(el);
+      else if (el.name === 'pay' && el.closest('form[data-form="checkout"]')) HW.checkout.payChanged(el.closest('form'));
       else if (el.dataset.act === 'acct-ret-order') HW.account.returnOrder(el);
     });
     document.addEventListener('input', function (e) {

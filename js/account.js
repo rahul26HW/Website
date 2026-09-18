@@ -9,8 +9,36 @@
   var KEY = 'hw:account';          // { token, email, expires, name, checkout } — this device only; "Sign out" removes it
   var PENDING = 'hw:accountEmail'; // email waiting for its code (this tab only)
   var SEEN = 'hw:accountSeen';     // { email: time } — notifications read up to
+  var GKEY = 'hw:googleSignIn';    // { state, nonce } for one "Continue with Google" round trip (this tab only)
+  var NEXT = 'hw:accountNext';     // where to go after signing in (this tab only)
+  var GOOGLE_G = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A11.9 11.9 0 0 1 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
   var linkStyle = ' style="font-size:inherit;letter-spacing:0;text-transform:none"';
   var state = { data: null, email: null, loading: null, editing: null };
+
+  function googleId() {
+    var id = String(((HW.DB && HW.DB.settings) || {}).googleClientId || '').trim();
+    return /^[\w.-]+\.apps\.googleusercontent\.com$/.test(id) ? id : '';
+  }
+  function randomToken() {
+    var b = new Uint8Array(24); crypto.getRandomValues(b);
+    return btoa(String.fromCharCode.apply(null, b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function takeNext() { var n = u.session.get(NEXT, null); u.session.set(NEXT, null); return /^\/(account(\/[a-z]+)?|checkout)$/.test(n || '') ? n : '/account'; }
+
+  function authShell(inner) {
+    var bd = HW.DB.brand || {}, name = bd.name || 'Home Weavers';
+    return '<div class="auth">' +
+      '<div class="auth-brand"><a class="auth-logo" href="' + HW.link('/') + '"><svg width="26" height="26" viewBox="0 0 22 22" fill="none" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M1 6h20M1 11h20M1 16h20M6 1v20M11 1v20M16 1v20" stroke="currentColor" stroke-width="1" opacity=".55"/></svg><span>' + esc(name) + '</span></a>' +
+      '<div class="auth-pitch"><p class="auth-eyebrow">' + esc(bd.tagline || 'Woven for the way you live') + '</p><p class="auth-title">Welcome home</p>' +
+      '<p class="auth-text">Track your orders, save your addresses and check out faster — all in one place.</p></div>' +
+      '<p class="auth-foot">© ' + new Date().getFullYear() + ' ' + esc(name) + '</p></div>' +
+      '<div class="auth-panel"><div class="auth-box">' + inner + '<p class="auth-back"><a href="' + HW.link('/') + '">← Back to store</a></p></div></div></div>';
+  }
+  function authMsg(text, ok) {
+    var m = document.getElementById('authMsg');
+    if (!m) { u.toast(text); return; }
+    m.hidden = !text; m.className = 'form-msg ' + (ok ? 'ok' : 'err'); m.textContent = text || '';
+  }
 
   function prod(id) { return (HW.DB.products || []).find(function (p) { return p.id === id && !p.hidden; }); }
 
@@ -166,7 +194,9 @@
 
   function orderCard(o, i, email) {
     var link = HW.trackingUrl(o.carrier, o.tracking_number), a = o.shipping_address || {};
-    var pay = o.payment_status === 'authorized' ? 'Card approved — charged when we start preparing your order'
+    var pay = o.payment_status === 'cod' ? 'Cash on delivery — pay ' + u.money(o.total) + ' when it arrives'
+      : o.payment_method === 'cod' && o.payment_status === 'paid' ? 'Paid in cash on delivery'
+      : o.payment_status === 'authorized' ? 'Card approved — charged when we start preparing your order'
       : o.payment_status === 'voided' ? 'Card hold released — you weren’t charged'
       : o.payment_status === 'refunded' ? 'Refunded to your card'
       : o.payment_status === 'failed' ? 'Charging your card didn’t work — please contact us' : 'Paid by card';
@@ -189,6 +219,7 @@
       line('Subtotal', u.money(o.subtotal)) +
       (Number(o.discount) ? line('Discount' + (o.promo_code ? ' (' + esc(o.promo_code) + ')' : ''), '−' + u.money(o.discount), 'disc') : '') +
       line('Shipping', Number(o.shipping) ? u.money(o.shipping) : 'Free') +
+      (Number(o.cod_fee) ? line('Cash on delivery fee', u.money(o.cod_fee)) : '') +
       (Number(o.tax) ? line('Tax', u.money(o.tax)) : '') +
       line('Total', u.money(o.total), 'total') +
       '<p class="apay">' + icon('payments', 16) + ' ' + esc(pay) + '</p>' +
@@ -423,13 +454,39 @@
         u.session.set(PENDING, null);
         state.data = null;
         u.toast('You’re signed in');
-        var next = (function () { try { return new URLSearchParams(location.search).get('next'); } catch (e) { return ''; } })();
         await load(true).catch(function () {});
-        HW.router.navigate(next === 'checkout' ? '/checkout' : '/account');
+        HW.router.navigate(takeNext());
       } catch (e) {
         say(form, e.message + (e.data && e.data.triesLeft != null ? ' (' + e.data.triesLeft + ' tries left)' : ''));
         done(); form.elements.code.select();
       }
+    },
+
+    /* "Continue with Google": off to Google's own page; it comes back to /account/login with a signed ID token. */
+    google: function () {
+      var cid = googleId();
+      if (!cid) return;
+      var st = { state: randomToken(), nonce: randomToken() };
+      u.session.set(GKEY, st);
+      var q = new URLSearchParams({ client_id: cid, redirect_uri: location.origin + HW.link('/account/login'), response_type: 'id_token',
+        scope: 'openid email profile', nonce: st.nonce, state: st.state, prompt: 'select_account' });
+      location.assign('https://accounts.google.com/o/oauth2/v2/auth?' + q.toString());
+    },
+
+    finishGoogle: async function (q) {
+      var st = u.session.get(GKEY, null);
+      u.session.set(GKEY, null);
+      if (q.get('error')) { authMsg(q.get('error') === 'access_denied' ? 'Google sign-in was cancelled.' : 'Google sign-in didn’t work. Please try again or use your email.'); return; }
+      if (!st || !st.state || q.get('state') !== st.state || !q.get('id_token')) { authMsg('That Google sign-in expired. Please try again.'); return; }
+      authMsg('Signing you in…', true);
+      try {
+        var r = await post('/account/google', { id_token: q.get('id_token'), nonce: st.nonce });
+        u.store.set(KEY, { token: r.token, email: r.email, expires: r.expires });
+        state.data = null;
+        await load(true).catch(function () {});
+        u.toast('You’re signed in');
+        HW.router.navigate(takeNext(), { replace: true });
+      } catch (e) { authMsg(e.message); }
     },
 
     signOut: function (quiet) {
@@ -540,6 +597,9 @@
     var a = get(), pending = u.session.get(PENDING, null);
     var section = Object.prototype.hasOwnProperty.call(SECTIONS, params.section || '') ? (params.section || '') : null;
     var title = 'Your account';
+    if (a && section === null && params.section === 'login') {
+      return { html: '', seo: { title: 'Your account', noindex: true }, after: function () { HW.router.navigate(takeNext(), { replace: true }); } };
+    }
     if (a) {
       if (section === null) return HW.views.notfound();
       var d = state.data && state.email === a.email ? state.data : null;
@@ -560,7 +620,7 @@
         seo: { title: title, noindex: true, path: '/account' + (section ? '/' + section : '') },
         after: function () {
           paintHeader();
-          var open = d.orders.findIndex(function (o) { return HW.cancelLeft({ status: o.status, paid_at: o.paid_at, created_at: o.created_at }) > 0 && /^(paid|authorized)$/.test(o.payment_status); });
+          var open = d.orders.findIndex(function (o) { return HW.cancelLeft({ status: o.status, paid_at: o.paid_at, created_at: o.created_at }) > 0 && /^(paid|authorized|cod)$/.test(o.payment_status); });
           if (open > -1 && document.getElementById('cancelLeft' + (section === 'orders' && !params.id ? open : 0))) {
             HW.countdown('cancelLeft' + (section === 'orders' && !params.id ? open : 0), d.orders[open].paid_at);
           }
@@ -568,34 +628,46 @@
         }
       };
     }
-    var body;
-    var crumb = '<nav class="crumb" aria-label="Breadcrumb"><a href="' + HW.link('/') + '">Home</a> &nbsp;/&nbsp; <span aria-current="page">Your account</span></nav>';
+    /* Signed out: the sign-in page (split screen, header and footer hidden). */
+    var box;
     if (pending) {
-      body = '<h1>Check your email</h1>' +
-        '<form class="form panelbox" data-form="acct-code" novalidate aria-label="Enter your code">' +
-        '<p style="margin:0 0 12px">We’ve emailed a 6-digit code to <b>' + esc(pending) + '</b>. It works for 10 minutes — check your spam folder too.</p>' +
+      box = '<h1 class="auth-h">Check your email</h1>' +
+        '<p class="auth-sub">We’ve emailed a 6-digit code to <b>' + esc(pending) + '</b>. It works for 10 minutes — check your spam folder too.</p>' +
+        '<form class="form" data-form="acct-code" novalidate aria-label="Enter your code">' +
         '<div class="fld"><label for="ac_code">6-digit code</label><input class="acct-code" id="ac_code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required></div>' +
         '<p class="form-msg" role="status" hidden></p>' +
-        '<div class="btnrow"><button class="btn loom" type="submit">Sign in</button>' +
-        '<button class="linkbtn" type="button" data-act="acct-resend">Send a new code</button>' +
-        '<button class="linkbtn" type="button" data-act="acct-restart">Use a different email</button></div>' +
-        '<p class="muted" style="font-size:13px;margin:14px 0 0">No email after a minute? Check spam, check the address, or send a new code.</p>' +
-        '</form>';
+        '<button class="btn loom block" type="submit">Sign in</button>' +
+        '<div class="auth-links"><button class="linkbtn" type="button" data-act="acct-resend">Send a new code</button>' +
+        '<button class="linkbtn" type="button" data-act="acct-restart">Use a different email</button></div></form>';
     } else {
-      body = '<h1>Your account</h1>' +
-        '<p class="muted" style="margin:0 0 20px">See all your orders, follow deliveries and check out faster. There’s no password — we email you a one-time code. New here? The same step creates your account.</p>' +
-        '<form class="form panelbox" data-form="acct-email" novalidate aria-labelledby="acctHead">' +
-        '<h2 id="acctHead" style="font-size:24px;margin:0 0 4px;color:var(--ink)">Sign in or create an account</h2>' +
+      var gid = googleId();
+      box = '<h1 class="auth-h">Welcome back</h1>' +
+        '<p class="auth-sub">Sign in or create an account to track orders, save addresses and check out faster.</p>' +
+        '<p class="form-msg" id="authMsg" role="status" hidden></p>' +
+        (gid ? '<button class="gbtn" type="button" data-act="acct-google">' + GOOGLE_G + '<span>Continue with Google</span></button><div class="auth-or"><span>or</span></div>' : '') +
+        '<form class="form" data-form="acct-email" novalidate aria-label="Sign in with email">' +
         '<div class="fld"><label for="ac_email">Email</label><input id="ac_email" name="email" type="email" autocomplete="email" maxlength="254" required></div>' +
         '<p class="form-msg" role="status" hidden></p>' +
-        '<button class="btn loom" type="submit">Email me a code</button>' +
-        '</form>' +
-        '<p class="muted" style="font-size:13.5px;margin:16px 0 0">Already ordered as a guest? Use that email — your past orders appear automatically. No account needed to shop: guest checkout works as always, and you can <a class="link-u"' + linkStyle + ' href="' + HW.link('/page/track-your-order') + '">track one order</a> with its number and email.</p>';
+        '<button class="btn loom block" type="submit">Continue with email</button></form>' +
+        '<p class="auth-note">No password needed — we email you a 6-digit code. New here? The same step creates your account. Already ordered as a guest? Use that email and your orders appear automatically.</p>';
     }
+    if (section && section !== 'login' && SECTIONS[section]) u.session.set(NEXT, '/account/' + section);
+    else if (params.next === 'checkout') u.session.set(NEXT, '/checkout');
     return {
-      html: '<div class="wrap">' + crumb + '<div class="acct">' + body + '</div></div>',
-      seo: { title: title, noindex: true, path: '/account' },
-      after: function () { paintHeader(); var f = document.getElementById(pending ? 'ac_code' : 'ac_email'); if (f && pending) f.focus(); }
+      html: authShell(box),
+      seo: { title: 'Sign in', noindex: true, path: '/account/login' },
+      after: function () {
+        document.body.classList.add('auth-page');
+        paintHeader();
+        if (/[#&](id_token|error)=/.test(location.hash)) {
+          var q = new URLSearchParams(location.hash.slice(1));
+          // Take the token out of the address bar and history straight away.
+          history.replaceState(null, '', location.pathname + location.search);
+          HW.account.finishGoogle(q);
+          return;
+        }
+        var f = document.getElementById(pending ? 'ac_code' : 'ac_email'); if (f && pending) f.focus();
+      }
     };
   };
 })(window.HW = window.HW || {});

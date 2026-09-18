@@ -271,6 +271,22 @@ Links in emails carry only the order number, never the customer's email address.
 - Guest checkout works exactly as before; an account is simply "the orders placed with this email".
 - Nothing to set up beyond `RESEND_API_KEY`. Optional secret `CUSTOMER_SESSION_SECRET` (any long random text) — changing it signs every customer out.
 
+### Continue with Google (optional)
+No Google script runs on your pages: the button sends the shopper to Google's own sign-in page and back, and the server checks Google's signature. You only need a public **Client ID**:
+1. https://console.cloud.google.com → create a project (e.g. "Home Weavers website").
+2. **APIs & Services → OAuth consent screen** → External → app name *Home Weavers*, support email, your logo (optional) → scopes: `openid`, `email`, `profile` (no sensitive scopes, so no Google review) → **Publish app** (In production).
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID** → *Web application*.
+   - **Authorised JavaScript origins:** `https://rahul26hw.github.io`
+   - **Authorised redirect URIs:** `https://rahul26hw.github.io/Website/account/login`
+4. Copy the **Client ID** (ends in `.apps.googleusercontent.com`) → Admin › Storefront › **Customer accounts** → paste → **Save**. The button appears on the sign-in page. (There is no client secret to store.)
+If you move to your own domain later, add that origin and `https://yourdomain/account/login` in step 3.
+
+### Payment methods: card and cash on delivery
+Admin › Storefront › **Payment methods** has two switches:
+- **Card payments (Stripe)** — card, Apple Pay, Google Pay on Stripe's page (needs the Stripe secrets).
+- **Cash on delivery** — the courier collects cash. Set an optional fee (up to $50) and the largest COD order (bigger orders must pay by card); each email can place at most 3 COD orders a day. Before switching it on, check your carrier offers cash collection and update the Terms and Refund pages (they say you don't take COD).
+COD orders get the same 30-minute free cancellation, then go to ShipStation marked *Cash on delivery — collect $X*. When the cash is in, open the order in Admin and set **Payment** to **Paid**. With both switches off, checkout is closed.
+
 ### Cancellation window and accepting orders
 - After payment an order waits as **New**. For the first **30 minutes** (Admin › Storefront › *Free cancellation window*) the customer can cancel it themselves on the order page or on **Track your order**.
 - **Card now, charge later:** checkout only *approves* the card (card, Apple Pay, Google Pay). The card is charged when the order is accepted. A cancel inside the window just releases the hold, so it costs you no Stripe fee. If the charge fails when accepting, the order is marked **Charge failed** and is not sent to ShipStation.

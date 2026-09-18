@@ -13,7 +13,7 @@ const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIRS = ['category', 'product', 'page', 'account'];
-const ACCOUNT_SECTIONS = ['orders', 'wishlist', 'addresses', 'payments', 'notifications', 'returns', 'settings'];
+const ACCOUNT_SECTIONS = ['login', 'orders', 'wishlist', 'addresses', 'payments', 'notifications', 'returns', 'settings'];
 
 function loadLogic() {
   const ctx = { console };

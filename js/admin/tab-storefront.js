@@ -92,11 +92,24 @@
           '<p class="hint" style="margin:-6px 0 12px">Sign-ups always see their code on screen. To also email it, set up the AI worker with a free Brevo key (see README) and paste the worker URL here.</p>' +
           ui.field('Worker URL', 'newsletter.emailEndpoint', nl.emailEndpoint || '', { type: 'trim', placeholder: 'https://home-weavers-ai.yourname.workers.dev' }) + ui.saveBtn()) +
 
+        ui.panel('Customer accounts',
+          '<p class="hint" style="margin:-6px 0 12px">Customers sign in on <b>Your account</b> with a 6-digit code sent to their email — no passwords. ' +
+          'To add “Continue with Google”, create a free OAuth client ID in Google Cloud (steps: README › “Customer accounts”) and paste it here. It’s a public ID, not a secret.</p>' +
+          ui.field('Google sign-in client ID', 'settings.googleClientId', (d.settings || {}).googleClientId, { type: 'trim', placeholder: '1234567890-abc123.apps.googleusercontent.com',
+            hint: 'Authorised redirect URI in Google: ' + esc(location.origin + HW.link('/account/login')) + ' · Leave blank to hide the Google button.' })) +
+        ui.panel('Payment methods',
+          '<p class="hint" style="margin:-6px 0 12px">Switch each way to pay on or off, then press <b>Save</b>. With both off, checkout is closed.</p>' +
+          '<div class="switches">' +
+          ui.check('<b>Card payments (Stripe)</b><span class="hint">Card, Apple Pay and Google Pay on Stripe’s secure page. Needs the Stripe keys in Supabase — “Check server” below must show Stripe ready.</span>', 'payments.stripe', pay.stripe) +
+          ui.check('<b>Cash on delivery</b><span class="hint">The customer pays the courier in cash. Before switching on: make sure your carrier offers cash collection, and update the Terms and Refund pages (they currently say you don’t take cash on delivery).</span>', 'payments.cod', pay.cod) +
+          '</div>' +
+          '<div class="grid2">' +
+          ui.field('Cash on delivery fee ($)', 'payments.codFee', pay.codFee, { type: 'number', min: 0, hint: 'Added to COD orders. 0 = no fee. Up to $50.' }) +
+          ui.field('Largest order for cash on delivery ($)', 'payments.codMax', pay.codMax, { type: 'int', min: 1, hint: 'Bigger orders must pay by card. Each email can also place at most 3 COD orders a day.' }) +
+          '</div>') +
         ui.panel('Card payments (Stripe) &amp; ShipStation',
-          '<p class="hint" style="margin:-6px 0 12px">Shoppers pay on a secure Stripe page after checkout. Paid orders are sent to ShipStation, and when you ship there the carrier and tracking number come back to the order. ' +
+          '<p class="hint" style="margin:-6px 0 12px">Shoppers pay on a secure Stripe page after checkout. Paid orders (and cash-on-delivery orders) are sent to ShipStation, and when you ship there the carrier and tracking number come back to the order. ' +
           'All keys live in your Supabase Edge Function “hw” (Supabase › Edge Functions › Secrets) — never here. Setup steps: README › “Card payments and ShipStation”.</p>' +
-          ui.check('Take card payments with Stripe at checkout', 'payments.stripe', pay.stripe) +
-          '<p class="hint" style="margin:-4px 0 12px">While this is off, checkout is closed — the site takes no orders without payment.</p>' +
           ui.field('Free cancellation window (minutes)', 'settings.cancelMinutes', (d.settings || {}).cancelMinutes, { type: 'int', min: 0, max: 1440,
             hint: 'After payment the customer can cancel themselves for this long and get an automatic refund. The order is then sent to ShipStation by itself. 0 = no self-service cancelling.' }) +
           ui.field('Server address (optional)', 'payments.workerUrl', pay.workerUrl, { type: 'trim', placeholder: A.defaultWorkerUrl(),
