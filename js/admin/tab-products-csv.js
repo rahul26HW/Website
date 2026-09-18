@@ -295,9 +295,42 @@
 
   A._productCsv = { exportTable: exportTable, plan: plan }; // for tests
 
+  /* What each column means, in the admin (a CSV can't carry notes). */
+  var HELP = [
+    ['handle', 'The product’s web address (…/product/<b>handle</b>). Rows with the same handle are one product. For a new product, type any short name with dashes, e.g. <code>blue-bath-towel</code>. Don’t change it on existing products — it’s how the import finds them.'],
+    ['name', 'Product name shown in the store.'],
+    ['type', '<code>simple</code> (one SKU) or <code>collection</code> (colors × sizes, one row each).'],
+    ['category / subcategory', 'Must match names under Categories.'],
+    ['sku', 'Your SKU for this row.'],
+    ['color / size', 'Collections only: the color name and size name of this row.'],
+    ['color_hex', 'Collections only: the color’s dot as a hex code, e.g. <code>#5E86B5</code>. Only used when there’s no swatch or close-up photo.'],
+    ['price / sale_price', 'In dollars. Leave sale_price empty for no sale; type <code>none</code> to remove a sale.'],
+    ['stock', 'Quantity on hand (whole number).'],
+    ['images', 'Photo links for this SKU (https://…), separated by <code> | </code>. The first is the main photo.'],
+    ['color_images', 'Collections only: photos shared by every size of that color. Usually empty — images per row is enough.'],
+    ['description / features / care / material / origin', 'Product text. Features: one bullet per item, separated by <code> | </code>.'],
+    ['weight', 'Shipping weight in grams. Optional — not used by the current checkout.'],
+    ['badge', 'Small label on the product card, e.g. <code>New</code> or <code>Best seller</code> (optional).'],
+    ['featured', '<code>yes</code> puts it in “Featured this season” on the homepage.'],
+    ['hidden', '<code>yes</code> keeps it off the store (a draft) — handy for new products until photos are ready.'],
+    ['seo_title / seo_description', 'Optional title and summary for Google. Leave empty to use the name and description.'],
+    ['image_alt', 'Optional description of the main photo for screen readers and Google.']
+  ];
+  A.actions['products-csv-help'] = function () {
+    A.modal({
+      title: 'Product CSV columns',
+      body: '<p class="hint">One row per SKU. A blank cell keeps what’s there now; import never deletes products. Only <b>handle</b> is needed on every row — the other columns can be left out of the file.</p>' +
+        '<div class="tablewrap" style="max-height:420px;overflow:auto"><table class="vartable"><tbody>' +
+        HELP.map(function (h) { return '<tr><th scope="row" style="white-space:nowrap;vertical-align:top"><code>' + esc(h[0]) + '</code></th><td>' + h[1] + '</td></tr>'; }).join('') +
+        '</tbody></table></div>',
+      buttons: []
+    });
+  };
+
   A.productCsvButtons = function () {
     return '<button class="btn ghost sm" type="button" data-a="products-export" title="One row per SKU — opens in Excel or Google Sheets">⬇ Export CSV</button>' +
       '<button class="btn ghost sm" type="button" data-a="products-import">⬆ Import CSV</button>' +
-      '<button class="txtbtn" type="button" data-a="products-template">Template</button>';
+      '<button class="txtbtn" type="button" data-a="products-template">Template</button>' +
+      '<button class="txtbtn" type="button" data-a="products-csv-help">Columns?</button>';
   };
 })(window.HW = window.HW || {});

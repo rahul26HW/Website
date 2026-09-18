@@ -35,11 +35,22 @@
     return el ? el.value : 'card';
   }
 
-  function summaryHTML(t, pay) {
+  function formState() { var s = document.getElementById('co_state'); return s ? s.value : ((u.session.get(DRAFT, {}) || {}).state || ''); }
+
+  function summaryHTML(t, pay, st) {
     var fee = pay === 'cod' ? codFee() : 0;
+    if (st === undefined) st = formState();
+    var tx = HW.cart.tax(t, st, fee), taxOn = HW.cart.taxOn();
     return '<h2>Order summary</h2>' + t.lines.map(function (l) {
-      return '<div class="co-line"><div class="thumb"><img src="' + esc(HW.asset(HW.m.thumb(l.image))) + '" alt="" width="56" height="56" loading="lazy"><span class="qty" aria-label="Quantity ' + l.qty + '">' + l.qty + '</span></div>' +
-        '<div><div class="nm">' + esc(l.name) + '</div>' + (l.variant ? '<div class="vr">' + esc(l.variant) + '</div>' : '') + '</div>' +
+      var nm = esc(HW.seo.clip(l.name, 40));
+      return '<div class="co-line"><div class="thumb"><img src="' + esc(HW.asset(HW.m.thumb(l.image))) + '" alt="" width="56" height="56" loading="lazy"><span class="qty" aria-hidden="true">' + l.qty + '</span></div>' +
+        '<div><div class="nm">' + esc(l.name) + '</div>' + (l.variant ? '<div class="vr">' + esc(l.variant) + '</div>' : '') +
+        (!l.inStock ? '<div class="vr" style="color:var(--clay);font-weight:600">Out of stock — please remove</div>' : '') +
+        '<div class="co-qty"><div class="stepper sm" role="group" aria-label="Quantity for ' + nm + '">' +
+        '<button type="button" data-act="co-qty" data-key="' + esc(l.key) + '" data-d="-1" aria-label="Decrease quantity"' + (l.qty <= 1 ? ' disabled' : '') + '>–</button>' +
+        '<span aria-live="polite">' + l.qty + '</span>' +
+        '<button type="button" data-act="co-qty" data-key="' + esc(l.key) + '" data-d="1" aria-label="Increase quantity"' + (l.qty >= Math.min(l.max, 99) ? ' disabled' : '') + '>+</button></div>' +
+        '<button class="rm" type="button" data-act="co-remove" data-key="' + esc(l.key) + '">Remove<span class="sr-only"> ' + nm + '</span></button></div></div>' +
         '<div>' + u.money(l.price * l.qty) + '</div></div>';
     }).join('') +
       '<div style="margin-top:14px">' +
@@ -48,7 +59,9 @@
       (t.promo && !t.promoValid ? '<div class="promo-note err" style="margin:0 0 8px">' + esc(t.promoNote) + '</div>' : '') +
       '<div class="sumrow"><span>Shipping</span><span>' + (t.ship ? u.money(t.ship) : 'Free') + '</span></div>' +
       (fee ? '<div class="sumrow"><span>Cash on delivery fee</span><span>' + u.money(fee) + '</span></div>' : '') +
-      '<div class="sumrow total"><span>Total</span><span>' + u.money(t.total + fee) + '</span></div></div>' +
+      (taxOn ? '<div class="sumrow"><span>Sales tax' + (tx.rate ? ' <span class="muted">(' + esc(String(st).toUpperCase()) + ' ' + tx.rate + '%)</span>' : '') + '</span><span>' +
+        (!st ? '<span class="muted">Choose your state</span>' : tx.tax ? u.money(tx.tax) : u.money(0)) + '</span></div>' : '') +
+      '<div class="sumrow total"><span>Total</span><span>' + u.money(t.total + fee + tx.tax) + '</span></div></div>' +
       '<p class="muted" style="font-size:12.5px;margin:0">Ships in ' + esc(m.shippingDays()) + '. Final total is confirmed when you ' + (pay === 'cod' ? 'place the order' : 'continue to payment') + '.</p>';
   }
 
@@ -128,7 +141,8 @@
   };
 
   function submitLabel(pay, t) {
-    return pay === 'cod' ? 'Place order · ' + u.money(t.total + codFee()) + ' cash on delivery' : 'Continue to payment · ' + u.money(t.total);
+    var fee = pay === 'cod' ? codFee() : 0, total = t.total + fee + HW.cart.tax(t, formState(), fee).tax;
+    return pay === 'cod' ? 'Place order · ' + u.money(total) + ' cash on delivery' : 'Continue to payment · ' + u.money(total);
   }
 
   /* The payments server: the Supabase Edge Function "hw" unless the admin entered another address (e.g. a Cloudflare Worker). */
@@ -185,6 +199,28 @@
       return p.cod === true && /^https:\/\//.test(workerUrl()) && !(HW.snip && HW.snip.enabled());
     },
     /* Switching between card and cash on delivery updates the button and the total. */
+    /* Quantity +/− and Remove in the checkout summary. */
+    qty: function (btn) {
+      var key = btn.dataset.key, d = +btn.dataset.d;
+      if (!HW.cart.setQty(key, d)) return;
+      HW.checkout.refresh(d);
+      var again = document.querySelector('#coSummary [data-act="co-qty"][data-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"][data-d="' + d + '"]');
+      if (again && again.disabled) again = again.parentNode.querySelector('[data-d="' + (-d) + '"]');
+      if (again) again.focus();
+    },
+    remove: function (btn) {
+      var key = btn.dataset.key, l = HW.cart.lines().find(function (x) { return x.key === key; });
+      if (!l) return;
+      HW.cart.setQty(key, -l.qty);
+      u.toast('Removed ' + HW.seo.clip(l.name, 40));
+      HW.checkout.refresh();
+      var first = document.querySelector('#coSummary [data-act="co-qty"], #coSummary .rm'); if (first) first.focus();
+    },
+    refresh: function () {
+      var form = document.querySelector('form[data-form="checkout"]');
+      if (!HW.cart.lines().length) { HW.router.run({ scroll: false }); return; }
+      if (form) HW.checkout.payChanged(form);
+    },
     payChanged: function (form) {
       var t = HW.cart.totals(), pay = method(form);
       var b = document.getElementById('coSubmit'); if (b) b.textContent = submitLabel(pay, t);
@@ -397,6 +433,7 @@
         (o.discount > 0 ? '<div class="sumrow"><span class="disc">Discount</span><span class="disc">−' + u.money(o.discount) + '</span></div>' : '') +
         '<div class="sumrow"><span>Shipping</span><span>' + (o.shipping > 0 ? u.money(o.shipping) : 'Free') + '</span></div>' +
         (Number(o.cod_fee) > 0 ? '<div class="sumrow"><span>Cash on delivery fee</span><span>' + u.money(o.cod_fee) + '</span></div>' : '') +
+        (Number(o.tax) > 0 ? '<div class="sumrow"><span>Sales tax</span><span>' + u.money(o.tax) + '</span></div>' : '') +
         '<div class="sumrow total" style="margin-bottom:0"><span>Total</span><span>' + u.money(o.total) + '</span></div></div>' +
         '<a class="btn" href="' + HW.link('/') + '">Continue shopping</a> ' +
         '<a class="btn ghost" href="' + HW.link('/page/track-your-order') + '">Track your order</a>' +

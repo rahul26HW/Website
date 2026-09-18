@@ -132,6 +132,28 @@
         promo: promo, promoValid: promoValid, promoNote: promoNote, freeShip: freeShip, remaining: remaining, sh: sh };
     },
 
+    /* Sales tax for a state, worked out exactly like place_order (whole cents, rate per state from the admin). */
+    tax: function (t, state, fee) {
+      var tx = HW.DB.tax || {};
+      if (!tx.enabled || !state) return { tax: 0, rate: 0, known: !!tx.enabled && !!state };
+      var r = (tx.rates || []).find(function (x) { return String(x.state || '').toUpperCase() === String(state).toUpperCase(); });
+      var rate = r ? Math.min(Number(r.rate) || 0, 20) : 0;
+      if (!(rate > 0)) return { tax: 0, rate: 0, known: true };
+      var baseCents = Math.max(0, Math.round(t.sub * 100) - Math.round(t.discount * 100)) + (r.shipping === false ? 0 : Math.round(t.ship * 100));
+      return { tax: Math.round(baseCents * Math.round(rate * 1000) / 100000) / 100, rate: rate, known: true };
+    },
+    taxOn: function () { return !!(HW.DB.tax && HW.DB.tax.enabled && (HW.DB.tax.rates || []).length); },
+    /* Quantity change without the drawer's focus handling (used by the checkout summary). */
+    setQty: function (key, d) {
+      var l = state.lines.find(function (x) { return x.key === key; });
+      if (!l) return false;
+      var r = resolve(l), q = l.qty + d;
+      if (r && q > Math.min(r.max, 99)) { u.toast('Only ' + r.max + ' available.'); return false; }
+      if (q <= 0) state.lines = state.lines.filter(function (x) { return x.key !== key; }); else l.qty = q;
+      save(); cart.render();
+      return true;
+    },
+
     render: function () {
       var n = cart.count();
       var cc = document.getElementById('cartCount');
@@ -189,6 +211,7 @@
         (t.discount > 0 ? '<div class="sumrow"><span class="disc">Discount (' + esc(t.promo.code) + ')</span><span class="disc">−' + u.money(t.discount) + '</span></div>' : '') +
         '<div class="sumrow"><span>Shipping</span><span>' + (t.sh.enabled ? (t.ship ? u.money(t.ship) : 'Free') : 'Calculated at checkout') + '</span></div>' +
         '<div class="sumrow total"><span>Total</span><span>' + u.money(t.total) + '</span></div>' +
+        (cart.taxOn() ? '<p class="muted center" style="font-size:12px;margin:-4px 0 12px">Sales tax, if any, is added at checkout.</p>' : '') +
         (anyOut
           ? '<button class="btn loom block" type="button" disabled>Checkout</button><p class="muted center" style="font-size:12px;margin:12px 0 0">Remove out-of-stock items to continue.</p>'
           : '<a class="btn loom block" href="' + HW.link('/checkout') + '" data-act="cart-close">Checkout</a>');

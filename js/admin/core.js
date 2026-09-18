@@ -318,6 +318,14 @@
     });
     var sh = d.shipping || {};
     if (!(Number(sh.flatRate) >= 0) || !(Number(sh.freeThreshold) >= 0)) out.push('Shipping: the flat rate and the free-shipping amount must be numbers (0 or more).');
+    var seenTax = {};
+    ((d.tax || {}).rates || []).forEach(function (r) {
+      var st = String(r.state || '').toUpperCase(), rate = Number(r.rate);
+      if (!st) out.push('Sales tax: choose a state for every row (or remove the empty row).');
+      else if (seenTax[st]) out.push('Sales tax: ' + st + ' is listed twice.');
+      if (!(rate > 0 && rate <= 20)) out.push('Sales tax' + (st ? ' for ' + st : '') + ': the rate must be between 0.001 and 20 (%).');
+      seenTax[st] = 1;
+    });
     return out;
   };
 

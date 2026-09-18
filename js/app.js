@@ -109,6 +109,8 @@
     consent: function (el) { HW.consent.set(el.dataset.level); },
     'pay-order': function (el) { HW.checkout.payAgain(el); },
     'cancel-order': function (el) { HW.orderCancel.run(el); },
+    'co-qty': function (el) { HW.checkout.qty(el); },
+    'co-remove': function (el) { HW.checkout.remove(el); },
     'cancel-ask': function (el) { HW.orderCancel.request(el); },
     'acct-signout': function () { HW.account.signOut(); },
     'acct-restart': function () { HW.account.restart(); },
@@ -174,7 +176,7 @@
       else if (el.dataset.act === 'cf-num') HW.catalog.num(el);
       else if (el.dataset.act === 'sort') HW.catalog.sort(el);
       else if (el.dataset.act === 'acct-sub') HW.account.subscribe(el);
-      else if (el.name === 'pay' && el.closest('form[data-form="checkout"]')) HW.checkout.payChanged(el.closest('form'));
+      else if ((el.name === 'pay' || el.id === 'co_state') && el.closest('form[data-form="checkout"]')) HW.checkout.payChanged(el.closest('form'));
       else if (el.dataset.act === 'acct-ret-order') HW.account.returnOrder(el);
     });
     document.addEventListener('input', function (e) {

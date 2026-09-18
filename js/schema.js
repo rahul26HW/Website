@@ -63,6 +63,7 @@
       promos: [],
       newsletter: { couponCode: '', emailEndpoint: '' },
       shipping: { enabled: true, freeThreshold: 75, flatRate: 9.95 },
+      tax: { enabled: false, rates: [] },
       social: { facebook: '', instagram: '', pinterest: '' },
       payments: { stripe: false, cod: false, codFee: 0, codMax: 500, workerUrl: '', cancelMinutes: 30 },   // Stripe Checkout through the Cloudflare Worker (keys live in the worker)
       snipcart: { enabled: false, apiKey: '', currency: 'usd', version: '3.7.1', mode: 'side', feedUrl: '' },
