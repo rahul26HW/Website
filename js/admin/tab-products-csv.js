@@ -9,6 +9,27 @@
     'images', 'color_images', 'description', 'features', 'care', 'material', 'origin', 'weight', 'badge', 'featured', 'hidden',
     'seo_title', 'seo_description', 'image_alt'];
   var SEP = ' | ';
+  var MEDIA = 'https://soydgxrrwozmiqzutypr.supabase.co/storage/v1/object/public/media/products/';
+  /* Filled-in examples at the top of every export and template. Import skips any handle that starts with "example-". */
+  var SAMPLE = [
+    { handle: 'example-cotton-bath-towel', name: 'EXAMPLE – Cotton Bath Towel, Set of 2 – Blue', type: 'simple', category: 'Towels', subcategory: 'Towels',
+      sku: 'EX-TWL-BL', price: '34.00', sale_price: '29.99', stock: 25,
+      images: MEDIA + 'willow-collection-bath-towels-set-of-2-2/2026/twi2pc27bl-liv-mb2q2o.webp' + SEP + MEDIA + 'willow-collection-bath-towels-set-of-2-2/2026/twi2pc27bl-wbg-mj4pxs.webp',
+      description: 'Soft, absorbent cotton bath towels. (Sample row: copy it, change the handle, then fill in your product.)',
+      features: '100% cotton' + SEP + '630 GSM, thick and plush' + SEP + 'Size: 27 x 54 inches', care: 'Machine wash cold. Tumble dry low.',
+      material: '100% cotton', origin: 'India', weight: 1200, badge: 'New', featured: 'no', hidden: 'yes',
+      seo_title: 'Cotton Bath Towels, Set of 2', seo_description: 'Soft, absorbent 630 GSM cotton bath towels.', image_alt: 'Two folded blue cotton bath towels' },
+    { handle: 'example-bath-rug-collection', name: 'EXAMPLE – Striped Bath Rug', type: 'collection', category: 'Rugs', subcategory: 'Bath Rugs',
+      sku: 'EX-RUG-BL-2020', color: 'Blue', color_hex: '#5E86B5', size: '20"x20"', price: '19.99', stock: 10,
+      images: MEDIA + 'gradiation-rug-collection/2026/bgrd2020bl-s3wj4i.webp',
+      description: 'A collection: one row per color × size. Product details go on the first row; later rows only need handle, sku, color, size, price and stock.',
+      features: 'Soft cotton' + SEP + 'Non-slip backing', care: 'Machine wash cold.', material: '100% cotton', origin: 'India', featured: 'no', hidden: 'yes' },
+    { handle: 'example-bath-rug-collection', sku: 'EX-RUG-BL-2134', color: 'Blue', size: '21"x34"', price: '24.99', stock: 8,
+      images: MEDIA + 'gradiation-rug-collection/2026/bgrd2134bl-zz8k6x.webp' },
+    { handle: 'example-bath-rug-collection', sku: 'EX-RUG-PK-2020', color: 'Pink', color_hex: '#E8A9B4', size: '20"x20"', price: '19.99', stock: 0 }
+  ];
+  var isSample = function (h) { return /^example-/i.test(String(h || '').trim()); };
+  function sampleRows() { return SAMPLE.map(function (o) { return COLS.map(function (k) { return o[k] == null ? '' : o[k]; }); }); }
   var CLEAR = /^(none|clear|-)$/i;
 
   function isColl(p) { return Array.isArray(p.options) && p.options.some(function (o) { return o.type === 'color'; }) && p.options.some(function (o) { return o.type === 'size'; }); }
@@ -30,7 +51,7 @@
    * Export
    * ================================================================ */
   function exportTable() {
-    var d = A.draft, inv = d.inventory || {}, rows = [COLS.slice()];
+    var d = A.draft, inv = d.inventory || {}, rows = [COLS.slice()].concat(sampleRows());
     var stock = function (k) { return k && has(inv, k) ? inv[k] : ''; };
     d.products.forEach(function (p) {
       var c = d.categories.find(function (x) { return x.id === p.categoryId; });
@@ -64,16 +85,10 @@
     var rows = exportTable();
     // The BOM makes Excel read the file as UTF-8 (dashes, ×, curly quotes).
     A.download('home-weavers-products-' + A.today() + '.csv', '﻿' + A.toCsv(rows), 'text/csv;charset=utf-8');
-    u.toast('Exported ' + (rows.length - 1) + ' rows (one per SKU)');
+    u.toast('Exported ' + (rows.length - 1 - SAMPLE.length) + ' rows (one per SKU), with sample rows at the top');
   };
   A.actions['products-template'] = function () {
-    var ex = function (o) { return COLS.map(function (k) { return o[k] == null ? '' : o[k]; }); };
-    var rows = [COLS.slice(),
-      ex({ handle: 'my-new-towel', name: 'My New Towel', type: 'simple', category: 'Towels', sku: 'SKU-001', price: '24.99', stock: 10,
-        images: 'https://…/photo-1.webp | https://…/photo-2.webp', description: 'One or two sentences about it.', features: 'Soft | Absorbent', featured: 'no', hidden: 'yes' }),
-      ex({ handle: 'my-new-rug', name: 'My New Rug', type: 'collection', category: 'Rugs', subcategory: 'Bath Rugs', sku: 'RUG-BL-1724', color: 'Blue', color_hex: '#5E86B5', size: '17"x24"', price: '19.99', stock: 5, hidden: 'yes' }),
-      ex({ handle: 'my-new-rug', sku: 'RUG-BL-2032', color: 'Blue', size: '20"x32"', price: '24.99', stock: 5 })];
-    A.download('home-weavers-products-template.csv', '﻿' + A.toCsv(rows), 'text/csv;charset=utf-8');
+    A.download('home-weavers-products-template.csv', '\ufeff' + A.toCsv([COLS.slice()].concat(sampleRows())), 'text/csv;charset=utf-8');
   };
 
   /* ================================================================ *
@@ -99,7 +114,7 @@
     var unknown = head.filter(function (h) { return h && COLS.indexOf(h) < 0; });
 
     // Rows → objects; group by handle.
-    var groups = {}, order = [];
+    var groups = {}, order = [], samples = 0;
     table.slice(1).forEach(function (cells, i) {
       if (!cells.some(function (c) { return str(c); })) return;
       var r = { line: i + 2 };
@@ -108,6 +123,7 @@
         if (/^'[=+\-@]/.test(v)) v = v.slice(1); // undo the export's spreadsheet-formula guard
         r[h] = v;
       });
+      if (isSample(r.handle)) { samples++; return; }
       var h = u.slugify(r.handle || r.name).slice(0, 80);
       if (!h) { groups['#' + r.line] = { handle: '', rows: [r] }; order.push('#' + r.line); return; }
       if (!groups[h]) { groups[h] = { handle: h, rows: [] }; order.push(h); }
@@ -123,7 +139,7 @@
     var fileSkus = {};
 
     var out = order.map(function (key) { return build(groups[key], owner, fileSkus); });
-    return { groups: out, unknown: unknown };
+    return { groups: out, unknown: unknown, samples: samples };
   }
 
   function build(g, owner, fileSkus) {
@@ -275,6 +291,7 @@
       title: 'Product import: ' + file.name,
       body: '<p><b class="ok">' + good.length + ' product' + (good.length === 1 ? '' : 's') + ' ready</b> (' + nNew + ' new, ' + (good.length - nNew) + ' updated)' +
         (same0.length ? ' · ' + same0.length + ' unchanged' : '') + (bad.length ? ' · <b class="bad">' + bad.length + ' with errors (skipped)</b>' : '') + '</p>' +
+        (pl.samples ? '<p class="hint">' + pl.samples + ' sample row' + (pl.samples === 1 ? '' : 's') + ' (handle starting with “example-”) skipped.</p>' : '') +
         (pl.unknown.length ? '<p class="hint">Ignored columns: ' + pl.unknown.map(esc).join(', ') + '</p>' : '') +
         '<div class="tablewrap" style="max-height:360px;overflow:auto"><table class="vartable"><thead><tr><th>Lines</th><th>Product</th><th>Result</th></tr></thead><tbody>' +
         bad.concat(good, same0).map(row).join('') + '</tbody></table></div>' +
@@ -320,8 +337,12 @@
     A.modal({
       title: 'Product CSV columns',
       body: '<p class="hint">One row per SKU. A blank cell keeps what’s there now; import never deletes products. Only <b>handle</b> is needed on every row — the other columns can be left out of the file.</p>' +
-        '<div class="tablewrap" style="max-height:420px;overflow:auto"><table class="vartable"><tbody>' +
-        HELP.map(function (h) { return '<tr><th scope="row" style="white-space:nowrap;vertical-align:top"><code>' + esc(h[0]) + '</code></th><td>' + h[1] + '</td></tr>'; }).join('') +
+        '<p class="hint">Every export and the template start with filled-in <b>sample rows</b> (handles starting with <code>example-</code>). Copy one, change the handle and the values, and upload — the samples themselves are always skipped.</p>' +
+        '<div class="tablewrap" style="max-height:420px;overflow:auto"><table class="vartable"><thead><tr><th>Column</th><th>What it is</th><th>Example</th></tr></thead><tbody>' +
+        HELP.map(function (h) {
+          var ex = h[0].split(' / ').map(function (k) { var v = SAMPLE[0][k] != null && SAMPLE[0][k] !== '' ? SAMPLE[0][k] : SAMPLE[1][k]; return v == null || v === '' ? '' : HW.seo.clip(String(v).replace(MEDIA, 'https://…/'), 60); }).filter(Boolean).join(' / ');
+          return '<tr><th scope="row" style="white-space:nowrap;vertical-align:top"><code>' + esc(h[0]) + '</code></th><td>' + h[1] + '</td><td style="vertical-align:top"><code>' + esc(ex) + '</code></td></tr>';
+        }).join('') +
         '</tbody></table></div>',
       buttons: []
     });
