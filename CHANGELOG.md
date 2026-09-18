@@ -14,6 +14,8 @@
 ### Customer sign-up
 - Anyone can create an account: "Sign in or create an account" takes any email and sends a 6-digit code — sign-up and sign-in are the same step, still no passwords. A new account shows "no orders yet"; orders placed with that email (as a guest before, or later) appear automatically.
 - New emails share a daily cap (50 codes a day, secret `LOGIN_NEW_PER_DAY` to change it) so sign-ups can never use up the email quota order emails need; customers who already have orders are never capped. The per-email (5/hour) and per-IP (20/hour) limits still apply.
+- Faster: the code request runs its database look-ups together (live: about 1.5–2 s, first request after a quiet period about 3 s; was 3.4–6 s). Buttons show “Sending your code…” / “Signing in…” while waiting.
+- Verified live (real emails via Resend): new email signs up and sees “no orders yet”; existing customer sees their order and saved address; wrong code refused with tries left; a used code can’t be reused; sign out clears the device.
 - Code emails say why they were sent ("someone asked to sign in … with this address").
 - 114 server tests (3 new), passing directly and through the Edge wrapper.
 
