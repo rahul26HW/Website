@@ -109,7 +109,8 @@
       });
       u.toast(on ? 'Saved to your wishlist' : 'Removed from your wishlist');
       wish.renderCount();
-      if (HW.router.current.name === 'wishlist' && !on) HW.router.run({ scroll: false });
+      var cur = HW.router.current || {};
+      if (!on && (cur.name === 'wishlist' || cur.name === 'account' && (cur.params || {}).section === 'wishlist')) HW.router.run({ scroll: false });
     },
     renderCount: function () {
       var valid = wish.ids().filter(function (id) { return (HW.DB.products || []).some(function (p) { return p.id === id && !p.hidden; }); });

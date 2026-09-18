@@ -25,7 +25,11 @@
      POST /email/test           Send a sample order email to the signed-in admin           (admins only)
      POST /account/code         Customer sign-in / sign-up: email a 6-digit code
      POST /account/verify       Customer sign-in: check the code → signed 30-day session (no passwords)
-     POST /account/orders       Signed-in customer's own orders (Authorization: Bearer <session>)
+     POST /account/orders       Signed-in customer's orders, profile, saved addresses (Authorization: Bearer <session>)
+     POST /account/profile      Signed-in customer: name, phone, saved addresses, email updates on/off
+     POST /account/return       Signed-in customer: ask to return a shipped order
+     POST /account/signout-all  Signed-in customer: end every session
+     POST /account/delete       Signed-in customer: delete profile, addresses and email sign-up (orders are kept)
      GET  /          Health check (lists which features are set up — never the keys)
 
    "Admins only" = the request must carry the signed-in admin's Supabase
@@ -88,6 +92,10 @@ const handler = {
         case "/account/code": return await handleAccountCode(request, env, cors);
         case "/account/verify": return await handleAccountVerify(request, env, cors);
         case "/account/orders": return await handleAccountOrders(request, env, cors);
+        case "/account/profile": return await handleAccountProfile(request, env, cors);
+        case "/account/return": return await handleAccountReturn(request, env, cors);
+        case "/account/signout-all": return await handleAccountSignoutAll(request, env, cors);
+        case "/account/delete": return await handleAccountDelete(request, env, cors);
         default: return json({ error: "Not found" }, 404, cors);
       }
     } catch (e) {
@@ -912,7 +920,7 @@ function button(href, label) {
   return `<p style="margin:18px 0"><a href="${esc(href)}" style="display:inline-block;background:#2C463F;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:4px;font-size:14px;letter-spacing:.04em">${esc(label)}</a></p>`;
 }
 
-/* kind: received | accepted | shipped | cancelled | refunded */
+/* kind: received | accepted | shipped | cancelled | refunded | return */
 function buildOrderEmail(kind, order, data, extra = {}) {
   const brand = (data.brand && data.brand.name) || "Home Weavers";
   const site = String((data.settings && data.settings.siteUrl) || "").replace(/\/?$/, "/");
@@ -961,6 +969,15 @@ function buildOrderEmail(kind, order, data, extra = {}) {
     title = "Your refund is on its way";
     body = hi + p(`We’ve refunded ${extra.amount != null ? "<b>" + money(extra.amount) + "</b>" : "your payment"} for order <b>${num}</b> to your original payment method. It usually shows up in 5–10 business days.`);
     text = `We've refunded ${extra.amount != null ? money(extra.amount) : "your payment"} for order ${order.order_number}. Allow 5–10 business days.`;
+  } else if (kind === "return") {
+    const items = (extra.items || []).map((i) => `<li style="font-size:14px;line-height:1.6">${esc(i)}</li>`).join("");
+    subject = `We’ve got your return request for ${order.order_number}`;
+    title = "Your return request";
+    body = hi + p(`Thanks — we’ve received your request to return items from order <b>${num}</b>:`) +
+      (items ? `<ul style="margin:0 0 12px;padding-left:20px">${items}</ul>` : "") +
+      p(`We’ll reply within one business day with how to send them back. Please keep them unused and unwashed, with their tags.`) +
+      button(site + "account/returns", "See your returns");
+    text = `We've received your return request for order ${order.order_number}. We'll reply within one business day with how to send it back.`;
   } else {
     return null;
   }
@@ -1117,39 +1134,186 @@ async function handleAccountVerify(request, env, cors) {
   const used = await db(env, "customer_login_codes?id=eq." + row.id + "&used_at=is.null", { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ used_at: now }) });
   if (!Array.isArray(used) || !used.length) return wrong();
   const exp = Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400;
-  const payload = b64url(enc.encode(JSON.stringify({ e: email, x: exp, n: b64url(crypto.getRandomValues(new Uint8Array(9))) })));
+  const payload = b64url(enc.encode(JSON.stringify({ e: email, x: exp, i: Date.now(), n: b64url(crypto.getRandomValues(new Uint8Array(9))) })));
   const token = payload + "." + b64url(await hmacBytes(key, "session:" + payload));
   return json({ ok: true, token, email, expires: new Date(exp * 1000).toISOString() }, 200, cors);
 }
 
-/* The email of a valid customer session, or null. */
-async function customerEmail(request, env) {
+/* A valid customer session → { email, profile } (profile may be null), or null.
+   Sessions issued before the profile's signed_out_at ("Sign out on all devices", "Delete account") are refused. */
+async function customerSession(request, env) {
   const m = /^Bearer\s+([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(request.headers.get("Authorization") || "");
   if (!m) return null;
   const expect = b64url(await hmacBytes(await accountKey(env), "session:" + m[1]));
   if (!safeEqual(expect, m[2])) return null;
-  try {
-    const p = JSON.parse(atob(m[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return p && EMAIL_RE.test(p.e || "") && Number(p.x) * 1000 > Date.now() ? p.e : null;
-  } catch { return null; }
+  let p;
+  try { p = JSON.parse(atob(m[1].replace(/-/g, "+").replace(/_/g, "/"))); } catch { return null; }
+  if (!p || !EMAIL_RE.test(p.e || "") || !(Number(p.x) * 1000 > Date.now())) return null;
+  const rows = await db(env, "customer_profiles?email=eq." + encodeURIComponent(p.e) + "&select=first_name,last_name,phone,addresses,signed_out_at&limit=1");
+  const profile = Array.isArray(rows) && rows[0] ? rows[0] : null;
+  if (profile && profile.signed_out_at && !(Number(p.i || 0) > Date.parse(profile.signed_out_at))) return null;
+  return { email: p.e, profile };
+}
+const signedOut = (cors) => json({ error: "Please sign in again.", signedOut: true }, 401, cors);
+
+function publicProfile(profile) {
+  const pr = profile || {};
+  return { first_name: pr.first_name || "", last_name: pr.last_name || "", phone: pr.phone || "", addresses: Array.isArray(pr.addresses) ? pr.addresses : [] };
 }
 
+/* POST /account/orders — everything the account panel shows: orders, profile, saved addresses, email updates. */
 async function handleAccountOrders(request, env, cors) {
   if (!features(env).database) return json({ error: "Sign-in isn’t available right now." }, 501, cors);
-  const email = await customerEmail(request, env);
-  if (!email) return json({ error: "Please sign in again.", signedOut: true }, 401, cors);
+  const s = await customerSession(request, env);
+  if (!s) return signedOut(cors);
   // Only what the customer needs to see: no internal ids, notes, payment references or tokens.
-  const cols = "order_number,created_at,paid_at,status,payment_status,subtotal,discount,shipping,tax,total,promo_code,carrier,tracking_number,shipped_at,cancel_requested_at,name,phone,shipping_address,order_items(name,variant,qty,image,line_total)";
-  const rows = await db(env, "orders?email=eq." + encodeURIComponent(email) + "&payment_status=in." + PAID_STATES + "&select=" + cols + "&order=created_at.desc&limit=50");
+  const cols = "order_number,created_at,paid_at,accepted_at,shipped_at,cancelled_at,status,payment_status,subtotal,discount,shipping,tax,total,promo_code," +
+    "carrier,tracking_number,cancel_requested_at,return_requested_at,return_reason,name,phone,shipping_address,order_items(name,variant,qty,unit_price,image,line_total)";
+  const [rows, subs] = await Promise.all([
+    db(env, "orders?email=eq." + encodeURIComponent(s.email) + "&payment_status=in." + PAID_STATES + "&select=" + cols + "&order=created_at.desc&limit=50"),
+    db(env, "subscribers?email=eq." + encodeURIComponent(s.email) + "&select=id&limit=1"),
+  ]);
   const list = Array.isArray(rows) ? rows : [];
   const last = list[0];
-  const profile = last ? { name: last.name || "", phone: last.phone || "", address: last.shipping_address || {} } : null;
+  const lastAddress = last ? { name: last.name || "", phone: last.phone || "", address: last.shipping_address || {} } : null;
   const orders = list.map((o) => {
     const c = Object.assign({}, o, { items: o.order_items || [] });
-    delete c.order_items; delete c.name; delete c.phone; delete c.shipping_address;
+    delete c.order_items;
     return c;
   });
-  return json({ ok: true, email, orders, profile }, 200, cors);
+  return json({ ok: true, email: s.email, orders, profile: publicProfile(s.profile), lastAddress, subscribed: Array.isArray(subs) && subs.length > 0 }, 200, cors);
+}
+
+const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
+const str = (v, max) => String(v == null ? "" : v).replace(/[ -]/g, " ").trim().slice(0, max);
+
+/* One saved address, checked and trimmed; throws a shopper-friendly message. */
+function cleanAddress(a, i) {
+  const out = {
+    id: /^[A-Za-z0-9-]{1,40}$/.test(String(a && a.id || "")) ? String(a.id) : crypto.randomUUID(),
+    label: str(a && a.label, 40),
+    name: str(a && a.name, 120), phone: str(a && a.phone, 40),
+    line1: str(a && a.line1, 200), line2: str(a && a.line2, 200), city: str(a && a.city, 100),
+    state: str(a && a.state, 2).toUpperCase(), zip: str(a && a.zip, 10), country: "US",
+    is_default: !!(a && a.is_default),
+  };
+  const n = "Address " + (i + 1) + ": ";
+  if (!out.name) throw new Error(n + "enter the full name.");
+  if (!out.line1 || !out.city) throw new Error(n + "enter the street address and city.");
+  if (!US_STATES.includes(out.state)) throw new Error(n + "choose a US state.");
+  if (!/^\d{5}(-\d{4})?$/.test(out.zip)) throw new Error(n + "enter a 5-digit ZIP code.");
+  return out;
+}
+
+/* POST /account/profile { first_name?, last_name?, phone?, addresses?, subscribed? } — only the fields sent are changed. */
+async function handleAccountProfile(request, env, cors) {
+  if (!features(env).database) return json({ error: "Your account isn’t available right now." }, 501, cors);
+  const s = await customerSession(request, env);
+  if (!s) return signedOut(cors);
+  const body = await readJson(request);
+  const patch = {};
+  if ("first_name" in body) patch.first_name = str(body.first_name, 60) || null;
+  if ("last_name" in body) patch.last_name = str(body.last_name, 60) || null;
+  if ("phone" in body) patch.phone = str(body.phone, 40) || null;
+  if ("addresses" in body) {
+    if (!Array.isArray(body.addresses) || body.addresses.length > 10) return json({ error: "You can save up to 10 addresses." }, 400, cors);
+    try { patch.addresses = body.addresses.map(cleanAddress); } catch (e) { return json({ error: e.message }, 400, cors); }
+    // Exactly one default (the first one if none was chosen).
+    const d = Math.max(0, patch.addresses.findIndex((a) => a.is_default));
+    patch.addresses.forEach((a, i) => { a.is_default = i === d; });
+  }
+  let profile = s.profile;
+  if (Object.keys(patch).length) {
+    const rows = await db(env, "customer_profiles?on_conflict=email", {
+      method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(Object.assign({ email: s.email }, patch)),
+    });
+    profile = Array.isArray(rows) && rows[0] ? rows[0] : Object.assign({}, profile, patch);
+  }
+  let subscribed;
+  if ("subscribed" in body) {
+    if (body.subscribed) {
+      await db(env, "subscribers?on_conflict=email", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ email: s.email, source: "account" }) });
+      subscribed = true;
+    } else {
+      await db(env, "subscribers?email=eq." + encodeURIComponent(s.email), { method: "DELETE" });
+      subscribed = false;
+    }
+  }
+  return json({ ok: true, profile: publicProfile(profile), subscribed }, 200, cors);
+}
+
+/* POST /account/signout-all — ends every session for this email (this one too). */
+async function handleAccountSignoutAll(request, env, cors) {
+  if (!features(env).database) return json({ error: "Not available right now." }, 501, cors);
+  const s = await customerSession(request, env);
+  if (!s) return signedOut(cors);
+  await db(env, "customer_profiles?on_conflict=email", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ email: s.email, signed_out_at: new Date().toISOString() }) });
+  return json({ ok: true }, 200, cors);
+}
+
+/* POST /account/delete — removes the profile, saved addresses and email sign-up, and ends every session.
+   Orders stay (needed for taxes, returns and warranty), as the Privacy Policy explains. */
+async function handleAccountDelete(request, env, cors) {
+  if (!features(env).database) return json({ error: "Not available right now." }, 501, cors);
+  const s = await customerSession(request, env);
+  if (!s) return signedOut(cors);
+  await Promise.all([
+    db(env, "customer_profiles?on_conflict=email", {
+      method: "POST", headers: { Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({ email: s.email, first_name: null, last_name: null, phone: null, addresses: [], signed_out_at: new Date().toISOString() }),
+    }),
+    db(env, "subscribers?email=eq." + encodeURIComponent(s.email), { method: "DELETE" }),
+    db(env, "customer_login_codes?email=eq." + encodeURIComponent(s.email), { method: "DELETE" }),
+  ]);
+  return json({ ok: true }, 200, cors);
+}
+
+const RETURN_REASONS = ["Doesn’t fit or wrong size", "Not as described or pictured", "Arrived damaged or defective", "Wrong item sent", "Changed my mind", "Other"];
+const RETURN_DAYS = 45; // from shipping; the policy gives 30 days from delivery
+
+/* POST /account/return { order_number, reason, items: [index…], details } — asks us to take a shipped order back. */
+async function handleAccountReturn(request, env, cors) {
+  if (!features(env).database) return json({ error: "Returns can’t be requested here right now. Please contact us." }, 501, cors);
+  const s = await customerSession(request, env);
+  if (!s) return signedOut(cors);
+  const body = await readJson(request);
+  const number = String(body.order_number || "").trim().toUpperCase();
+  if (!/^[A-Z]{2,4}-\d{1,12}$/.test(number)) return json({ error: "Order not found" }, 404, cors);
+  if (!RETURN_REASONS.includes(body.reason)) return json({ error: "Choose a reason for the return." }, 400, cors);
+  const order = await loadOrder(env, "order_number=eq." + encodeURIComponent(number) + "&email=eq." + encodeURIComponent(s.email));
+  if (!order) return json({ error: "Order not found" }, 404, cors);
+  if (order.return_requested_at) return json({ ok: true, already: true, return_requested_at: order.return_requested_at }, 200, cors);
+  if (!/^(shipped|delivered)$/.test(order.status) || order.payment_status !== "paid") return json({ error: "This order can’t be returned here. Please contact us." }, 409, cors);
+  const shipped = Date.parse(order.shipped_at || order.accepted_at || order.created_at);
+  if (!(shipped > Date.now() - RETURN_DAYS * 86400000)) return json({ error: "The return window for this order has passed. Please contact us and we’ll see what we can do." }, 409, cors);
+  const items = order.order_items || [];
+  const picked = (Array.isArray(body.items) ? body.items : []).map(Number).filter((i) => Number.isInteger(i) && items[i]);
+  if (!picked.length) return json({ error: "Choose at least one item to return." }, 400, cors);
+  const names = [...new Set(picked)].map((i) => items[i].name + (items[i].variant ? " (" + items[i].variant + ")" : "") + " × " + items[i].qty);
+  const text = ("Reason: " + body.reason + ". Items: " + names.join("; ") + "." + (str(body.details, 500) ? " Details: " + str(body.details, 500) : "")).slice(0, 1000);
+  const rows = await patchOrder(env, "id=eq." + order.id + "&return_requested_at=is.null", { return_requested_at: new Date().toISOString(), return_reason: text });
+  if (!Array.isArray(rows) || !rows.length) return json({ ok: true, already: true }, 200, cors);
+  const fresh = Object.assign({}, order, rows[0]);
+  await Promise.all([sendOrderEmail(env, "return", fresh, { items: names }), notifyStore(env, "Return requested: " + order.order_number, order.order_number + " (" + s.email + ")\n" + text + "\n\nOpen Admin › Orders to handle it.")]);
+  return json({ ok: true, return_requested_at: fresh.return_requested_at }, 200, cors);
+}
+
+/* A plain note to the store's own contact email (Admin › Storefront). Never blocks the customer's request. */
+async function notifyStore(env, subject, text) {
+  if (!env.RESEND_API_KEY) return false;
+  try {
+    const data = await storeData(env);
+    const to = env.EMAIL_REPLY_TO || (data.contact && data.contact.email);
+    if (!to || !EMAIL_RE.test(to)) return false;
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json", "Idempotency-Key": "store-" + subject.replace(/[^\w-]/g, "").slice(0, 60) },
+      body: JSON.stringify({ from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT, to: [to], subject, text }),
+    });
+    if (!res.ok) console.error("store email failed", res.status);
+    return res.ok;
+  } catch (e) { console.error("store email failed", e && e.message); return false; }
 }
 
 

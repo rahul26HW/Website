@@ -113,6 +113,7 @@
     if (wl) wl.setAttribute('href', HW.link('/wishlist'));
     var al = document.getElementById('acctLink');
     if (al) al.setAttribute('href', HW.link('/account'));
+    if (HW.account) HW.account.paintHeader();
     if (HW.wishlist) HW.wishlist.renderCount();
     if (HW.cart) HW.cart.render();
   };

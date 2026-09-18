@@ -140,6 +140,7 @@
   }
 
   HW.checkout = {
+    states: function () { return STATES; },
     /* Card payments are on when the admin turned Stripe on and gave a worker address (and Snipcart is off). */
     cardPayments: function () {
       var p = (HW.DB && HW.DB.payments) || {};

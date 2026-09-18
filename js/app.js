@@ -112,6 +112,15 @@
     'acct-signout': function () { HW.account.signOut(); },
     'acct-restart': function () { HW.account.restart(); },
     'acct-resend': function (el) { HW.account.resend(el); },
+    'acct-signout-all': function (el) { HW.account.signOutAll(el); },
+    'acct-delete': function (el) { HW.account.remove(el); },
+    'acct-read': function () { HW.account.markRead(); },
+    'acct-addr-new': function () { HW.account.addr.edit(); },
+    'acct-addr-edit': function (el) { HW.account.addr.edit(el.dataset.id); },
+    'acct-addr-cancel': function () { HW.account.addr.cancel(); },
+    'acct-addr-default': function (el) { HW.account.addr.setDefault(el); },
+    'acct-addr-del': function (el) { HW.account.addr.remove(el); },
+    'acct-addr-import': function (el) { HW.account.addr.importLast(el); },
     reload: function () { location.reload(); },
     'consent-settings': function () { HW.consent.show(); var b = document.querySelector('#cookieBanner button'); if (b) b.focus(); }
   };
@@ -124,6 +133,9 @@
     track: function (f) { HW.track.submit(f); },
     'acct-email': function (f) { HW.account.sendCode(f); },
     'acct-code': function (f) { HW.account.verify(f); },
+    'acct-profile': function (f) { HW.account.saveSettings(f); },
+    'acct-address': function (f) { HW.account.addr.save(f); },
+    'acct-return': function (f) { HW.account.requestReturn(f); },
 
     notify: function (f) { HW.pdp.notify(f); },
     search: function (f) {
@@ -153,6 +165,8 @@
       if (el.dataset.act === 'cf') HW.catalog.toggle(el);
       else if (el.dataset.act === 'cf-num') HW.catalog.num(el);
       else if (el.dataset.act === 'sort') HW.catalog.sort(el);
+      else if (el.dataset.act === 'acct-sub') HW.account.subscribe(el);
+      else if (el.dataset.act === 'acct-ret-order') HW.account.returnOrder(el);
     });
     document.addEventListener('input', function (e) {
       var el = e.target;

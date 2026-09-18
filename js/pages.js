@@ -177,6 +177,7 @@
         var r = await HW.cancelOrder(number, email);
         var last = u.session.get('hw:lastOrder', null);
         if (last && last.order_number === number) { last.cancelled = true; last.paid = false; u.session.set('hw:lastOrder', last); }
+        if (HW.account) HW.account.invalidate();
         u.toast(r.voided ? 'Order cancelled — you haven’t been charged' : r.refunded ? 'Order cancelled — your refund is on its way' : 'Order cancelled');
         HW.router.run({ scroll: false });
       } catch (e) {
@@ -196,6 +197,7 @@
         var r = await HW.api.rpc('request_cancel', { p_number: number, p_email: email, p_reason: reason.trim() });
         msg.hidden = false;
         if (r && r.ok) {
+          if (HW.account) HW.account.invalidate();
           msg.className = 'form-msg ok';
           msg.textContent = 'Thanks — we’ve asked our team to cancel this order. We’ll email you. If it has already shipped, you can return it instead.';
           box.querySelector('.cancel-fields').hidden = true;

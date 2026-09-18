@@ -27,6 +27,7 @@
 
   function orderList() {
     var asked = (os.list || []).filter(function (o) { return o.cancel_requested_at && !/^(cancelled|refunded|shipped|delivered)$/.test(o.status); });
+    var returns = (os.list || []).filter(function (o) { return o.return_requested_at && !/^(cancelled|refunded)$/.test(o.status); });
     if (!os.list) return '<h1>Orders</h1><p class="hint">Loading orders…</p>';
     var q = os.q.toLowerCase();
     var shown = os.list.filter(function (o) {
@@ -41,6 +42,8 @@
       (os.error ? '<p class="badmsg">Couldn’t load orders: ' + esc(os.error) + '</p>' : '') +
       (asked.length ? '<div class="adwarn"><b>' + asked.length + ' cancellation request' + (asked.length > 1 ? 's' : '') + ':</b> ' +
         asked.map(function (o) { return esc(o.order_number); }).join(', ') + ' — open the order to see why.</div>' : '') +
+      (returns.length ? '<div class="adwarn"><b>' + returns.length + ' return request' + (returns.length > 1 ? 's' : '') + ':</b> ' +
+        returns.map(function (o) { return esc(o.order_number); }).join(', ') + ' — open the order for the items and reason.</div>' : '') +
       '<section class="panel"><div class="toolbar"><div class="subnav">' +
       [['all', 'All']].concat(STATUSES).map(function (s) {
         return '<button type="button" class="chip' + (os.filter === s[0] ? ' active' : '') + '" data-a="orders-filter" data-f="' + s[0] + '" aria-pressed="' + (os.filter === s[0]) + '">' + s[1] + ' (' + counts[s[0]] + ')</button>';
@@ -128,6 +131,11 @@
         (o.cancel_reason ? ': “' + esc(o.cancel_reason) + '”' : '') +
         (/^(shipped|delivered|cancelled|refunded)$/.test(o.status) ? '' : ' — if you agree, refund it in Stripe and set the status to Cancelled.') + '</div>'
       : '';
+    if (o.return_requested_at) {
+      asked += '<div class="adwarn" style="margin:10px 0 0"><b>Customer asked to return items</b> on ' + esc(new Date(o.return_requested_at).toLocaleString()) +
+        (o.return_reason ? ': “' + esc(o.return_reason) + '”' : '') +
+        (/^(refunded|cancelled)$/.test(o.status) ? '' : ' — email them how to send it back; when it arrives, refund in Stripe (the order changes to Refunded by itself).') + '</div>';
+    }
     // Once shipped (or refunded) the order is final in ShipStation; sending it again would reset it to "awaiting shipment".
     var btn = /^(shipped|delivered|refunded)$/.test(o.status) ? ''
       : o.status === 'cancelled'

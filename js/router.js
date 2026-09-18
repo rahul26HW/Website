@@ -58,7 +58,7 @@
       case 'order': return parts[1] ? { name: 'order', params: { number: parts[1] } } : { name: 'notfound', params: {} };
       case 'search': return { name: 'search', params: { q: q.q || '' } };
       case 'wishlist': return { name: 'wishlist', params: {} };
-      case 'account': return { name: 'account', params: q };
+      case 'account': return { name: 'account', params: Object.assign({}, q, { section: parts[1] || '', id: parts[2] || '' }) };
       default: return { name: 'notfound', params: {} };
     }
   };

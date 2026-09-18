@@ -12,7 +12,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '..');
-const DIRS = ['category', 'product', 'page'];
+const DIRS = ['category', 'product', 'page', 'account'];
+const ACCOUNT_SECTIONS = ['orders', 'wishlist', 'addresses', 'payments', 'notifications', 'returns', 'settings'];
 
 function loadLogic() {
   const ctx = { console };
@@ -117,6 +118,15 @@ async function main() {
       .replace(/<title>[^<]*<\/title>/, '<title>' + attr(r.charAt(0).toUpperCase() + r.slice(1) + ' | ' + brand) + '</title>')
       .replace(/(<meta name="description"[^>]*>)/, '$1\n<meta name="robots" content="noindex">');
     fs.writeFileSync(path.join(ROOT, r + '.html'), html);
+  });
+
+  ACCOUNT_SECTIONS.forEach(function (sec) {
+    const html = index
+      .replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|tel:)/g, '$1../')
+      .replace(/<title>[^<]*<\/title>/, '<title>' + attr(sec.charAt(0).toUpperCase() + sec.slice(1) + ' | ' + brand) + '</title>')
+      .replace(/(<meta name="description"[^>]*>)/, '$1\n<meta name="robots" content="noindex">');
+    fs.mkdirSync(path.join(ROOT, 'account'), { recursive: true });
+    fs.writeFileSync(path.join(ROOT, 'account', sec + '.html'), html);
   });
 
   const today = new Date().toISOString().slice(0, 10);

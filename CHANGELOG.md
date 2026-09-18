@@ -11,6 +11,14 @@
 
 ## After launch
 
+### Customer panel (Your account)
+- Sidebar with profile card (initials, name, email) and eight sections, in the store's own style: **Overview** (greeting, counts for orders / wishlist / addresses, recent orders with photos), **Orders** (full cards: items, address, progress, tracking, payment summary, Track / Return / Cancel; a page per order), **Wishlist**, **Addresses** (add, edit, remove, default — the default fills in checkout; one click saves the last order's address), **Payment methods** (explains cards are never stored; Stripe, Apple Pay, Google Pay), **Notifications** (order updates list with unread count and "Mark all read"; email offers on/off, order emails always on), **Returns** (pick order, items and reason; saved on the order, emails the customer and the store; shown in Admin › Orders), **Settings** (name, phone; no password — "Sign out on all devices"; delete account).
+- Header shows the customer's initials when signed in. Every section has its own address (`/account/orders`, `/account/returns`, …) that answers 200 and is never indexed.
+- New table `customer_profiles` (service role only; `signed_out_at` ends older sessions) and order columns `return_requested_at`, `return_reason`. New Edge routes `/account/profile`, `/account/return`, `/account/signout-all`, `/account/delete`; `/account/orders` now also returns the profile, saved addresses, email-updates state and each order's address.
+- **Fixed (live site):** on phones, saving a wishlist item made the header's heart count push the cart icon off-screen, so the page scrolled sideways. The count is now a small bubble on the heart.
+- **Fixed:** after cancelling inside the account, the list kept showing the old status until reload.
+- 137 server tests (23 new) and a 40-step browser test of the whole panel (desktop + phone).
+
 ### Customer sign-up
 - Anyone can create an account: "Sign in or create an account" takes any email and sends a 6-digit code — sign-up and sign-in are the same step, still no passwords. A new account shows "no orders yet"; orders placed with that email (as a guest before, or later) appear automatically.
 - New emails share a daily cap (50 codes a day, secret `LOGIN_NEW_PER_DAY` to change it) so sign-ups can never use up the email quota order emails need; customers who already have orders are never capped. The per-email (5/hour) and per-IP (20/hour) limits still apply.

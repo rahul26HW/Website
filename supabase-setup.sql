@@ -371,6 +371,8 @@ alter table public.orders add column if not exists accepted_at           timesta
 alter table public.orders add column if not exists cancelled_at          timestamptz;
 alter table public.orders add column if not exists cancel_requested_at   timestamptz; -- customer asked to cancel after the window
 alter table public.orders add column if not exists cancel_reason         text;
+alter table public.orders add column if not exists return_requested_at   timestamptz; -- customer asked to return (from their account)
+alter table public.orders add column if not exists return_reason         text;
 -- authorized = card held, charged when the order is accepted; voided = hold released (never charged); failed = charging failed.
 alter table public.orders drop constraint if exists orders_payment_status_check;
 alter table public.orders add constraint orders_payment_status_check
@@ -724,6 +726,24 @@ create index if not exists customer_login_codes_email_idx on public.customer_log
 create index if not exists customer_login_codes_ip_idx    on public.customer_login_codes (ip_hash, created_at desc);
 alter table public.customer_login_codes enable row level security;   -- no policies: closed to anon and authenticated
 
+-- Customer profiles (Your account › Settings and Addresses). Keyed by email, like orders.
+-- signed_out_at: sessions issued before it are refused ("Sign out on all devices", "Delete account").
+create table if not exists public.customer_profiles (
+  email          text primary key check (email = lower(email) and length(email) <= 254),
+  first_name     text check (length(first_name) <= 60),
+  last_name      text check (length(last_name) <= 60),
+  phone          text check (length(phone) <= 40),
+  addresses      jsonb not null default '[]'::jsonb
+                 check (jsonb_typeof(addresses) = 'array' and jsonb_array_length(addresses) <= 10),
+  signed_out_at  timestamptz,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+drop trigger if exists customer_profiles_touch on public.customer_profiles;
+create trigger customer_profiles_touch before update on public.customer_profiles
+  for each row execute function public._touch_updated_at();
+alter table public.customer_profiles enable row level security;      -- no policies: closed to anon and authenticated
+
 
 -- ---------------------------------------------------------------------
 -- 11. Privileges — least privilege for the public API roles.
@@ -733,7 +753,8 @@ grant usage on schema public to anon, authenticated;
 
 revoke all on public.admins, public.store, public.store_private, public.subscribers,
               public.stock_alerts, public.contact_messages, public.orders,
-              public.order_items, public.promo_redemptions, public.customer_login_codes
+              public.order_items, public.promo_redemptions, public.customer_login_codes,
+              public.customer_profiles
   from anon, authenticated;
 revoke all on sequence public.order_number_seq from anon, authenticated;
 
@@ -759,6 +780,8 @@ grant select on public.store, public.subscribers to service_role;
 grant all on public.orders, public.order_items, public.promo_redemptions to service_role;
 grant usage, select on sequence public.order_number_seq to service_role;
 grant select, insert, update, delete on public.customer_login_codes to service_role;
+grant select, insert, update, delete on public.customer_profiles to service_role;
+grant insert, delete on public.subscribers to service_role;       -- Your account › Notifications: email updates on/off
 
 -- Functions: lock everything, then open only what each role needs.
 revoke all on function public._num(text)                         from public, anon, authenticated;
