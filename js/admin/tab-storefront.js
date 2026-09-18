@@ -96,7 +96,7 @@
           '<p class="hint" style="margin:-6px 0 12px">Customers sign in on <b>Your account</b> with a 6-digit code sent to their email — no passwords. ' +
           'To add “Continue with Google”, create a free OAuth client ID in Google Cloud (steps: README › “Customer accounts”) and paste it here. It’s a public ID, not a secret.</p>' +
           ui.field('Google sign-in client ID', 'settings.googleClientId', (d.settings || {}).googleClientId, { type: 'trim', placeholder: '1234567890-abc123.apps.googleusercontent.com',
-            hint: 'Authorised redirect URI in Google: ' + esc(location.origin + HW.link('/account/login')) + ' · Leave blank to hide the Google button.' })) +
+            hint: 'Authorised redirect URI in Google: ' + esc(location.origin + HW.link('/account/login')) + ' · Leave blank to hide the Google button.' }) + ui.saveBtn()) +
         ui.panel('Payment methods',
           '<p class="hint" style="margin:-6px 0 12px">Switch each way to pay on or off, then press <b>Save</b>. With both off, checkout is closed.</p>' +
           '<div class="switches">' +
@@ -106,7 +106,7 @@
           '<div class="grid2">' +
           ui.field('Cash on delivery fee ($)', 'payments.codFee', pay.codFee, { type: 'number', min: 0, hint: 'Added to COD orders. 0 = no fee. Up to $50.' }) +
           ui.field('Largest order for cash on delivery ($)', 'payments.codMax', pay.codMax, { type: 'int', min: 1, hint: 'Bigger orders must pay by card. Each email can also place at most 3 COD orders a day.' }) +
-          '</div>') +
+          '</div>' + ui.saveBtn()) +
         ui.panel('Card payments (Stripe) &amp; ShipStation',
           '<p class="hint" style="margin:-6px 0 12px">Shoppers pay on a secure Stripe page after checkout. Paid orders (and cash-on-delivery orders) are sent to ShipStation, and when you ship there the carrier and tracking number come back to the order. ' +
           'All keys live in your Supabase Edge Function “hw” (Supabase › Edge Functions › Secrets) — never here. Setup steps: README › “Card payments and ShipStation”.</p>' +

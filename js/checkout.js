@@ -140,7 +140,8 @@
     if (!o || o.status && o.status !== 'new') return 0;
     var started = Date.parse(o.paid_at || o.created_at || '');
     if (!started) return 0;
-    return Math.max(0, started + HW.cancelMinutes() * 60000 - Date.now());
+    // Capped at the window itself: the server clock can be a few seconds ahead of this device.
+    return Math.min(HW.cancelMinutes() * 60000, Math.max(0, started + HW.cancelMinutes() * 60000 - Date.now()));
   };
   HW.cancelOrder = async function (number, email) {
     var res, data = {};
