@@ -162,7 +162,7 @@
 
     return {
       html: html,
-      seo: { title: '', description: (DB.brand.name + ' — ' + DB.brand.tagline + '. Bath rugs, towels and home textiles with ' + (DB.shipping && DB.shipping.enabled ? 'free shipping on orders of ' + u.money(DB.shipping.freeThreshold) + ' or more' : 'fast shipping') + '.'), path: '/', image: m.primaryImage(feat[0] || {}), jsonld: HW.ld && HW.ld.site() },
+      seo: { title: '', description: (DB.brand.name + ' — ' + DB.brand.tagline + '. Bath rugs, towels and home textiles with ' + (DB.shipping && DB.shipping.enabled ? 'free shipping on orders of ' + u.money(DB.shipping.freeThreshold).replace(/\.00$/, '') + ' or more' : 'fast shipping') + '.'), path: '/', image: m.primaryImage(feat[0] || {}), jsonld: HW.ld && HW.ld.site() },
       after: function () { HW.hero.init(); HW.rails.init(); }
     };
   };

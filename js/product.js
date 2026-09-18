@@ -132,7 +132,7 @@
     if (cl.length) tabs.push({ id: 'care', label: 'Care', html: '<ul class="bullets">' + cl.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' });
 
     var sh = HW.DB.shipping || {};
-    var shipTitle = sh.enabled && sh.freeThreshold ? 'Free shipping on orders of ' + u.money(sh.freeThreshold) + ' or more' : 'Fast, tracked shipping';
+    var shipTitle = sh.enabled && sh.freeThreshold ? 'Free shipping on orders of ' + u.money(sh.freeThreshold).replace(/\.00$/, '') + ' or more' : 'Fast, tracked shipping';
     var f0 = (HW.DB.features || [])[0] || {};
     var row = function (ic, t, s) { return '<div class="passure"><span class="pa-ic">' + ic + '</span><div><b>' + esc(t) + '</b>' + (s ? '<span>' + esc(s) + '</span>' : '') + '</div></div>'; };
     var aside = '<aside class="pdp-aside" aria-label="Shipping and returns">' +

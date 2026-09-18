@@ -47,7 +47,7 @@
     var DB = HW.DB, m = HW.m;
     // {{free_shipping}} is replaced by the threshold set in Promotions, so the bar can't drift from the real rule.
     var sh0 = DB.shipping || {};
-    var ann = (DB.announcement || '').replace(/\{\{\s*free_shipping\s*\}\}/gi, sh0.enabled !== false && sh0.freeThreshold ? u.money(sh0.freeThreshold) : '').trim();
+    var ann = (DB.announcement || '').replace(/\{\{\s*free_shipping\s*\}\}/gi, sh0.enabled !== false && sh0.freeThreshold ? u.money(sh0.freeThreshold).replace(/\.00$/, '') : '').trim();
     var annBar = document.getElementById('announce');
     document.getElementById('announceText').textContent = ann;
     annBar.hidden = !ann;
