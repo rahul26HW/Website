@@ -107,6 +107,9 @@
 
   function trackBlock() {
     var last = u.session.get('hw:lastOrder', null) || {};
+    // Links in order emails carry ?order=HW-… (never the email address) to fill in the number.
+    var fromLink = (function () { try { return new URLSearchParams(location.search).get('order') || ''; } catch (e) { return ''; } })();
+    if (/^HW-?\d{1,12}$/i.test(fromLink)) last = { order_number: fromLink.toUpperCase(), email: last.order_number === fromLink.toUpperCase() ? last.email : '' };
     return '<form class="form panelbox" data-form="track" novalidate aria-labelledby="trackHead" style="margin-top:24px">' +
       '<h2 id="trackHead" style="font-size:24px;margin:0 0 4px;color:var(--ink)">Find your order</h2>' +
       '<div class="row2"><div class="fld"><label for="tr_no">Order number</label><input id="tr_no" name="number" placeholder="HW-100001" value="' + esc(last.order_number || '') + '" autocomplete="off" maxlength="20" required></div>' +

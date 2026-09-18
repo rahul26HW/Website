@@ -11,6 +11,12 @@
 
 ## After launch
 
+### Customer emails
+- Branded order emails from **Home Weavers <orders@homeweavers.net>** through Resend (secret `RESEND_API_KEY`), replies to the store contact email: received (with the self-cancel window), accepted/preparing, shipped (carrier tracking link), cancelled (with refund amount), and refunds made in Stripe.
+- Sent once per step: only when the order actually changes (no repeats on duplicate Stripe or ShipStation notices; a customer cancel doesn't also trigger a Stripe-refund email). A failed email is logged and never blocks the order.
+- Email links carry only the order number (`page/track-your-order?order=HW-…`), which pre-fills the tracking page; the customer's email address is never put in a link. All customer-entered text is escaped.
+- 79 server tests (11 new for emails), passing directly and through the Edge wrapper.
+
 ### Cancellation window and accepting orders
 - A paid order now waits as **New** for a **30-minute cancellation window** (Admin › Storefront, 0–1440 minutes) instead of going straight to ShipStation.
 - **Customer:** a *Cancel this order* button with a live countdown on the order page and on Track your order. It refunds the payment in Stripe, frees the promo code and cancels the order (`POST /order/cancel`, order number + email, window checked on the server).

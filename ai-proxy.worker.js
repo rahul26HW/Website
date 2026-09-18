@@ -39,6 +39,10 @@
    ShipStation (API v1) — also need SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY:
      SHIPSTATION_API_KEY, SHIPSTATION_API_SECRET   (ShipStation → Settings → Account → API Settings)
      SHIPSTATION_WEBHOOK_TOKEN  any long random text; it proves shipment calls come from your ShipStation webhook
+   Customer emails (Resend):
+     RESEND_API_KEY             re_… (resend.com → API Keys); the sending domain must be verified in Resend
+     EMAIL_FROM                 optional, default "Home Weavers <orders@homeweavers.net>"
+     EMAIL_REPLY_TO             optional, default the contact email from Admin › Storefront
    Full click-by-click setup: README.md → "AI worker".
    ===================================================================== */
 
@@ -322,6 +326,7 @@ function features(env) {
   const ss = !!(db && env.SHIPSTATION_API_KEY && env.SHIPSTATION_API_SECRET);
   return {
     database: db,
+    email: !!env.RESEND_API_KEY,
     ai: !!(env.ANTHROPIC_API_KEY && env.SUPABASE_URL && env.SUPABASE_PUBLISHABLE_KEY),
     stripe: !!(db && env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET),
     stripeMode: env.STRIPE_SECRET_KEY ? (/^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY) ? "live" : "test") : null,
@@ -404,6 +409,7 @@ async function handleOrderCancel(request, env, cors) {
   if (!Array.isArray(rows) || !rows.length) return json({ error: "This order can no longer be cancelled here.", tooLate: true }, 409, cors);
   await db(env, "promo_redemptions?order_id=eq." + order.id, { method: "DELETE" }).catch(() => {});
   if (order.shipstation_order_id && features(env).shipstation) await pushToShipstation(env, { ...order, status: "cancelled" }).catch(() => {});
+  await sendOrderEmail(env, "cancelled", Object.assign({}, order, rows[0]), { refunded });
   return json({ ok: true, refunded }, 200, cors);
 }
 
@@ -416,6 +422,7 @@ async function acceptOrder(env, order) {
   if (features(env).shipstation && !fresh.shipstation_order_id) {
     try { shipstation = (await pushToShipstation(env, fresh)).shipstation_order_id; } catch (e) { shipstation = "error: " + e.message; }
   }
+  await sendOrderEmail(env, "accepted", fresh);
   return { ok: true, order_number: fresh.order_number, shipstation };
 }
 
@@ -584,7 +591,10 @@ async function handleStripeWebhook(request, env) {
           ? (order.admin_note ? order.admin_note + "\n" : "") + "⚠ Stripe charged $" + (obj.amount_total / 100).toFixed(2) + " but the order total is $" + Number(order.total).toFixed(2) + ". Check before shipping."
           : order.admin_note,
       });
-      if (Array.isArray(rows) && rows[0]) Object.assign(order, rows[0]);
+      if (Array.isArray(rows) && rows[0]) {
+        Object.assign(order, rows[0]);
+        await sendOrderEmail(env, "received", order);
+      }
     }
     // The order now waits as "new" until it is accepted (see /orders/accept and /orders/release),
     // so the customer still has their cancellation window before anything reaches the warehouse.
@@ -601,7 +611,8 @@ async function handleStripeWebhook(request, env) {
   }
 
   if (event.type === "charge.refunded" && obj.payment_intent && obj.refunded) {
-    await patchOrder(env, "payment_ref=eq." + encodeURIComponent(obj.payment_intent), { payment_status: "refunded" });
+    const rows = await patchOrder(env, "payment_ref=eq." + encodeURIComponent(obj.payment_intent) + "&payment_status=neq.refunded", { payment_status: "refunded" });
+    if (Array.isArray(rows) && rows[0]) await sendOrderEmail(env, "refunded", rows[0], { amount: (obj.amount_refunded || 0) / 100 });
     return json({ ok: true });
   }
   return json({ ok: true, ignored: event.type });
@@ -717,13 +728,18 @@ const CARRIERS = { stamps_com: "USPS", usps: "USPS", endicia: "USPS", ups: "UPS"
 /* Saves one ShipStation shipment or fulfillment on our order. `filter` picks the order (by our id or ShipStation's id). */
 async function applyShipment(env, filter, s) {
   if (!s || s.voided || !s.trackingNumber) return 0;
+  const before = await db(env, "orders?" + filter + "&select=id,status,tracking_number&limit=1");
+  const was = Array.isArray(before) && before[0];
   const rows = await patchOrder(env, filter + "&status=in.(new,accepted,packed,shipped)", {
     status: "shipped",
     carrier: CARRIERS[s.carrierCode] || String(s.carrierCode || "").toUpperCase() || null,
     tracking_number: String(s.trackingNumber).slice(0, 100),
     shipped_at: s.shipDate ? new Date(s.shipDate).toISOString() : new Date().toISOString(),
   });
-  return Array.isArray(rows) ? rows.length : 0;
+  const updated = Array.isArray(rows) ? rows.length : 0;
+  // One "shipped" email per order, and a new one only if the tracking number changes.
+  if (updated && was && (was.status !== "shipped" || was.tracking_number !== rows[0].tracking_number)) await sendOrderEmail(env, "shipped", rows[0]);
+  return updated;
 }
 
 /* Our order for a ShipStation record: labels carry our orderKey; fulfillments only carry ShipStation's orderId. */
@@ -780,4 +796,131 @@ async function handleShipstationSync(request, env, cors) {
   const updated = await applyShipment(env, "id=eq." + order.id, latest);
   const fresh = await loadOrder(env, "id=eq." + order.id);
   return json({ ok: true, shipped: true, updated, carrier: fresh && fresh.carrier, tracking_number: fresh && fresh.tracking_number, status: fresh && fresh.status }, 200, cors);
+}
+
+/* ================================================================ *
+ * Customer emails (Resend). Secrets: RESEND_API_KEY; optional EMAIL_FROM, EMAIL_REPLY_TO.
+ * Every email is best-effort: a failed email is logged and never blocks an order change.
+ * ================================================================ */
+const EMAIL_FROM_DEFAULT = "Home Weavers <orders@homeweavers.net>";
+
+async function storeData(env) {
+  const rows = await db(env, "store?id=eq.main&select=data");
+  return (rows && rows[0] && rows[0].data) || {};
+}
+
+function trackingLink(carrier, number) {
+  if (!number) return "";
+  const n = encodeURIComponent(number), c = String(carrier || "").toLowerCase();
+  if (/usps|stamps/.test(c)) return "https://tools.usps.com/go/TrackConfirmAction?tLabels=" + n;
+  if (/ups/.test(c)) return "https://www.ups.com/track?tracknum=" + n;
+  if (/fedex/.test(c)) return "https://www.fedex.com/fedextrack/?trknbr=" + n;
+  if (/dhl/.test(c)) return "https://www.dhl.com/us-en/home/tracking.html?tracking-id=" + n;
+  return "";
+}
+
+const money = (n) => "$" + Number(n || 0).toFixed(2);
+
+function emailLayout(brand, site, title, bodyHtml) {
+  const b = esc(brand);
+  return `<!doctype html><html><body style="margin:0;background:#F7F4EF;font-family:Arial,Helvetica,sans-serif;color:#2A2622">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F4EF;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #E6E0D6;border-radius:6px">
+<tr><td style="background:#2C463F;padding:18px 24px;border-radius:6px 6px 0 0"><span style="font-family:Georgia,serif;font-size:22px;color:#ffffff">${b}</span></td></tr>
+<tr><td style="padding:24px">
+<h1 style="font-family:Georgia,serif;font-weight:400;font-size:24px;margin:0 0 14px">${esc(title)}</h1>
+${bodyHtml}
+</td></tr>
+<tr><td style="padding:16px 24px;border-top:1px solid #E6E0D6;font-size:12px;color:#6C6359">
+${site ? `<a href="${esc(site)}" style="color:#3A5A52">${esc(site.replace(/^https?:\/\//, "").replace(/\/$/, ""))}</a> · ` : ""}You’re getting this email because you placed an order with ${b}.
+</td></tr></table></td></tr></table></body></html>`;
+}
+
+function itemsTable(order) {
+  const rows = (order.order_items || []).map((i) =>
+    `<tr><td style="padding:6px 0;font-size:14px">${esc(i.name)}${i.variant ? ` <span style="color:#6C6359">(${esc(i.variant)})</span>` : ""} × ${Number(i.qty)}</td>` +
+    `<td align="right" style="padding:6px 0;font-size:14px">${money(i.line_total)}</td></tr>`).join("");
+  const line = (label, value) => `<tr><td style="padding:4px 0;font-size:14px;color:#6C6359">${label}</td><td align="right" style="padding:4px 0;font-size:14px">${value}</td></tr>`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #E6E0D6;border-bottom:1px solid #E6E0D6;margin:14px 0">${rows}</table>` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">` +
+    line("Subtotal", money(order.subtotal)) +
+    (Number(order.discount) > 0 ? line("Discount" + (order.promo_code ? " (" + esc(order.promo_code) + ")" : ""), "−" + money(order.discount)) : "") +
+    line("Shipping", Number(order.shipping) > 0 ? money(order.shipping) : "Free") +
+    `<tr><td style="padding:6px 0;font-size:15px"><b>Total</b></td><td align="right" style="padding:6px 0;font-size:15px"><b>${money(order.total)}</b></td></tr></table>`;
+}
+
+function button(href, label) {
+  return `<p style="margin:18px 0"><a href="${esc(href)}" style="display:inline-block;background:#2C463F;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:4px;font-size:14px;letter-spacing:.04em">${esc(label)}</a></p>`;
+}
+
+/* kind: received | accepted | shipped | cancelled | refunded */
+function buildOrderEmail(kind, order, data, extra = {}) {
+  const brand = (data.brand && data.brand.name) || "Home Weavers";
+  const site = String((data.settings && data.settings.siteUrl) || "").replace(/\/?$/, "/");
+  const minutes = Number((data.settings || {}).cancelMinutes);
+  const windowMin = minutes >= 0 && minutes <= 1440 ? minutes : 30;
+  const trackUrl = site + "page/track-your-order?order=" + encodeURIComponent(order.order_number);
+  const first = String(order.name || "").split(" ")[0];
+  const hi = `<p style="font-size:15px;line-height:1.6;margin:0 0 10px">Hi ${esc(first || "there")},</p>`;
+  const p = (t) => `<p style="font-size:15px;line-height:1.6;margin:0 0 10px">${t}</p>`;
+  const num = esc(order.order_number);
+  let subject, title, body, text;
+
+  if (kind === "received") {
+    subject = `We’ve got your order ${order.order_number}`;
+    title = "Thank you for your order";
+    body = hi + p(`Your payment went through and we’ve received order <b>${num}</b>.`) +
+      (windowMin > 0 ? p(`Changed your mind? You can cancel it yourself for the next <b>${windowMin} minutes</b> and get a full refund. After that we start preparing it.`) : "") +
+      itemsTable(order) + button(trackUrl, windowMin > 0 ? "View or cancel your order" : "View your order");
+    text = `Thank you for your order ${order.order_number} (${money(order.total)}).` + (windowMin > 0 ? ` You can cancel within ${windowMin} minutes: ${trackUrl}` : ` Track it: ${trackUrl}`);
+  } else if (kind === "accepted") {
+    subject = `Your order ${order.order_number} is being prepared`;
+    title = "We’re preparing your order";
+    body = hi + p(`Good news — order <b>${num}</b> is confirmed and we’re getting it ready to ship. We’ll email you the tracking number as soon as it’s on its way.`) +
+      button(trackUrl, "Track your order");
+    text = `Order ${order.order_number} is confirmed and being prepared. Track it: ${trackUrl}`;
+  } else if (kind === "shipped") {
+    const link = trackingLink(order.carrier, order.tracking_number);
+    subject = `Your order ${order.order_number} has shipped`;
+    title = "Your order is on its way";
+    body = hi + p(`Order <b>${num}</b> has shipped${order.carrier ? " with <b>" + esc(order.carrier) + "</b>" : ""}.`) +
+      p(`Tracking number: <b>${esc(order.tracking_number || "")}</b>`) +
+      (link ? button(link, "Track your package") : button(trackUrl, "Track your order"));
+    text = `Order ${order.order_number} has shipped${order.carrier ? " with " + order.carrier : ""}. Tracking: ${order.tracking_number || ""} ${link || trackUrl}`;
+  } else if (kind === "cancelled") {
+    subject = `Order ${order.order_number} is cancelled`;
+    title = "Your order is cancelled";
+    body = hi + p(`We’ve cancelled order <b>${num}</b> as you asked.`) +
+      (extra.refunded ? p(`Your payment of <b>${money(order.total)}</b> has been refunded to your original payment method. It usually shows up in 5–10 business days.`) : "") +
+      p(`We hope to see you again soon.`);
+    text = `Order ${order.order_number} is cancelled.` + (extra.refunded ? ` ${money(order.total)} has been refunded; allow 5–10 business days.` : "");
+  } else if (kind === "refunded") {
+    subject = `Refund for order ${order.order_number}`;
+    title = "Your refund is on its way";
+    body = hi + p(`We’ve refunded ${extra.amount != null ? "<b>" + money(extra.amount) + "</b>" : "your payment"} for order <b>${num}</b> to your original payment method. It usually shows up in 5–10 business days.`);
+    text = `We've refunded ${extra.amount != null ? money(extra.amount) : "your payment"} for order ${order.order_number}. Allow 5–10 business days.`;
+  } else {
+    return null;
+  }
+  return { subject, html: emailLayout(brand, site, title, body), text };
+}
+
+async function sendOrderEmail(env, kind, order, extra) {
+  if (!env.RESEND_API_KEY || !order || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(order.email || "")) return false;
+  try {
+    const data = await storeData(env);
+    const msg = buildOrderEmail(kind, order, data, extra);
+    if (!msg) return false;
+    const replyTo = env.EMAIL_REPLY_TO || (data.contact && data.contact.email) || undefined;
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json", "Idempotency-Key": kind + "-" + order.id },
+      body: JSON.stringify({ from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT, to: [order.email], reply_to: replyTo, subject: msg.subject, html: msg.html, text: msg.text }),
+    });
+    if (!res.ok) console.error("email " + kind + " " + order.order_number + " failed", res.status, (await res.text()).slice(0, 200));
+    return res.ok;
+  } catch (e) {
+    console.error("email " + kind + " failed", e && e.message);
+    return false;
+  }
 }

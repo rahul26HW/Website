@@ -255,6 +255,15 @@ Secrets take effect within a minute; you don't need to redeploy.
 4. Also test closing the Stripe page: the order page offers **Pay securely** again.
 5. To go live: switch Stripe out of test mode, add a **live** webhook endpoint (same URL and events), then replace the `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` secrets with the live values. **Check server** then shows "live mode".
 
+### Customer emails (orders@homeweavers.net)
+Customers get branded emails for: order received (with the 30-minute cancel link), order confirmed, shipped (carrier + tracking link), cancelled, and refunds made in Stripe. Replies go to the contact email in Admin › Storefront.
+1. Create a free account at https://resend.com → **Domains** → **Add Domain** → `homeweavers.net`.
+2. Resend shows 3 DNS records (MX, TXT for SPF, TXT for DKIM). Add them at the company that manages homeweavers.net, exactly as shown, then click **Verify** in Resend (can take a few minutes to a few hours).
+3. Resend → **API Keys** → **Create API Key** (permission: *Sending access*, domain: homeweavers.net).
+4. Supabase → **Edge Functions** → **Secrets** → add `RESEND_API_KEY` with that key. Optional: `EMAIL_FROM` (default `Home Weavers <orders@homeweavers.net>`) and `EMAIL_REPLY_TO`.
+5. Admin › Storefront › **Check server** shows ✓ Customer emails.
+Links in emails carry only the order number, never the customer's email address.
+
 ### Cancellation window and accepting orders
 - After payment an order waits as **New**. For the first **30 minutes** (Admin › Storefront › *Free cancellation window*) the customer can cancel it themselves on the order page or on **Track your order**. The payment is refunded automatically.
 - You can **Accept order & send to ShipStation** at any time (Admin › Orders › the order).

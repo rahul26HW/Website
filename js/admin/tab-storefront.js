@@ -149,6 +149,7 @@
         row(f.stripe, 'Stripe payments' + (f.stripeMode ? ' (' + f.stripeMode + ' mode)' : ''), 'add the secrets STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET') +
         row(f.shipstation, 'Send orders to ShipStation', 'add the secrets SHIPSTATION_API_KEY and SHIPSTATION_API_SECRET') +
         row(f.shipstationWebhook, 'Tracking numbers from ShipStation', 'add the secret SHIPSTATION_WEBHOOK_TOKEN, then click Connect ShipStation tracking') +
+        row(f.email, 'Customer emails (orders@homeweavers.net)', 'add the secret RESEND_API_KEY after verifying homeweavers.net in Resend') +
         row(f.ai, 'Marketing AI', 'optional: add the secret ANTHROPIC_API_KEY') + '</ul>' +
         (f.stripeMode === 'test' ? '<p class="hint">Stripe is in test mode: use card 4242 4242 4242 4242, any future date and any CVC. Switch to your live key before launch.</p>' : '');
     } catch (e) {
