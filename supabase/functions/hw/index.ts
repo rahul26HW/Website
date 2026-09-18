@@ -22,6 +22,7 @@
      POST /order/cancel         Customer cancels inside the free window: refund + cancel  (order number + email)
      POST /orders/accept        Accept one order now and send it to ShipStation           (admins only)
      POST /orders/release       Accept orders whose cancellation window has passed        (scheduled job)
+     POST /email/test           Send a sample order email to the signed-in admin           (admins only)
      GET  /          Health check (lists which features are set up — never the keys)
 
    "Admins only" = the request must carry the signed-in admin's Supabase
@@ -80,12 +81,13 @@ const handler = {
         case "/order/cancel": return await handleOrderCancel(request, env, cors);
         case "/orders/accept": return await handleOrderAccept(request, env, cors);
         case "/orders/release": return await handleOrderRelease(request, env, cors);
+        case "/email/test": return await handleEmailTest(request, env, cors);
         default: return json({ error: "Not found" }, 404, cors);
       }
     } catch (e) {
       // Details go to the Cloudflare log. Only signed-in admins get them back; shoppers and webhooks get a plain message.
       console.error(url.pathname, e && e.stack ? e.stack : e);
-      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept"].includes(url.pathname.replace(/\/+$/, ""));
+      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/email/test"].includes(url.pathname.replace(/\/+$/, ""));
       return json({ error: adminRoute ? "Worker error: " + (e && e.message ? e.message : "unknown") : "Something went wrong. Please try again in a moment." }, 500, cors);
     }
   },
@@ -929,6 +931,24 @@ async function sendOrderEmail(env, kind, order, extra) {
     console.error("email " + kind + " failed", e && e.message);
     return false;
   }
+}
+
+/* POST /email/test { kind } — admins only. Sends a sample order email to the signed-in admin's own address. */
+async function handleEmailTest(request, env, cors) {
+  const denied = await requireAdmin(request, env);
+  if (denied) return json({ error: denied }, 401, cors);
+  if (!env.RESEND_API_KEY) return json({ error: "Add the secret RESEND_API_KEY first." }, 501, cors);
+  const who = await fetch(env.SUPABASE_URL + "/auth/v1/user", { headers: { apikey: env.SUPABASE_PUBLISHABLE_KEY, Authorization: request.headers.get("Authorization") } }).then((r) => r.json()).catch(() => ({}));
+  if (!who || !who.email) return json({ error: "Couldn’t read your admin email." }, 400, cors);
+  const body = await readJson(request);
+  const kind = ["received", "accepted", "shipped", "cancelled", "refunded"].includes(body.kind) ? body.kind : "received";
+  const sample = {
+    id: "test-" + Date.now(), order_number: "HW-TEST", email: who.email, name: "Test Customer",
+    subtotal: 64, discount: 0, shipping: 9.95, total: 73.95, carrier: "USPS", tracking_number: "9400100000000000000000",
+    order_items: [{ name: "Sample item (this is a test email)", variant: "Blue", qty: 1, line_total: 64 }],
+  };
+  const sent = await sendOrderEmail(env, kind, sample, { refunded: true, amount: 73.95 });
+  return sent ? json({ ok: true, to: who.email, kind }, 200, cors) : json({ error: "Resend didn’t accept the email. Check that homeweavers.net is verified and the key has sending access." }, 502, cors);
 }
 
 

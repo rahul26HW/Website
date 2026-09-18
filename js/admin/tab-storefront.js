@@ -103,7 +103,8 @@
             hint: 'Leave blank to use your Supabase Edge Function. Leave Stripe off until “Check server” shows Stripe ready.' }) +
           (sn.enabled && pay.stripe ? '<p class="adwarn">Snipcart is also on. While Snipcart is on, shoppers use Snipcart’s checkout and Stripe isn’t used.</p>' : '') +
           '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="worker-check">Check server</button>' +
-          '<button class="btn ghost sm" type="button" data-a="shipstation-setup">Connect ShipStation tracking</button></div>' +
+          '<button class="btn ghost sm" type="button" data-a="shipstation-setup">Connect ShipStation tracking</button>' +
+          '<button class="btn ghost sm" type="button" data-a="email-test">Send test email</button></div>' +
           '<div id="workerOut" aria-live="polite" style="margin-top:10px"></div>' +
           ui.saveBtn()) +
 
@@ -155,6 +156,15 @@
     } catch (e) {
       out.innerHTML = '<p class="badmsg">⚠ ' + esc(e.message && !/JSON/.test(e.message) ? e.message : 'The payments server didn’t answer. Is the “hw” Edge Function deployed, with Verify JWT turned off?') + '</p>';
     }
+  };
+  A.actions['email-test'] = async function (btn) {
+    var out = document.getElementById('workerOut');
+    btn.disabled = true;
+    try {
+      var r = await A.workerCall('/email/test', { kind: 'received' });
+      out.innerHTML = '<p class="okmsg">✓ Test email sent to ' + esc(r.to) + '. Check your inbox (and spam, the first time).</p>';
+    } catch (e) { out.innerHTML = '<p class="badmsg">⚠ ' + esc(e.message) + '</p>'; }
+    finally { btn.disabled = false; }
   };
   A.actions['shipstation-setup'] = async function (btn) {
     var out = document.getElementById('workerOut');
