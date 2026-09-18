@@ -2,7 +2,7 @@
 (function (HW) {
   'use strict';
 
-  var ROUTES = ['category', 'product', 'page', 'admin', 'checkout', 'order', 'search', 'wishlist'];
+  var ROUTES = ['category', 'product', 'page', 'admin', 'checkout', 'order', 'search', 'wishlist', 'account'];
 
   function computeBase() {
     var cfg = window.HW_CONFIG || {};
@@ -58,6 +58,7 @@
       case 'order': return parts[1] ? { name: 'order', params: { number: parts[1] } } : { name: 'notfound', params: {} };
       case 'search': return { name: 'search', params: { q: q.q || '' } };
       case 'wishlist': return { name: 'wishlist', params: {} };
+      case 'account': return { name: 'account', params: q };
       default: return { name: 'notfound', params: {} };
     }
   };

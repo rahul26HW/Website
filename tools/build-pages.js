@@ -112,7 +112,7 @@ async function main() {
 
   // App screens get their own file too, so a direct visit answers 200 instead of going through 404.html.
   // They sit next to index.html (no "../"), are never indexed, and are left out of the sitemap.
-  ['checkout', 'search', 'wishlist', 'admin'].forEach(function (r) {
+  ['checkout', 'search', 'wishlist', 'account', 'admin'].forEach(function (r) {
     const html = index
       .replace(/<title>[^<]*<\/title>/, '<title>' + attr(r.charAt(0).toUpperCase() + r.slice(1) + ' | ' + brand) + '</title>')
       .replace(/(<meta name="description"[^>]*>)/, '$1\n<meta name="robots" content="noindex">');

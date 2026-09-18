@@ -17,6 +17,9 @@
      POST /orders/accept        Accept one order now and send it to ShipStation           (admins only)
      POST /orders/release       Accept orders whose cancellation window has passed        (scheduled job)
      POST /email/test           Send a sample order email to the signed-in admin           (admins only)
+     POST /account/code         Customer sign-in: email a 6-digit code (only to emails that have ordered)
+     POST /account/verify       Customer sign-in: check the code → signed 30-day session (no passwords)
+     POST /account/orders       Signed-in customer's own orders (Authorization: Bearer <session>)
      GET  /          Health check (lists which features are set up — never the keys)
 
    "Admins only" = the request must carry the signed-in admin's Supabase
@@ -76,6 +79,9 @@ export default {
         case "/orders/accept": return await handleOrderAccept(request, env, cors);
         case "/orders/release": return await handleOrderRelease(request, env, cors);
         case "/email/test": return await handleEmailTest(request, env, cors);
+        case "/account/code": return await handleAccountCode(request, env, cors);
+        case "/account/verify": return await handleAccountVerify(request, env, cors);
+        case "/account/orders": return await handleAccountOrders(request, env, cors);
         default: return json({ error: "Not found" }, 404, cors);
       }
     } catch (e) {
@@ -919,7 +925,7 @@ function buildOrderEmail(kind, order, data, extra = {}) {
     body = hi + (order.payment_status === "authorized"
         ? p(`We’ve received order <b>${num}</b>. Your card is approved for <b>${money(order.total)}</b>; you’ll only be charged when we start preparing your order.`)
         : p(`Your payment went through and we’ve received order <b>${num}</b>.`)) +
-      (windowMin > 0 ? p(`Changed your mind? You can cancel it yourself for the next <b>${windowMin} minutes</b> and get a full refund. After that we start preparing it.`) : "") +
+      (windowMin > 0 ? p(`Changed your mind? You can cancel it yourself for the next <b>${windowMin} minutes</b>` + (order.payment_status === "authorized" ? " and you won’t be charged." : " and get a full refund.") + " After that we start preparing it.") : "") +
       itemsTable(order) + button(trackUrl, windowMin > 0 ? "View or cancel your order" : "View your order");
     text = `Thank you for your order ${order.order_number} (${money(order.total)}).` + (order.payment_status === "authorized" ? " Your card is approved; you'll be charged when we start preparing it." : "") + (windowMin > 0 ? ` You can cancel within ${windowMin} minutes: ${trackUrl}` : ` Track it: ${trackUrl}`);
   } else if (kind === "accepted") {
@@ -991,4 +997,135 @@ async function handleEmailTest(request, env, cors) {
   };
   const sent = await sendOrderEmail(env, kind, sample, { refunded: true, amount: 73.95 });
   return sent ? json({ ok: true, to: who.email, kind }, 200, cors) : json({ error: "Resend didn’t accept the email. Check that homeweavers.net is verified and the key has sending access." }, 502, cors);
+}
+
+/* ---------------------------------------------------------------- *
+ * Customer accounts — sign in with a code sent by email. No passwords are stored anywhere.
+ *   POST /account/code   { email }        → emails a 6-digit code, but only if that email has placed an order.
+ *                                           The answer is the same either way, so nobody can test who shops here.
+ *   POST /account/verify { email, code }  → { token } — a signed 30-day session
+ *   POST /account/orders  Authorization: Bearer <token> → that customer's orders + last address (for checkout)
+ * Codes are kept only as keyed hashes in customer_login_codes (service role only) and deleted after a day.
+ * ---------------------------------------------------------------- */
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const CODE_MINUTES = 10, CODE_TRIES = 5, SESSION_DAYS = 30;
+const CODES_PER_EMAIL_HOUR = 5, CODES_PER_IP_HOUR = 20;
+const PAID_STATES = "(authorized,paid,refunded,voided,failed)";
+
+const enc = new TextEncoder();
+const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const hexOf = (bytes) => [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
+async function hmacBytes(key, msg) {
+  const k = await crypto.subtle.importKey("raw", enc.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return crypto.subtle.sign("HMAC", k, enc.encode(msg));
+}
+/* Session/code key: CUSTOMER_SESSION_SECRET if set, otherwise derived from the service key (never leaves the server). */
+async function accountKey(env) {
+  return env.CUSTOMER_SESSION_SECRET || hexOf(await hmacBytes(String(env.SUPABASE_SERVICE_ROLE_KEY || ""), "hw-customer-session-v1"));
+}
+function clientIp(request) {
+  return String(request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+}
+async function countRows(env, path) {
+  const rows = await db(env, path + "&select=id&limit=100");
+  return Array.isArray(rows) ? rows.length : 0;
+}
+
+async function handleAccountCode(request, env, cors) {
+  if (!features(env).database || !env.RESEND_API_KEY) return json({ error: "Sign-in isn’t available right now. You can still track an order with its number and email." }, 501, cors);
+  const body = await readJson(request);
+  const email = String(body.email || "").trim().toLowerCase();
+  if (!EMAIL_RE.test(email) || email.length > 254) return json({ error: "Enter a valid email address." }, 400, cors);
+  const key = await accountKey(env);
+  const ipHash = hexOf(await hmacBytes(key, "ip:" + clientIp(request))).slice(0, 32);
+  const hourAgo = encodeURIComponent(new Date(Date.now() - 3600000).toISOString());
+
+  await db(env, "customer_login_codes?created_at=lt." + encodeURIComponent(new Date(Date.now() - 86400000).toISOString()), { method: "DELETE" }).catch(() => {});
+  if (await countRows(env, "customer_login_codes?ip_hash=eq." + ipHash + "&created_at=gt." + hourAgo) >= CODES_PER_IP_HOUR ||
+      await countRows(env, "customer_login_codes?email=eq." + encodeURIComponent(email) + "&created_at=gt." + hourAgo) >= CODES_PER_EMAIL_HOUR) {
+    return json({ error: "Too many codes asked for. Please try again in an hour." }, 429, cors);
+  }
+  const sameAnswer = json({ ok: true }, 200, cors);
+  const known = await db(env, "orders?email=eq." + encodeURIComponent(email) + "&payment_status=in." + PAID_STATES + "&select=id&limit=1");
+  const isCustomer = Array.isArray(known) && known.length > 0;
+  // Unknown emails are counted too (with a hash nothing can match), so the limits can't be used to test addresses either.
+  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+  const rows = await db(env, "customer_login_codes", {
+    method: "POST", headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      email, ip_hash: ipHash,
+      code_hash: isCustomer ? hexOf(await hmacBytes(key, "code:" + email + ":" + code)) : "none",
+      expires_at: new Date(Date.now() + CODE_MINUTES * 60000).toISOString(),
+    }),
+  });
+  if (!isCustomer) return sameAnswer;
+  const data = await storeData(env);
+  const brand = (data.brand && data.brand.name) || "Home Weavers";
+  const site = String((data.settings && data.settings.siteUrl) || "").replace(/\/?$/, "/");
+  const html = emailLayout(brand, site, "Your sign-in code",
+    `<p style="font-size:15px;line-height:1.6;margin:0 0 10px">Use this code to sign in and see your orders:</p>` +
+    `<p style="font-size:32px;letter-spacing:.3em;font-weight:bold;margin:16px 0;font-family:Georgia,serif">${code}</p>` +
+    `<p style="font-size:14px;line-height:1.6;color:#6C6359;margin:0">It works for ${CODE_MINUTES} minutes. If you didn’t ask for it, you can ignore this email — nobody can sign in without the code.</p>`);
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json", "Idempotency-Key": "login-" + ((rows && rows[0] && rows[0].id) || Date.now()) },
+    body: JSON.stringify({ from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT, to: [email], subject: `${code} is your ${brand} sign-in code`, html, text: `Your ${brand} sign-in code is ${code}. It works for ${CODE_MINUTES} minutes. If you didn't ask for it, ignore this email.` }),
+  });
+  if (!res.ok) console.error("login email failed", res.status, (await res.text()).slice(0, 200));
+  return sameAnswer;
+}
+
+async function handleAccountVerify(request, env, cors) {
+  if (!features(env).database) return json({ error: "Sign-in isn’t available right now." }, 501, cors);
+  const body = await readJson(request);
+  const email = String(body.email || "").trim().toLowerCase();
+  const code = String(body.code || "").replace(/\s+/g, "");
+  const wrong = (extra) => json(Object.assign({ error: "That code isn’t right or has expired. Check it, or ask for a new one." }, extra || {}), 400, cors);
+  if (!EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) return wrong();
+  const now = new Date().toISOString();
+  const rows = await db(env, "customer_login_codes?email=eq." + encodeURIComponent(email) + "&used_at=is.null&expires_at=gt." + encodeURIComponent(now) + "&select=id,code_hash,attempts&order=created_at.desc&limit=1");
+  const row = Array.isArray(rows) && rows[0];
+  if (!row) return wrong();
+  if (row.attempts >= CODE_TRIES) return json({ error: "Too many tries. Ask for a new code." }, 429, cors);
+  // Count the try first (only if nobody else counted it meanwhile), then compare.
+  const bumped = await db(env, "customer_login_codes?id=eq." + row.id + "&attempts=eq." + row.attempts, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ attempts: row.attempts + 1 }) });
+  if (!Array.isArray(bumped) || !bumped.length) return wrong();
+  const key = await accountKey(env);
+  if (!safeEqual(row.code_hash, hexOf(await hmacBytes(key, "code:" + email + ":" + code)))) return wrong({ triesLeft: Math.max(0, CODE_TRIES - row.attempts - 1) });
+  const used = await db(env, "customer_login_codes?id=eq." + row.id + "&used_at=is.null", { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ used_at: now }) });
+  if (!Array.isArray(used) || !used.length) return wrong();
+  const exp = Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400;
+  const payload = b64url(enc.encode(JSON.stringify({ e: email, x: exp, n: b64url(crypto.getRandomValues(new Uint8Array(9))) })));
+  const token = payload + "." + b64url(await hmacBytes(key, "session:" + payload));
+  return json({ ok: true, token, email, expires: new Date(exp * 1000).toISOString() }, 200, cors);
+}
+
+/* The email of a valid customer session, or null. */
+async function customerEmail(request, env) {
+  const m = /^Bearer\s+([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(request.headers.get("Authorization") || "");
+  if (!m) return null;
+  const expect = b64url(await hmacBytes(await accountKey(env), "session:" + m[1]));
+  if (!safeEqual(expect, m[2])) return null;
+  try {
+    const p = JSON.parse(atob(m[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return p && EMAIL_RE.test(p.e || "") && Number(p.x) * 1000 > Date.now() ? p.e : null;
+  } catch { return null; }
+}
+
+async function handleAccountOrders(request, env, cors) {
+  if (!features(env).database) return json({ error: "Sign-in isn’t available right now." }, 501, cors);
+  const email = await customerEmail(request, env);
+  if (!email) return json({ error: "Please sign in again.", signedOut: true }, 401, cors);
+  // Only what the customer needs to see: no internal ids, notes, payment references or tokens.
+  const cols = "order_number,created_at,paid_at,status,payment_status,subtotal,discount,shipping,tax,total,promo_code,carrier,tracking_number,shipped_at,cancel_requested_at,name,phone,shipping_address,order_items(name,variant,qty,image,line_total)";
+  const rows = await db(env, "orders?email=eq." + encodeURIComponent(email) + "&payment_status=in." + PAID_STATES + "&select=" + cols + "&order=created_at.desc&limit=50");
+  const list = Array.isArray(rows) ? rows : [];
+  const last = list[0];
+  const profile = last ? { name: last.name || "", phone: last.phone || "", address: last.shipping_address || {} } : null;
+  const orders = list.map((o) => {
+    const c = Object.assign({}, o, { items: o.order_items || [] });
+    delete c.order_items; delete c.name; delete c.phone; delete c.shipping_address;
+    return c;
+  });
+  return json({ ok: true, email, orders, profile }, 200, cors);
 }

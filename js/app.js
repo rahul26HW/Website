@@ -109,6 +109,9 @@
     'pay-order': function (el) { HW.checkout.payAgain(el); },
     'cancel-order': function (el) { HW.orderCancel.run(el); },
     'cancel-ask': function (el) { HW.orderCancel.request(el); },
+    'acct-signout': function () { HW.account.signOut(); },
+    'acct-restart': function () { HW.account.restart(); },
+    'acct-resend': function (el) { HW.account.resend(el); },
     reload: function () { location.reload(); },
     'consent-settings': function () { HW.consent.show(); var b = document.querySelector('#cookieBanner button'); if (b) b.focus(); }
   };
@@ -119,6 +122,8 @@
     checkout: function (f) { HW.checkout.submit(f); },
     contact: function (f) { HW.contact.submit(f); },
     track: function (f) { HW.track.submit(f); },
+    'acct-email': function (f) { HW.account.sendCode(f); },
+    'acct-code': function (f) { HW.account.verify(f); },
 
     notify: function (f) { HW.pdp.notify(f); },
     search: function (f) {

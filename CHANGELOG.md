@@ -11,6 +11,14 @@
 
 ## After launch
 
+### Customer accounts (guest checkout unchanged)
+- **Your account** page (`/account`, header icon on desktop, menu and footer link everywhere): customers sign in with a 6-digit code emailed from orders@homeweavers.net. No passwords exist anywhere, and no Supabase Auth users are created for customers.
+- Signed in, they see every order placed with that email (including earlier guest orders): status, progress, tracking link, cancel inside the free window, or ask to cancel after it. Checkout fills in their details from their last order; "Sign out" clears everything on the device.
+- Guest checkout stays the default; the checkout offers "Sign in" only as a shortcut.
+- Privacy and security: a code is sent only to emails that have a paid order, and the reply is identical either way (no way to test who shops here). Codes are 6 digits, valid 10 minutes, 5 tries, single use, stored only as keyed hashes; 5 codes per email and 20 per IP per hour (IP kept only as a hash); rows deleted after a day. Sessions are signed tokens valid 30 days; the orders reply leaves out internal fields (ids, notes, payment references, tokens).
+- New table `customer_login_codes` (row security on, no public access, service role only) and Edge routes `/account/code`, `/account/verify`, `/account/orders`.
+- 20 new server tests (111 total, also through the Edge wrapper) and a 22-step browser test (sign in, wrong code, orders, cancel, checkout prefill, sign out, expired session, phone layout, no XSS, no CSP errors).
+
 ### Site audit (2026-09-18)
 - Crawled all 22 sitemap pages plus checkout, search, wishlist, order, admin and 404, on desktop and phone: no broken links or images, no JS or CSP errors, no third-party requests or trackers, one h1 per page, no sideways scroll.
 - 49 live security probes as an anonymous visitor all held: private tables (orders, messages, subscribers, admins, private store) unreadable and unwritable, admin functions and Edge routes refuse without an admin session, webhooks refuse unsigned calls, storage can't be listed or written, order lookup and cancel need the matching email, the public store copy holds only the public contact email and no keys.

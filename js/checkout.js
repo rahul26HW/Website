@@ -74,6 +74,8 @@
         seo: { title: 'Checkout', noindex: true }
       };
     }
+    if (HW.account) HW.account.prefillCheckout(DRAFT);
+    var acct = HW.account && HW.account.get();
     return {
       html: '<div class="wrap"><div class="checkout">' +
         '<form class="form" data-form="checkout" novalidate aria-labelledby="coHead">' +
@@ -81,6 +83,8 @@
         '<h1 id="coHead">Checkout</h1>' +
         '<div class="notice" role="note"><b>Secure card payment.</b> After you enter your details you’ll pay on Stripe’s secure page (card, Apple Pay or Google Pay). Your card is approved at checkout and only charged when we start preparing your order. Your card number goes only to Stripe — we never see or store it.</div>' +
         '<h2>Contact</h2>' +
+        (acct ? '<p class="muted" style="font-size:13.5px;margin:0 0 10px">Signed in as <b>' + esc(acct.email) + '</b>. Your details are filled in from your last order.</p>'
+          : '<p class="muted" style="font-size:13.5px;margin:0 0 10px">Checking out as a guest. Ordered before? <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/account') + '?next=checkout">Sign in</a> to fill in your details.</p>') +
         field('email', 'Email', 'email', { ac: 'email', max: 254 }) +
         '<div class="row2">' + field('name', 'Full name', 'text', { ac: 'name', max: 120 }) + field('phone', 'Phone', 'tel', { ac: 'tel', optional: true, max: 40 }) + '</div>' +
         '<h2>Shipping address</h2>' +
@@ -127,6 +131,8 @@
     if (!res.ok) throw new Error(data.error || 'We couldn’t cancel this order. Please contact us.');
     return data;
   };
+
+  HW.serverUrl = function () { return workerUrl(); };
 
   function workerUrl() {
     var custom = String(((HW.DB && HW.DB.payments) || {}).workerUrl || '').trim().replace(/\/+$/, '');
@@ -271,7 +277,7 @@
         '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="cancel-order" data-n="' + esc(o.order_number) + '" data-e="' + esc(o.email) + '">Cancel this order</button></div></div>'
       : '';
     var next = o.paid
-      ? '<p>A receipt goes to <b>' + esc(o.email) + '</b>. Orders ship within ' + esc(m.shippingDays()) + ', and you can follow yours on Track your order.</p>'
+      ? '<p>A receipt goes to <b>' + esc(o.email) + '</b>. Orders ship within ' + esc(m.shippingDays()) + '. Follow it any time in <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/account') + '">your account</a> — just sign in with this email.</p>'
       : unpaid
         ? '<p class="form-msg err" id="payMsg" role="alert"' + (o.payError ? '' : ' hidden') + '>' + esc(o.payError || '') + '</p>' +
           '<p><button class="btn loom" type="button" data-act="pay-order">Pay ' + u.money(o.total) + ' securely</button></p>' +

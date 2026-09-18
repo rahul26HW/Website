@@ -74,18 +74,18 @@
         (subs.length ? '<div class="msub">' + subs.map(function (s) {
           return '<a href="' + HW.link('/category/' + c.slug + '?sub=' + encodeURIComponent(s.slug)) + '">' + esc(s.name) + '</a>';
         }).join('') + '</div>' : '');
-    }).join('') + visiblePages('service').concat(visiblePages('company')).map(function (p) {
+    }).join('') + '<a href="' + HW.link('/account') + '">Your account</a>' + visiblePages('service').concat(visiblePages('company')).map(function (p) {
       return '<a href="' + HW.link('/page/' + p.slug) + '">' + esc(p.title) + '</a>';
     }).join('');
 
     var shopLinks = cats.map(function (c) { return '<a href="' + HW.link('/category/' + c.slug) + '">' + esc(c.name) + '</a>'; }).join('');
-    function pageCol(key, label) {
-      var links = visiblePages(key).map(function (p) { return '<a href="' + HW.link('/page/' + p.slug) + '">' + esc(p.title) + '</a>'; }).join('');
+    function pageCol(key, label, first) {
+      var links = (first || '') + visiblePages(key).map(function (p) { return '<a href="' + HW.link('/page/' + p.slug) + '">' + esc(p.title) + '</a>'; }).join('');
       return links ? '<div class="fcol"><h2 class="h5">' + esc(label) + '</h2>' + links + '</div>' : '';
     }
     document.getElementById('footLinks').innerHTML =
       (shopLinks ? '<div class="fcol"><h2 class="h5">Shop</h2>' + shopLinks + '</div>' : '') +
-      pageCol('service', 'Customer service') + pageCol('company', 'Our company');
+      pageCol('service', 'Customer service', '<a href="' + HW.link('/account') + '">Your account</a>') + pageCol('company', 'Our company');
 
     var soc = DB.social || {};
     var socials = [['facebook', 'Facebook'], ['instagram', 'Instagram'], ['pinterest', 'Pinterest'], ['youtube', 'YouTube'], ['tiktok', 'TikTok'], ['houzz', 'Houzz']]
@@ -111,6 +111,8 @@
 
     var wl = document.getElementById('wishLink');
     if (wl) wl.setAttribute('href', HW.link('/wishlist'));
+    var al = document.getElementById('acctLink');
+    if (al) al.setAttribute('href', HW.link('/account'));
     if (HW.wishlist) HW.wishlist.renderCount();
     if (HW.cart) HW.cart.render();
   };

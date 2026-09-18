@@ -704,6 +704,27 @@ $$;
 
 
 -- ---------------------------------------------------------------------
+-- 10b. Customer sign-in codes (the Edge Function's /account routes).
+--      Customers sign in with a 6-digit code sent by email — no passwords, no Supabase Auth users.
+--      Only a keyed hash of each code is kept, plus a hash of the requester's IP for rate limits.
+--      Rows are deleted after a day. Only the service role can touch this table.
+-- ---------------------------------------------------------------------
+create table if not exists public.customer_login_codes (
+  id          uuid primary key default gen_random_uuid(),
+  email       text not null check (email = lower(email) and length(email) <= 254),
+  code_hash   text not null,
+  ip_hash     text,
+  attempts    int  not null default 0 check (attempts >= 0),
+  expires_at  timestamptz not null,
+  used_at     timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index if not exists customer_login_codes_email_idx on public.customer_login_codes (email, created_at desc);
+create index if not exists customer_login_codes_ip_idx    on public.customer_login_codes (ip_hash, created_at desc);
+alter table public.customer_login_codes enable row level security;   -- no policies: closed to anon and authenticated
+
+
+-- ---------------------------------------------------------------------
 -- 11. Privileges — least privilege for the public API roles.
 --     RLS above decides WHICH rows; these grants decide WHICH actions.
 -- ---------------------------------------------------------------------
@@ -711,7 +732,7 @@ grant usage on schema public to anon, authenticated;
 
 revoke all on public.admins, public.store, public.store_private, public.subscribers,
               public.stock_alerts, public.contact_messages, public.orders,
-              public.order_items, public.promo_redemptions
+              public.order_items, public.promo_redemptions, public.customer_login_codes
   from anon, authenticated;
 revoke all on sequence public.order_number_seq from anon, authenticated;
 
@@ -736,6 +757,7 @@ grant select on public.order_items, public.promo_redemptions to authenticated;
 grant select on public.store, public.subscribers to service_role;
 grant all on public.orders, public.order_items, public.promo_redemptions to service_role;
 grant usage, select on sequence public.order_number_seq to service_role;
+grant select, insert, update, delete on public.customer_login_codes to service_role;
 
 -- Functions: lock everything, then open only what each role needs.
 revoke all on function public._num(text)                         from public, anon, authenticated;

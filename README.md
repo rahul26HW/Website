@@ -264,6 +264,12 @@ Customers get branded emails for: order received (with the 30-minute cancel link
 5. Admin › Storefront › **Check server** shows ✓ Customer emails.
 Links in emails carry only the order number, never the customer's email address.
 
+### Customer accounts
+- Customers open **Your account** (header, menu or footer), enter the email they used at checkout, and get a 6-digit code by email (from the same Resend setup as order emails). No passwords.
+- They see all their orders with that email, tracking, and can cancel inside the free window. Checkout fills in their last address.
+- Guest checkout works exactly as before; an account is simply "the orders placed with this email".
+- Nothing to set up beyond `RESEND_API_KEY`. Optional secret `CUSTOMER_SESSION_SECRET` (any long random text) — changing it signs every customer out.
+
 ### Cancellation window and accepting orders
 - After payment an order waits as **New**. For the first **30 minutes** (Admin › Storefront › *Free cancellation window*) the customer can cancel it themselves on the order page or on **Track your order**.
 - **Card now, charge later:** checkout only *approves* the card (card, Apple Pay, Google Pay). The card is charged when the order is accepted. A cancel inside the window just releases the hold, so it costs you no Stripe fee. If the charge fails when accepting, the order is marked **Charge failed** and is not sent to ShipStation.
