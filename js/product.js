@@ -86,12 +86,26 @@
   };
 
   /* ---------- pieces ---------- */
+  /* Long descriptions: one or two sentences at the top, the full text in the Description tab below. */
+  var SHORT = 240;
+  function descText(p) { return HW.htmlToText(p.description).replace(/\s*[•▪●◦]\s*/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function isLongDesc(p) { return descText(p).length > SHORT; }
+  function summary(text) {
+    var parts = text.match(/[^.!?]+[.!?]+(\s|$)/g) || [text], out = '';
+    for (var i = 0; i < parts.length; i++) {
+      if (out && (out + parts[i]).length > 220) break;
+      out += parts[i];
+      if (out.length >= 90) break;
+    }
+    out = out.trim();
+    return out.length > 220 ? HW.seo.clip(out, 200) : out;
+  }
   function descHTML(p) {
     var html = HW.sanitizeHtml(p.description);
     if (!html) return '';
-    var long = HW.htmlToText(p.description).length > 600;
-    return '<div class="desc-wrap' + (long ? ' clamped' : '') + '" id="descWrap"><div class="desc" id="pdpDesc">' + html + '</div></div>' +
-      (long ? '<button class="desc-more" type="button" data-act="desc-more" aria-expanded="false" aria-controls="pdpDesc">Read more</button>' : '');
+    if (!isLongDesc(p)) return '<div class="desc" id="pdpDesc">' + html + '</div>';
+    return '<div class="desc" id="pdpDesc"><p>' + esc(summary(descText(p))) + '</p></div>' +
+      '<button class="desc-more" type="button" data-act="desc-more" aria-controls="pdt-description">Read full description</button>';
   }
 
   function stepper(max) {
@@ -122,8 +136,9 @@
       '<p class="form-msg" role="status" hidden></p></form>';
   }
 
-  function tabsHTML(specs, features, care, inStock) {
+  function tabsHTML(specs, features, care, inStock, p) {
     var tabs = [];
+    if (p && isLongDesc(p)) tabs.push({ id: 'description', label: 'Description', html: '<div class="desc">' + HW.sanitizeHtml(p.description) + '</div>' });
     var sp = specs.filter(function (s) { return s.value != null && String(s.value).trim() !== ''; });
     if (sp.length) tabs.push({ id: 'details', label: 'Details', html: '<ul class="detail-list flat">' + sp.map(function (s) { return '<li><b>' + esc(s.label) + '</b> ' + esc(s.value) + '</li>'; }).join('') + '</ul>' });
     var ft = (features || []).map(function (s) { return String(s || '').trim(); }).filter(Boolean);
@@ -189,7 +204,9 @@
       '<div class="swatches">' + cOpt.values.map(function (c) {
         var anyIn = sOpt.values.some(function (s) { return m.resolveVariant(p, c.id, s.id).inStock; });
         var on = c.id === v.color.id;
-        return '<button class="swatch-btn ' + (on ? 'active' : '') + (anyIn ? '' : ' oos') + '" type="button" style="background:' + esc(c.hex) + '" data-act="color" data-id="' + esc(c.id) + '" data-tip="' + esc(c.label) + '" aria-label="' + esc(c.label) + (anyIn ? '' : ' (sold out)') + '" aria-pressed="' + on + '"></button>';
+        var sw = m.swatchImage(p, c);
+        return '<button class="swatch-btn ' + (on ? 'active' : '') + (anyIn ? '' : ' oos') + (sw ? ' has-img' : '') + '" type="button" style="background:' + esc(c.hex) + '" data-act="color" data-id="' + esc(c.id) + '" data-tip="' + esc(c.label) + '" aria-label="' + esc(c.label) + (anyIn ? '' : ' (sold out)') + '" aria-pressed="' + on + '">' +
+          (sw ? '<span class="sw-img" aria-hidden="true" style="background-image:url(' + esc(JSON.stringify(HW.asset(m.thumb(sw)))) + ');background-position:50% ' + (/swatch/i.test(sw.split('/').pop()) ? '85%' : '25%') + '"></span>' : '') + '</button>';
       }).join('') + '</div></fieldset>';
     var sizes = '<fieldset class="optblock"><legend class="sr-only">' + esc(sOpt.name || 'Size') + '</legend>' +
       '<div class="lab"><span class="t" aria-hidden="true">' + esc(sOpt.name || 'Size') + '</span><span class="v"><span aria-hidden="true">' + esc(v.size.label) + '</span>' +
@@ -240,7 +257,7 @@
     return {
       cat: cat,
       pdp: '<div class="pdp"><div class="gallerywrap">' + galleryHTML(items, info.start, alt) + '</div><div class="info" id="pdpInfo">' + info.html + '</div></div>',
-      tabs: tabsHTML(info.specs, p.features, p.care, info.inStock)
+      tabs: tabsHTML(info.specs, p.features, p.care, info.inStock, p)
     };
   }
 
@@ -299,11 +316,10 @@
       e.preventDefault();
       HW.pdp.tab(tabs[(n + tabs.length) % tabs.length].dataset.tab, true);
     },
-    moreDesc: function (btn) {
-      var w = document.getElementById('descWrap');
-      var open = w.classList.toggle('clamped') === false;
-      btn.setAttribute('aria-expanded', String(open));
-      btn.textContent = open ? 'Read less' : 'Read more';
+    moreDesc: function () {
+      HW.pdp.tab('description', true);
+      var t = document.getElementById('pdpTabs');
+      if (t) t.scrollIntoView({ behavior: u.reducedMotion() ? 'auto' : 'smooth', block: 'start' });
     },
     notify: async function (form) {
       var input = form.querySelector('input[type=email]');

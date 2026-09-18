@@ -135,6 +135,19 @@
     }
     return '';
   };
+  /* A photo of the fabric itself for the colour button: a set swatch image, else a photo named "…swatch…",
+     else a close-up. None found → the colour dot is used. */
+  m.swatchImage = function (p, c) {
+    if (c.swatchImage) return c.swatchImage;
+    var all = (c.images || []).slice();
+    m.optSize(p).values.forEach(function (s) {
+      var ov = (p.variants && p.variants[m.vKey(c.id, s.id)]) || {};
+      all = all.concat(ov.images || []);
+    });
+    all = all.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+    var name = function (u) { return u.split('/').pop(); };
+    return all.find(function (u) { return /swatch/i.test(name(u)); }) || all.find(function (u) { return /close-?up/i.test(name(u)); }) || '';
+  };
   m.primaryImage = function (p) {
     if (m.isCollection(p)) {
       var cols = m.optColor(p).values;
