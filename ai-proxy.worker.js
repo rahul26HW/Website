@@ -1042,32 +1042,28 @@ async function handleAccountCode(request, env, cors) {
   const key = await accountKey(env);
   const ipHash = hexOf(await hmacBytes(key, "ip:" + clientIp(request))).slice(0, 32);
   const hourAgo = encodeURIComponent(new Date(Date.now() - 3600000).toISOString());
+  const dayAgo = encodeURIComponent(new Date(Date.now() - 86400000).toISOString());
+  const cap = Number(env.LOGIN_NEW_PER_DAY) > 0 ? Number(env.LOGIN_NEW_PER_DAY) : NEW_PER_DAY;
 
-  await db(env, "customer_login_codes?created_at=lt." + encodeURIComponent(new Date(Date.now() - 86400000).toISOString()), { method: "DELETE" }).catch(() => {});
-  if (await countRows(env, "customer_login_codes?ip_hash=eq." + ipHash + "&created_at=gt." + hourAgo) >= CODES_PER_IP_HOUR ||
-      await countRows(env, "customer_login_codes?email=eq." + encodeURIComponent(email) + "&created_at=gt." + hourAgo) >= CODES_PER_EMAIL_HOUR) {
+  // Independent look-ups run together (each is a round trip to the database).
+  const [, byIp, byEmail, known, recentNew, data] = await Promise.all([
+    db(env, "customer_login_codes?created_at=lt." + dayAgo, { method: "DELETE" }).catch(() => {}),
+    countRows(env, "customer_login_codes?ip_hash=eq." + ipHash + "&created_at=gt." + hourAgo),
+    countRows(env, "customer_login_codes?email=eq." + encodeURIComponent(email) + "&created_at=gt." + hourAgo),
+    db(env, "orders?email=eq." + encodeURIComponent(email) + "&payment_status=in." + PAID_STATES + "&select=id&limit=1"),
+    db(env, "customer_login_codes?new_customer=eq.true&created_at=gt." + dayAgo + "&select=id&limit=" + cap),
+    storeData(env),
+  ]);
+  if (byIp >= CODES_PER_IP_HOUR || byEmail >= CODES_PER_EMAIL_HOUR) {
     return json({ error: "Too many codes asked for. Please try again in an hour." }, 429, cors);
   }
-  const known = await db(env, "orders?email=eq." + encodeURIComponent(email) + "&payment_status=in." + PAID_STATES + "&select=id&limit=1");
   const isCustomer = Array.isArray(known) && known.length > 0;
-  if (!isCustomer) {
-    const cap = Number(env.LOGIN_NEW_PER_DAY) > 0 ? Number(env.LOGIN_NEW_PER_DAY) : NEW_PER_DAY;
-    const dayAgo = encodeURIComponent(new Date(Date.now() - 86400000).toISOString());
-    const recent = await db(env, "customer_login_codes?new_customer=eq.true&created_at=gt." + dayAgo + "&select=id&limit=" + cap);
-    if (Array.isArray(recent) && recent.length >= cap) {
-      return json({ error: "We can’t send more sign-up codes today. Please try again tomorrow — you can still check out as a guest." }, 429, cors);
-    }
+  if (!isCustomer && Array.isArray(recentNew) && recentNew.length >= cap) {
+    return json({ error: "We can’t send more sign-up codes today. Please try again tomorrow — you can still check out as a guest." }, 429, cors);
   }
+
   const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
-  const rows = await db(env, "customer_login_codes", {
-    method: "POST", headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      email, ip_hash: ipHash, new_customer: !isCustomer,
-      code_hash: hexOf(await hmacBytes(key, "code:" + email + ":" + code)),
-      expires_at: new Date(Date.now() + CODE_MINUTES * 60000).toISOString(),
-    }),
-  });
-  const data = await storeData(env);
+  const id = crypto.randomUUID();
   const brand = (data.brand && data.brand.name) || "Home Weavers";
   const site = String((data.settings && data.settings.siteUrl) || "").replace(/\/?$/, "/");
   const html = emailLayout(brand, site, "Your sign-in code",
@@ -1075,11 +1071,22 @@ async function handleAccountCode(request, env, cors) {
     `<p style="font-size:32px;letter-spacing:.3em;font-weight:bold;margin:16px 0;font-family:Georgia,serif">${code}</p>` +
     `<p style="font-size:14px;line-height:1.6;color:#6C6359;margin:0">It works for ${CODE_MINUTES} minutes. If you didn’t ask for it, you can ignore this email — nobody can sign in without the code.</p>`,
     "You’re getting this email because someone asked to sign in to " + brand + " with this address.");
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json", "Idempotency-Key": "login-" + ((rows && rows[0] && rows[0].id) || Date.now()) },
-    body: JSON.stringify({ from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT, to: [email], subject: `${code} is your ${brand} sign-in code`, html, text: `Your ${brand} sign-in code is ${code}. It works for ${CODE_MINUTES} minutes. If you didn't ask for it, ignore this email.` }),
-  });
+  // Save the code and send the email together.
+  const [, res] = await Promise.all([
+    db(env, "customer_login_codes", {
+      method: "POST",
+      body: JSON.stringify({
+        id, email, ip_hash: ipHash, new_customer: !isCustomer,
+        code_hash: hexOf(await hmacBytes(key, "code:" + email + ":" + code)),
+        expires_at: new Date(Date.now() + CODE_MINUTES * 60000).toISOString(),
+      }),
+    }),
+    fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json", "Idempotency-Key": "login-" + id },
+      body: JSON.stringify({ from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT, to: [email], subject: `${code} is your ${brand} sign-in code`, html, text: `Your ${brand} sign-in code is ${code}. It works for ${CODE_MINUTES} minutes. If you didn't ask for it, ignore this email.` }),
+    }),
+  ]);
   if (!res.ok) console.error("login email failed", res.status, (await res.text()).slice(0, 200));
   return json({ ok: true }, 200, cors);
 }

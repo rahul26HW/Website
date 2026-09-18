@@ -69,18 +69,19 @@
     sendCode: async function (form, emailArg) {
       var email = emailArg || form.elements.email.value.trim();
       if (!u.isEmail(email)) { say(form, 'Enter a valid email address.'); form.elements.email && form.elements.email.focus(); return; }
-      var btn = form.querySelector('button[type=submit]'); btn.disabled = true; say(form, '');
+      var btn = form.querySelector('button[type=submit]'), label = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Sending your code…'; btn.setAttribute('aria-busy', 'true'); say(form, '');
       try {
         await post('/account/code', { email: email });
         u.session.set(PENDING, email.toLowerCase());
         HW.router.run({ scroll: false });
-      } catch (e) { say(form, e.message); btn.disabled = false; }
+      } catch (e) { say(form, e.message); btn.disabled = false; btn.textContent = label; btn.removeAttribute('aria-busy'); }
     },
 
     resend: async function (btn) {
       var email = u.session.get(PENDING, null), form = btn.closest('form');
       if (!email) return HW.account.restart();
-      btn.disabled = true;
+      btn.disabled = true; say(form, 'Sending a new code…', true);
       try { await post('/account/code', { email: email }); say(form, 'We’ve sent a new code. Use the newest one.', true); }
       catch (e) { say(form, e.message); }
       finally { setTimeout(function () { btn.disabled = false; }, 20000); }
@@ -93,7 +94,8 @@
       var code = form.elements.code.value.replace(/\D/g, '');
       if (!email) return HW.account.restart();
       if (code.length !== 6) { say(form, 'Enter the 6-digit code from the email.'); form.elements.code.focus(); return; }
-      var btn = form.querySelector('button[type=submit]'); btn.disabled = true; say(form, '');
+      var btn = form.querySelector('button[type=submit]'), label = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Signing in…'; btn.setAttribute('aria-busy', 'true'); say(form, '');
       try {
         var r = await post('/account/verify', { email: email, code: code });
         u.store.set(KEY, { token: r.token, email: r.email, expires: r.expires });
@@ -104,7 +106,7 @@
         else HW.router.navigate('/account');
       } catch (e) {
         say(form, e.message + (e.data && e.data.triesLeft != null ? ' (' + e.data.triesLeft + ' tries left)' : ''));
-        btn.disabled = false; form.elements.code.select();
+        btn.disabled = false; btn.textContent = label; btn.removeAttribute('aria-busy'); form.elements.code.select();
       }
     },
 
