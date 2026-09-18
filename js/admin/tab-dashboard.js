@@ -133,8 +133,10 @@
     var o = await A.sb.from('orders').select('total,status,payment_status');
     if (!o.error) {
       var rows = o.data || [];
-      var revenue = rows.filter(function (r) { return r.status !== 'refunded'; }).reduce(function (s, r) { return s + Number(r.total || 0); }, 0);
-      set('stOrders', rows.length);
+      // Real orders only: abandoned or cancelled checkouts don't count, and revenue is money actually taken (or approved).
+      var real = rows.filter(function (r) { return r.payment_status !== 'unpaid' && r.status !== 'cancelled'; });
+      var revenue = real.filter(function (r) { return /^(paid|authorized)$/.test(r.payment_status) && r.status !== 'refunded'; }).reduce(function (s, r) { return s + Number(r.total || 0); }, 0);
+      set('stOrders', real.length);
       set('stRevenue', u.money(revenue));
       A.newOrders = rows.filter(function (r) { return r.status === 'new'; }).length;
     } else { set('stOrders', '—'); set('stRevenue', '—'); }

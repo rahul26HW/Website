@@ -8,7 +8,9 @@
   var LAST = 'hw:lastOrder';
   var DRAFT = 'hw:checkoutDraft';
 
-  var STATES = [['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'], ['DC', 'District of Columbia'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'], ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'], ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'], ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'], ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming']];
+  var STATES = [['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'], ['DC', 'District of Columbia'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'], ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'], ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'], ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'], ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
+    ['PR', 'Puerto Rico'], ['GU', 'Guam'], ['VI', 'U.S. Virgin Islands'], ['AS', 'American Samoa'], ['MP', 'Northern Mariana Islands'],
+    ['AA', 'Armed Forces Americas (AA)'], ['AE', 'Armed Forces Europe (AE)'], ['AP', 'Armed Forces Pacific (AP)']];
 
   function field(id, label, type, opts) {
     opts = opts || {};
@@ -143,12 +145,24 @@
     // Capped at the window itself: the server clock can be a few seconds ahead of this device.
     return Math.min(HW.cancelMinutes() * 60000, Math.max(0, started + HW.cancelMinutes() * 60000 - Date.now()));
   };
+  /* Proof that this visitor may cancel: the tab that placed the order (pay token), the signed link in the order
+     email (cancel token), or the signed-in account. Knowing the email alone isn't enough. */
+  HW.cancelProof = function (number, email) {
+    var body = {}, headers = {}, ok = false;
+    var last = u.session.get(LAST, null);
+    if (last && last.order_number === number && last.pay_token) { body.pay_token = last.pay_token; ok = true; }
+    var toks = u.session.get('hw:cancelTokens', {}) || {};
+    if (toks[number]) { body.cancel_token = toks[number]; ok = true; }
+    var a = HW.account && HW.account.get();
+    if (a && String(a.email).toLowerCase() === String(email || '').toLowerCase()) { headers.Authorization = 'Bearer ' + a.token; ok = true; }
+    return { ok: ok, body: body, headers: headers };
+  };
   HW.cancelOrder = async function (number, email) {
-    var res, data = {};
+    var res, data = {}, proof = HW.cancelProof(number, email);
     try {
       res = await fetch(workerUrl() + '/order/cancel', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_number: number, email: email })
+        method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, proof.headers),
+        body: JSON.stringify(Object.assign({ order_number: number, email: email }, proof.body))
       });
       data = await res.json().catch(function () { return {}; });
     } catch (e) { throw new Error('We couldn’t reach the store. Please try again.'); }
@@ -195,6 +209,32 @@
       if (data.paid) { o.paid = true; u.session.set(LAST, o); throw new Error('This order is already paid.'); }
       if (!res.ok || !/^https:\/\/checkout\.stripe\.com\//.test(data.url || '')) throw new Error(data.error || 'We couldn’t open the payment page. Please try again.');
       window.location.assign(data.url);
+    },
+    /* After Stripe: poll the order until the card is approved (or give up politely after ~40 s). */
+    confirmPaid: async function (o) {
+      var tries = 0;
+      async function once() {
+        if (!document.getElementById('payWait')) return;
+        var st = null;
+        try {
+          var res = await fetch(workerUrl() + '/order/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order_number: o.order_number, pay_token: o.pay_token }) });
+          st = res.ok ? await res.json() : null;
+        } catch (e) { st = null; }
+        if (st && /^(authorized|paid)$/.test(st.payment_status)) {
+          o.paid = true; o.paid_at = st.paid_at || new Date().toISOString(); delete o.payError;
+          u.session.set(LAST, o); u.session.set(DRAFT, {}); HW.cart.clear();
+          if (HW.account) HW.account.invalidate();
+          HW.router.navigate('/order/' + encodeURIComponent(o.order_number), { replace: true, scroll: false });
+          return;
+        }
+        if (++tries >= 14) {
+          var w = document.getElementById('payWait');
+          if (w) w.innerHTML = 'We haven’t had the payment confirmation yet. If Stripe showed it as paid, it’s on its way — you’ll get an email. <button class="linkbtn" type="button" data-act="reload">Check again</button>';
+          return;
+        }
+        setTimeout(once, 3000);
+      }
+      once();
     },
     payAgain: async function (btn) {
       var o = u.session.get(LAST, null), msg = document.getElementById('payMsg');
@@ -276,6 +316,11 @@
         msg.hidden = false; msg.className = 'form-msg err';
         msg.textContent = e.message || 'We couldn’t place your order. Please try again.';
         msg.focus && msg.setAttribute('tabindex', '-1'); msg.focus();
+        if (e.code && /^PROMO_/.test(e.code) && HW.cart.promoCode()) {
+          // The code can't be used: take it off so the next try goes through.
+          HW.cart.removePromo();
+          msg.textContent = (e.message || 'That promo code can’t be used.') + ' We removed it — check the new total and try again.';
+        }
         if (e.code && /^(OUT_OF_STOCK|PRODUCT_NOT_FOUND|VARIANT_NOT_FOUND|PROMO_)/.test(e.code)) {
           // Stock or promo changed: refresh the catalog so the summary shows the truth.
           HW.reloadStore && HW.reloadStore().then(function () {
@@ -297,12 +342,14 @@
       };
     }
     var payment = (function () { try { return new URLSearchParams(location.search).get('payment'); } catch (e) { return null; } })();
-    if (payment === 'success' && !o.paid) {
-      // Display only: the Stripe webhook is what marks the order paid in the database.
-      o.paid = true; o.paid_at = o.paid_at || new Date().toISOString();
-      delete o.payError; delete o.pay_token; u.session.set(LAST, o);
-      u.session.set(DRAFT, {});
-      HW.cart.clear();
+    if (payment === 'success' && !o.paid && !o.cod) {
+      // Don't trust the address bar: ask the server whether Stripe really approved the card (the webhook can take a moment).
+      return {
+        html: '<div class="wrap"><div class="confirm"><div class="weave-rule">' + HW.SVG.weave + '</div><h1>Confirming your payment…</h1>' +
+          '<p class="muted" id="payWait" role="status">This takes a few seconds. Please keep this page open.</p></div></div>',
+        seo: { title: 'Confirming payment', noindex: true },
+        after: function () { HW.checkout.confirmPaid(o); }
+      };
     }
     var first = o.name ? ', ' + esc(o.name.split(' ')[0]) : '';
     var unpaid = HW.checkout.cardPayments() && !o.paid;

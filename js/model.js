@@ -93,10 +93,11 @@
     var price = +p.price, sale = p.salePrice != null && p.salePrice !== '' ? +p.salePrice : null;
     return { price: price, salePrice: sale, onSale: sale != null && sale < price, effective: (sale != null && sale < price) ? sale : price };
   };
-  m.priceRange = function (p) {
+  m.priceRange = function (p, lo, hi) {
     if (!m.isCollection(p)) { var e = m.simplePrice(p).effective; return { min: e, max: e }; }
     var vals = [];
-    m.eachVariant(p, function (v) { if (isFinite(v.effective)) vals.push(v.effective); });
+    m.eachVariant(p, function (v) { if (isFinite(v.effective) && (lo == null || v.effective >= lo) && (hi == null || v.effective <= hi)) vals.push(v.effective); });
+    if (!vals.length && (lo != null || hi != null)) return m.priceRange(p);
     if (!vals.length) return { min: 0, max: 0 };
     return { min: Math.min.apply(null, vals), max: Math.max.apply(null, vals) };
   };
@@ -245,10 +246,13 @@
   };
 
   /* ---------- promos ---------- */
+  // Shoppers only get the advertised newsletter code with the catalog; other codes are checked one at a time
+  // (HW.cart.applyPromo → check_promo) and remembered here.
+  HW.promoCache = HW.promoCache || {};
   m.findPromo = function (code) {
     var c = String(code || '').trim().toLowerCase();
     if (!c) return null;
-    return (DB().promos || []).find(function (p) { return p.active && String(p.code).toLowerCase() === c; }) || null;
+    return (DB().promos || []).find(function (p) { return p.active && String(p.code).toLowerCase() === c; }) || HW.promoCache[c] || null;
   };
   m.promoProblem = function (promo, subtotal) {
     var today = new Date().toISOString().slice(0, 10);

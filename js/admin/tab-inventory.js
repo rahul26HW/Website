@@ -86,8 +86,14 @@
         var el = e.target;
         if (el.dataset.inv != null) {
           var v = el.value.trim();
+          if (v !== '' && !/^\d{1,7}$/.test(v)) {
+            A.alert(['Stock must be a whole number, 0 or more (you typed “' + v + '”).'], el);
+            el.value = A.draft.inventory[el.dataset.inv] == null ? '' : A.draft.inventory[el.dataset.inv];
+            return;
+          }
+          el.removeAttribute('aria-invalid');
           if (v === '') delete A.draft.inventory[el.dataset.inv];
-          else A.draft.inventory[el.dataset.inv] = Math.max(0, parseInt(v, 10) || 0);
+          else A.draft.inventory[el.dataset.inv] = parseInt(v, 10);
           var row = el.closest('tr'); var r = rows().find(function (x) { return x.key === el.dataset.inv; });
           if (row && r) row.lastElementChild.innerHTML = status(r).html;
           A.refreshDirtyBar();

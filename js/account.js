@@ -136,7 +136,7 @@
   }
   var NAV = [['', 'Overview', 'overview'], ['orders', 'Orders', 'orders'], ['wishlist', 'Wishlist', 'wishlist'], ['addresses', 'Addresses', 'addresses'],
     ['payments', 'Payment methods', 'payments'], ['notifications', 'Notifications', 'notifications'], ['returns', 'Returns', 'returns'], ['settings', 'Settings', 'settings']];
-  var STATUS = { new: 'Received', accepted: 'Being prepared', packed: 'Packed', shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded' };
+  var STATUS = { new: 'Received', accepted: 'Being prepared', packed: 'Being prepared', shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded' };
   function badge(o) {
     var s = o.return_requested_at && !/^(refunded|cancelled)$/.test(o.status) ? 'return' : o.status;
     var label = s === 'return' ? 'Return requested' : (STATUS[s] || s);
@@ -490,6 +490,8 @@
     },
 
     signOut: function (quiet) {
+      var a = get();
+      if (a) post('/account/signout', {}, a.token).catch(function () {});
       u.store.del(KEY);
       u.session.set(PENDING, null);
       u.session.set('hw:checkoutDraft', {});

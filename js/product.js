@@ -94,11 +94,23 @@
       (long ? '<button class="desc-more" type="button" data-act="desc-more" aria-expanded="false" aria-controls="pdpDesc">Read more</button>' : '');
   }
 
-  function stepper() {
+  function stepper(max) {
+    sel.max = Math.max(1, Math.min(99, max || 99));
+    if (sel.qty > sel.max) sel.qty = sel.max;
     return '<div class="stepper" role="group" aria-label="Quantity">' +
-      '<button type="button" data-act="qty" data-d="-1" aria-label="Decrease quantity">–</button>' +
+      '<button type="button" data-act="qty" data-d="-1" aria-label="Decrease quantity"' + (sel.qty <= 1 ? ' disabled' : '') + '>–</button>' +
       '<span id="pdpQty" aria-live="polite">' + sel.qty + '</span>' +
-      '<button type="button" data-act="qty" data-d="1" aria-label="Increase quantity">+</button></div>';
+      '<button type="button" data-act="qty" data-d="1" aria-label="Increase quantity"' + (sel.qty >= sel.max ? ' disabled' : '') + '>+</button></div>';
+  }
+
+  /* The chosen colour and size live in the address bar, so a shared link opens the same option. */
+  function writeVariant() {
+    var p = current(); if (!p || !m.isCollection(p)) return;
+    try {
+      var v = m.resolveVariant(p, sel.colorId, sel.sizeId), url = new URL(location.href);
+      url.searchParams.set('color', u.slugify(v.color.label)); url.searchParams.set('size', u.slugify(v.size.label));
+      history.replaceState(history.state, '', url.pathname + url.search);
+    } catch (e) {}
   }
 
   function notifyHTML(p, sku, what) {
@@ -110,7 +122,7 @@
       '<p class="form-msg" role="status" hidden></p></form>';
   }
 
-  function tabsHTML(specs, features, care) {
+  function tabsHTML(specs, features, care, inStock) {
     var tabs = [];
     var sp = specs.filter(function (s) { return s.value != null && String(s.value).trim() !== ''; });
     if (sp.length) tabs.push({ id: 'details', label: 'Details', html: '<ul class="detail-list flat">' + sp.map(function (s) { return '<li><b>' + esc(s.label) + '</b> ' + esc(s.value) + '</li>'; }).join('') + '</ul>' });
@@ -120,11 +132,11 @@
     if (cl.length) tabs.push({ id: 'care', label: 'Care', html: '<ul class="bullets">' + cl.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' });
 
     var sh = HW.DB.shipping || {};
-    var shipTitle = sh.enabled && sh.freeThreshold ? 'Complimentary shipping over ' + u.money(sh.freeThreshold) : 'Fast, tracked shipping';
+    var shipTitle = sh.enabled && sh.freeThreshold ? 'Free shipping on orders of ' + u.money(sh.freeThreshold) + ' or more' : 'Fast, tracked shipping';
     var f0 = (HW.DB.features || [])[0] || {};
     var row = function (ic, t, s) { return '<div class="passure"><span class="pa-ic">' + ic + '</span><div><b>' + esc(t) + '</b>' + (s ? '<span>' + esc(s) + '</span>' : '') + '</div></div>'; };
     var aside = '<aside class="pdp-aside" aria-label="Shipping and returns">' +
-      row(ICON_TRUCK, shipTitle, 'Ships in ' + m.shippingDays()) +
+      (inStock === false ? '' : row(ICON_TRUCK, shipTitle, 'Ships in ' + m.shippingDays())) +
       row(ICON_RETURN, 'Easy returns', 'Not right? See our refund policy') +
       row(HW.SVG.logo, f0.title || 'Woven, not printed', f0.body || 'Crafted to last for years') + '</aside>';
 
@@ -161,9 +173,10 @@
         '<div class="price"><span class="now ' + (sp.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(sp.effective) + '</span>' + (sp.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(sp.price) + '</span>' : '') + '</div>' +
         descHTML(p) +
         '<div class="stocknote ' + (inStock ? 'in' : 'out') + '"><span aria-hidden="true">● </span>' + esc(m.stockLabel(qtyKey, inStock)) + '</div>' +
-        '<div class="qtyrow">' + (inStock ? stepper() : '') + buy + '</div>' +
+        '<div class="qtyrow">' + (inStock ? stepper(m.invTracked(qtyKey) ? m.invQty(qtyKey) : 99) : '') + buy + '</div>' +
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
         (inStock ? '' : notifyHTML(p, m.simpleSku(p), 'This item')),
+      inStock: inStock,
       specs: [{ label: 'SKU', value: p.sku }, { label: 'Material', value: p.material }, { label: 'Origin', value: p.origin }, { label: 'Availability', value: m.stockLabel(qtyKey, inStock) }]
     };
   }
@@ -199,9 +212,10 @@
         '<div class="price" aria-live="polite"><span class="now ' + (v.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(v.effective) + '</span>' + (v.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(v.price) + '</span>' : '') + '</div>' +
         descHTML(p) + swatches + sizes +
         '<div class="stocknote ' + (v.inStock ? 'in' : 'out') + '" aria-live="polite"><span aria-hidden="true">● </span>' + esc(v.inStock ? m.stockLabel(v.sku, true) : 'This option is currently sold out') + '</div>' +
-        '<div class="qtyrow">' + (v.inStock ? stepper() : '') + buy + '</div>' +
+        '<div class="qtyrow">' + (v.inStock ? stepper(m.invTracked(v.sku) ? m.invQty(v.sku) : 99) : '') + buy + '</div>' +
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
         (v.inStock ? '' : notifyHTML(p, v.sku, v.color.label + ' / ' + v.size.label)),
+      inStock: v.inStock,
       specs: [{ label: 'SKU', value: v.sku }, { label: 'Material', value: p.material }, { label: 'Origin', value: p.origin }]
     };
   }
@@ -209,6 +223,7 @@
   function render(p) {
     var cat = m.categoryById(p.categoryId);
     var sub = cat && (cat.subcategories || []).find(function (s) { return s.id === p.subcategoryId; });
+    if (sub && String(sub.name).trim().toLowerCase() === String(cat.name).trim().toLowerCase()) sub = null;
     var info, items, alt = m.imageAlt(p);
     if (m.isCollection(p)) {
       info = collectionInfo(p, cat, sub);
@@ -225,7 +240,7 @@
     return {
       cat: cat,
       pdp: '<div class="pdp"><div class="gallerywrap">' + galleryHTML(items, info.start, alt) + '</div><div class="info" id="pdpInfo">' + info.html + '</div></div>',
-      tabs: tabsHTML(info.specs, p.features, p.care)
+      tabs: tabsHTML(info.specs, p.features, p.care, info.inStock)
     };
   }
 
@@ -245,11 +260,26 @@
 
   HW.pdp = {
     zoom: function () { if (gal) HW.lightbox.open(gal.items, gal.idx, gal.alt); },
-    color: function (id) { sel.colorId = id; sel.qty = 1; rerender(); },
-    size: function (id) { sel.sizeId = id; sel.qty = 1; rerender(); },
+    color: function (id) {
+      var p = current(); sel.colorId = id; sel.qty = 1;
+      if (p && m.isCollection(p) && !m.resolveVariant(p, id, sel.sizeId).inStock) {
+        var s = m.optSize(p).values.find(function (x) { return m.resolveVariant(p, id, x.id).inStock; });
+        if (s) sel.sizeId = s.id;
+      }
+      rerender(); writeVariant();
+    },
+    size: function (id) { sel.sizeId = id; sel.qty = 1; rerender(); writeVariant(); },
     qty: function (d) {
-      sel.qty = Math.max(1, Math.min(99, sel.qty + d));
+      var max = sel.max || 99;
+      sel.qty = Math.max(1, Math.min(max, sel.qty + d));
       var el = document.getElementById('pdpQty'); if (el) el.textContent = sel.qty;
+      var bs = u.qsa('#pdpInfo [data-act="qty"]'), lost = false;
+      bs.forEach(function (b) {
+        var off = b.dataset.d === '-1' ? sel.qty <= 1 : sel.qty >= max;
+        if (off && b === document.activeElement) lost = true;
+        b.disabled = off;
+      });
+      if (lost) { var other = bs.find(function (b) { return !b.disabled; }); if (other) other.focus(); }
       var b = document.getElementById('buyBtn'); if (b && b.classList.contains('snipcart-add-item')) b.setAttribute('data-item-quantity', sel.qty);
     },
     getQty: function () { return sel.qty; },
@@ -286,7 +316,7 @@
       }
       input.removeAttribute('aria-invalid'); btn.disabled = true;
       try {
-        await HW.api.rpc('request_stock_alert', { p_email: input.value.trim(), p_product_id: form.dataset.pid, p_sku: form.dataset.sku || '', p_product_name: p ? p.name : null });
+        await HW.api.server('/public/stock-alert', { email: input.value.trim(), product_id: form.dataset.pid, sku: form.dataset.sku || '', product_name: p ? p.name : '' });
         msg.hidden = false; msg.className = 'form-msg ok';
         msg.textContent = 'Thanks — we’ll email you when it’s back in stock.';
         input.value = '';
@@ -309,12 +339,17 @@
         // First color with stock, then its first size with stock.
         var color = cOpt.values.find(function (c) { return sOpt.values.some(function (s) { return m.resolveVariant(p, c.id, s.id).inStock; }); }) || cOpt.values[0];
         var size = sOpt.values.find(function (s) { return m.resolveVariant(p, color.id, s.id).inStock; }) || sOpt.values[0];
+        // A shared link can ask for a colour and size (?color=coral&size=21-x-54).
+        var pick = function (vals, want) { want = String(want || '').toLowerCase(); return want ? vals.find(function (x) { return u.slugify(x.label) === want || String(x.id) === want; }) : null; };
+        var wc = pick(cOpt.values, params.color), ws = pick(sOpt.values, params.size);
+        if (wc) { color = wc; size = sOpt.values.find(function (s) { return m.resolveVariant(p, color.id, s.id).inStock; }) || sOpt.values[0]; }
+        if (ws) size = ws;
         sel.colorId = color.id; sel.sizeId = size.id;
       }
     }
     var r = render(p);
     var cat = r.cat;
-    var plain = HW.htmlToText(p.description);
+    var plain = HW.htmlToText(p.description).replace(/\s*[•▪●◦]\s*/g, ' ').replace(/\s+/g, ' ').trim();
     return {
       html: '<div class="wrap">' +
         '<nav class="crumb" aria-label="Breadcrumb"><a href="' + HW.link('/') + '">Home</a> &nbsp;/&nbsp; ' +

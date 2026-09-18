@@ -11,10 +11,11 @@
   };
   u.escAttr = u.esc;
 
+  var USD = window.Intl && Intl.NumberFormat ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
   u.money = function (n) {
     var v = Number(n);
     if (!isFinite(v)) v = 0;
-    return '$' + v.toFixed(2).replace(/\.00$/, '');
+    return USD ? USD.format(v) : '$' + v.toFixed(2);
   };
   u.round2 = function (n) { return Math.round((Number(n) || 0) * 100) / 100; };
 
@@ -25,7 +26,8 @@
   };
   u.uid = function (p) { return (p || 'id') + '_' + Math.random().toString(36).slice(2, 8); };
 
-  u.isEmail = function (s) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(s || '').trim()) && String(s).length <= 254; };
+  // Plain ASCII addresses with a real domain — the same rule as the server and the database.
+  u.isEmail = function (s) { return /^[A-Za-z0-9._%+'-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,24}$/.test(String(s || '').trim()) && String(s).trim().length <= 254; };
 
   u.debounce = function (fn, ms) {
     var t;

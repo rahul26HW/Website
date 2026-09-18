@@ -18,7 +18,7 @@
     var priceHtml, action, swatches = '';
 
     if (coll) {
-      var r = m.priceRange(p);
+      var r = m.priceRange(p, opts.minPrice, opts.maxPrice);
       priceHtml = r.min === r.max
         ? '<span class="now">' + u.money(r.min) + '</span>'
         : '<span class="muted" style="font-size:12px;letter-spacing:.04em">from</span> <span class="now">' + u.money(r.min) + '</span>';
@@ -88,11 +88,12 @@
         return colorsOf(p).some(function (c) { return c.label === v; });
       }).length;
       return { v: v, n: n, on: f[group].has(v) };
-    }).filter(function (r) { return r.n > 0 || r.on; });
+    });
+    // Options with no matches stay visible (greyed out), so shoppers can still see what else exists.
     return rows.map(function (r) {
-      var id = 'cf-' + group + '-' + u.slugify(r.v);
-      return '<label class="' + (group === 'colors' ? 'cf-color' : 'cf-opt') + '" for="' + id + '">' +
-        '<input type="checkbox" id="' + id + '" data-act="cf" data-g="' + group + '" data-v="' + esc(r.v) + '"' + (r.on ? ' checked' : '') + '>' +
+      var id = 'cf-' + group + '-' + u.slugify(r.v), none = r.n === 0 && !r.on;
+      return '<label class="' + (group === 'colors' ? 'cf-color' : 'cf-opt') + (none ? ' cf-none' : '') + '" for="' + id + '">' +
+        '<input type="checkbox" id="' + id + '" data-act="cf" data-g="' + group + '" data-v="' + esc(r.v) + '"' + (r.on ? ' checked' : '') + (none ? ' disabled' : '') + '>' +
         (extraFn ? extraFn(r.v) : '') + '<span class="cf-clabel">' + esc(labelFn(r.v)) + '</span>' +
         '<span class="cf-count" aria-label="' + u.plural(r.n, 'product') + '">(' + r.n + ')</span></label>';
     }).join('');
@@ -167,12 +168,28 @@
     range.style.right = (100 - ((mx - lo) / (hi - lo)) * 100) + '%';
   }
 
+  /* Filters live in the address bar, so refresh, Back and shared links keep them. */
+  function writeUrl() {
+    try {
+      var url = new URL(location.href), f = ctx.f;
+      var subSlugs = ctx.cat.subcategories.filter(function (s) { return f.subs.has(s.id); }).map(function (s) { return s.slug; });
+      var set = function (k, v) { if (v) url.searchParams.set(k, v); else url.searchParams.delete(k); };
+      set('sub', subSlugs.join(','));
+      set('color', Array.from(f.colors).join(','));
+      set('material', Array.from(f.materials).join(','));
+      set('min', f.min != null ? String(f.min) : '');
+      set('max', f.max != null ? String(f.max) : '');
+      history.replaceState(history.state, '', url.pathname + url.search);
+    } catch (e) {}
+  }
+
   function refresh(sourceGroup) {
+    if (sourceGroup !== 'sort') writeUrl();
     var items = results();
     var grid = document.getElementById('catGrid');
     if (grid) {
       grid.innerHTML = items.length
-        ? items.map(function (p, i) { return HW.productCard(p, { heading: 'h2', eager: i === 0 ? 'high' : i < 4 }); }).join('')
+        ? items.map(function (p, i) { return HW.productCard(p, { heading: 'h2', eager: i === 0 ? 'high' : i < 4, minPrice: ctx.f.min, maxPrice: ctx.f.max }); }).join('')
         : '<p class="muted" style="padding:30px 0 80px">No products match these filters. <button class="link-u" type="button" style="background:none;border:none;border-bottom:1px solid var(--ink);cursor:pointer" data-act="cf-clear">Clear filters</button></p>';
     }
     var c = document.getElementById('catCount');
@@ -263,10 +280,15 @@
     var all = m.productsIn(cat);
     var fcfg = Object.assign({ type: true, color: true, material: true, price: true }, cat.filters || {});
     ctx = { cat: cat, all: all, fcfg: fcfg, f: emptyFilter(), sort: params.sort || 'featured', lo: 0, hi: 0 };
-    if (params.sub) {
-      var sub = cat.subcategories.find(function (s) { return s.slug === params.sub; });
+    String(params.sub || '').split(',').forEach(function (slug) {
+      var sub = cat.subcategories.find(function (s) { return s.slug === slug; });
       if (sub) ctx.f.subs.add(sub.id);
-    }
+    });
+    var list = function (v) { return String(v || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 30); };
+    list(params.color).forEach(function (c) { ctx.f.colors.add(c); });
+    list(params.material).forEach(function (x) { ctx.f.materials.add(x); });
+    if (isFinite(parseFloat(params.min))) ctx.f.min = parseFloat(params.min);
+    if (isFinite(parseFloat(params.max))) ctx.f.max = parseFloat(params.max);
     var items = results();
     var anyFilter = all.length > 1 && ((fcfg.type && cat.subcategories.length) || fcfg.color || fcfg.material || fcfg.price);
     var sortSel = '<div class="listing-tools"><label for="catSort">Sort</label><select id="catSort" data-act="sort">' +

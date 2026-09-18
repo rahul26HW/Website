@@ -45,7 +45,9 @@
   /* ---------- header + footer ---------- */
   HW.paintChrome = function () {
     var DB = HW.DB, m = HW.m;
-    var ann = (DB.announcement || '').trim();
+    // {{free_shipping}} is replaced by the threshold set in Promotions, so the bar can't drift from the real rule.
+    var sh0 = DB.shipping || {};
+    var ann = (DB.announcement || '').replace(/\{\{\s*free_shipping\s*\}\}/gi, sh0.enabled !== false && sh0.freeThreshold ? u.money(sh0.freeThreshold) : '').trim();
     var annBar = document.getElementById('announce');
     document.getElementById('announceText').textContent = ann;
     annBar.hidden = !ann;
@@ -131,7 +133,15 @@
       document.getElementById('mnavScrim').classList.add('open');
       document.getElementById('menuBtn').setAttribute('aria-expanded', 'true');
       nav.removeAttribute('aria-hidden');
-      releaseMenu = u.trapFocus(nav, HW.menu.close);
+      // Start the focus trap once the slide-in has made the links visible; before that they can't take focus.
+      var started = false;
+      var start = function () {
+        if (started || !nav.classList.contains('open')) return;
+        started = true; nav.removeEventListener('transitionend', start);
+        releaseMenu = u.trapFocus(nav, HW.menu.close);
+      };
+      nav.addEventListener('transitionend', start);
+      setTimeout(start, 420);
     },
     close: function (restore) {
       var nav = document.getElementById('mnav');
@@ -161,7 +171,7 @@
     input.removeAttribute('aria-invalid');
     btn.disabled = true;
     try {
-      var out = await HW.api.rpc('subscribe', { p_email: email, p_source: 'footer' });
+      var out = await HW.api.server('/public/subscribe', { email: email, source: 'footer' });
       input.value = '';
       var promo = out && out.code ? HW.m.findPromo(out.code) : null;
       res.className = 'news-result ok';

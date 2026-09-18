@@ -34,7 +34,7 @@
           ui.check('Offer free shipping above a threshold', 'shipping.enabled', sh.enabled) +
           '<div class="grid2">' + ui.field('Free shipping at or above ($)', 'shipping.freeThreshold', sh.freeThreshold, { type: 'number', min: 0 }) +
           ui.field('Flat rate below threshold ($)', 'shipping.flatRate', sh.flatRate, { type: 'number', min: 0 }) + '</div>' +
-          '<p class="hint">Remember to update the announcement bar if you change the threshold.</p>' + ui.saveBtn()) +
+          '<p class="hint">The announcement bar follows this automatically when it uses {{free_shipping}}.</p>' + ui.saveBtn()) +
 
         '<section class="panel"><h2 class="ph3 h1row" style="font-size:14px">Discount codes <button class="btn loom sm" type="button" data-a="promo-add">+ New code</button></h2>' +
         welcomeWarning() +

@@ -90,9 +90,14 @@
         return;
       }
       if (v('website')) { msg.hidden = false; msg.className = 'form-msg ok'; msg.textContent = 'Thanks — your message has been sent.'; form.reset(); return; }
+      if (v('phone') && !/^[+()\d][\d\s().+-]{6,}$/.test(v('phone'))) {
+        form.elements.phone.setAttribute('aria-invalid', 'true');
+        msg.hidden = false; msg.className = 'form-msg err'; msg.textContent = 'Enter a phone number with digits only (or leave it empty).';
+        form.elements.phone.focus(); return;
+      }
       btn.disabled = true;
       try {
-        await HW.api.insert('contact_messages', { name: v('name'), email: v('email'), phone: v('phone') || null, subject: v('subject') || null, message: v('message') });
+        await HW.api.server('/public/contact', { name: v('name'), email: v('email'), phone: v('phone'), subject: v('subject'), message: v('message'), website: v('website') });
         form.reset();
         msg.hidden = false; msg.className = 'form-msg ok';
         msg.textContent = 'Thanks — your message has been sent. We usually reply within one business day.';
@@ -103,13 +108,21 @@
   };
 
   /* ---------- order tracking ---------- */
-  var STEPS = [['new', 'Received'], ['packed', 'Packed'], ['shipped', 'Shipped'], ['delivered', 'Delivered']];
+  var STEPS = [['new', 'Received'], ['packed', 'Preparing'], ['shipped', 'Shipped'], ['delivered', 'Delivered']];
 
   function trackBlock() {
     var last = u.session.get('hw:lastOrder', null) || {};
     // Links in order emails carry ?order=HW-… (never the email address) to fill in the number.
     var fromLink = (function () { try { return new URLSearchParams(location.search).get('order') || ''; } catch (e) { return ''; } })();
     if (/^HW-?\d{1,12}$/i.test(fromLink)) last = { order_number: fromLink.toUpperCase(), email: last.order_number === fromLink.toUpperCase() ? last.email : '' };
+    // The order email's link also carries a signed cancel token (?c=…): keep it for this tab, then clear it from the address bar.
+    try {
+      var qs = new URLSearchParams(location.search), c = qs.get('c');
+      if (c && /^[A-Za-z0-9_-]{16,64}$/.test(c) && /^HW-?\d{1,12}$/i.test(fromLink)) {
+        var toks = u.session.get('hw:cancelTokens', {}) || {}; toks[fromLink.toUpperCase()] = c; u.session.set('hw:cancelTokens', toks);
+        qs.delete('c'); history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs.toString() : ''));
+      }
+    } catch (e) {}
     return '<form class="form panelbox" data-form="track" novalidate aria-labelledby="trackHead" style="margin-top:24px">' +
       '<h2 id="trackHead" style="font-size:24px;margin:0 0 4px;color:var(--ink)">Find your order</h2>' +
       '<div class="row2"><div class="fld"><label for="tr_no">Order number</label><input id="tr_no" name="number" placeholder="HW-100001" value="' + esc(last.order_number || '') + '" autocomplete="off" maxlength="20" required></div>' +
@@ -138,6 +151,10 @@
     if (done) return '';
     var left = HW.cancelLeft({ status: o.status, paid_at: o.paid_at, created_at: o.created_at });
     if (o.status === 'new' && /^(paid|authorized|cod)$/.test(o.payment_status) && left > 0) {
+      if (HW.cancelProof && !HW.cancelProof(number, email).ok) {
+        return '<div class="notice" role="note" style="text-align:left;margin:14px 0 0"><b>You can still cancel</b> for the next ' + Math.ceil(left / 60000) + ' minutes. ' +
+          'For your security, use the “View or cancel your order” link in your order email, or <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/account/login') + '">sign in</a> with this email.</div>';
+      }
       return '<div class="notice" role="note" style="text-align:left;margin:14px 0 0"><b>You can still cancel.</b> Cancel yourself within the next ' +
         '<span id="cancelLeft' + key + '">' + Math.ceil(left / 60000) + '</span> minutes' + (o.payment_status === 'authorized' ? ' — you won’t be charged.' : o.payment_status === 'cod' ? ' — nothing to pay.' : ' for a full refund.') +
         '<p class="form-msg err" id="cancelMsg' + key + '" role="alert" hidden></p>' +
@@ -156,10 +173,10 @@
 
   HW.cancelBlock = cancelBlock;
 
-  /* Received → Packed → Shipped → Delivered progress, or nothing for a cancelled/refunded order. */
+  /* Received → Preparing → Shipped → Delivered progress, or nothing for a cancelled/refunded order. */
   HW.orderSteps = function (o) {
     if (o.status === 'refunded' || o.status === 'cancelled') return '';
-    var reached = ({ new: 0, accepted: 0, packed: 1, shipped: 2, delivered: 3 })[o.status];
+    var reached = ({ new: 0, accepted: 1, packed: 1, shipped: 2, delivered: 3 })[o.status];
     if (reached == null) reached = 0;
     return '<ol class="track-steps">' + STEPS.map(function (s, i) {
       return '<li class="' + (i <= reached ? 'done' : '') + (i < reached ? ' next-done' : '') + '"' + (i === reached ? ' aria-current="step"' : '') + '>' + s[1] + '</li>';
@@ -194,7 +211,7 @@
       var reason = (box.querySelector('input') || {}).value || '';
       btn.disabled = true;
       try {
-        var r = await HW.api.rpc('request_cancel', { p_number: number, p_email: email, p_reason: reason.trim() });
+        var r = await HW.api.server('/public/cancel-request', { number: number, email: email, reason: reason.trim() });
         msg.hidden = false;
         if (r && r.ok) {
           if (HW.account) HW.account.invalidate();
@@ -225,7 +242,7 @@
       no = no.toUpperCase().replace(/^HW-?/, 'HW-');
       btn.disabled = true; msg.hidden = true;
       try {
-        var o = await HW.api.rpc('track_order', { p_number: no, p_email: email });
+        var o = (await HW.api.server('/public/track', { number: no, email: email })).order;
         if (!o) {
           msg.hidden = false; msg.className = 'form-msg err';
           msg.textContent = 'We couldn’t find an order with that number and email. Check both and try again, or contact us.';
@@ -236,7 +253,7 @@
         out.innerHTML = '<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:18px">' +
           '<div class="sumrow"><span><b>' + esc(o.order_number) + '</b></span><span class="muted">Placed ' + esc(u.fmtDate(o.created_at)) + '</span></div>' +
           (ended
-            ? '<p class="form-msg ok" style="margin:12px 0">' + (o.status === 'refunded' ? 'This order has been refunded.' : 'This order was cancelled because payment wasn’t completed.') + '</p>'
+            ? '<p class="form-msg ok" style="margin:12px 0">' + (o.status === 'refunded' ? 'This order has been refunded.' : o.payment_status === 'unpaid' ? 'This order was cancelled because payment wasn’t completed.' : 'This order was cancelled.' + (o.payment_status === 'voided' ? ' You weren’t charged.' : o.payment_status === 'refunded' ? ' Your payment was refunded.' : '')) + '</p>'
             : HW.orderSteps(o)) +
           (o.tracking_number ? '<p style="margin:12px 0 6px"><b>Tracking:</b> ' + esc(o.carrier ? o.carrier + ' ' : '') +
             (link ? '<a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + esc(link) + '" target="_blank" rel="noopener noreferrer">' + esc(o.tracking_number) + '</a>' : esc(o.tracking_number)) + '</p>' : '') +

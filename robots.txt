@@ -1,6 +1,5 @@
 User-agent: *
 Allow: /
-Disallow: /Website/admin
 Disallow: /Website/checkout
 Disallow: /Website/order/
 

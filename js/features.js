@@ -58,6 +58,25 @@
         data.sku = p.sku || undefined;
         data.offers = { '@type': 'Offer', priceCurrency: 'USD', price: m.simplePrice(p).effective.toFixed(2), availability: availability, itemCondition: 'https://schema.org/NewCondition', url: url };
       }
+      // Shipping and returns, as Google shows them in results.
+      var sh = HW.DB.shipping || {}, low = Number(data.offers.lowPrice || data.offers.price) || 0;
+      var rate = sh.enabled === false || (sh.freeThreshold && low >= sh.freeThreshold) ? 0 : Number(sh.flatRate) || 0;
+      var days = String(m.shippingDays()).match(/(\d+)\D+(\d+)/) || [0, 2, 4];
+      var qv = function (a, b) { return { '@type': 'QuantitativeValue', minValue: a, maxValue: b, unitCode: 'DAY' }; };
+      Object.assign(data.offers, {
+        priceValidUntil: (new Date().getFullYear() + 1) + '-12-31',
+        shippingDetails: {
+          '@type': 'OfferShippingDetails',
+          shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'US' },
+          shippingRate: { '@type': 'MonetaryAmount', value: rate.toFixed(2), currency: 'USD' },
+          deliveryTime: { '@type': 'ShippingDeliveryTime', handlingTime: qv(0, 1), transitTime: qv(Number(days[1]), Number(days[2])) }
+        },
+        hasMerchantReturnPolicy: {
+          '@type': 'MerchantReturnPolicy', applicableCountry: 'US',
+          returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow', merchantReturnDays: 30,
+          returnMethod: 'https://schema.org/ReturnByMail', returnFees: 'https://schema.org/ReturnFeesCustomerResponsibility'
+        }
+      });
       return data;
     },
     site: function () {
@@ -165,7 +184,9 @@
   /* ================================================================ *
    * Search
    * ================================================================ */
-  function norm(s) { return String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/["”″]/g, ' in ').replace(/[^a-z0-9]+/g, ' ').trim(); }
+  // 24"x40", 24 x 40, 24×40 and 24 in x 40 in all become 24x40 before anything else.
+  function sizes(s) { return String(s || '').replace(/(\d+(?:\.\d+)?)\s*(?:["”″]|in(?:ch(?:es)?)?\b)?\s*[x×]\s*(\d+(?:\.\d+)?)\s*(?:["”″]|in(?:ch(?:es)?)?\b)?/gi, '$1x$2'); }
+  function norm(s) { return sizes(String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')).replace(/["”″]/g, ' in ').replace(/[^a-z0-9]+/g, ' ').trim(); }
 
   function searchIndex() {
     if (HW._searchIndex && HW._searchIndex.db === HW.DB) return HW._searchIndex.items;
@@ -184,8 +205,9 @@
 
   HW.search = {
     run: function (q) {
-      var terms = norm(q).split(' ').filter(function (t) { return t.length > 0; });
-      if (!terms.length) return [];
+      var terms = norm(String(q || '').slice(0, 100)).split(' ').filter(function (t) { return t.length > 0; });
+      // A single letter matches almost everything: ask for a bit more.
+      if (!terms.length || (terms.length === 1 && terms[0].length < 2)) return [];
       var raw = String(q).trim().toLowerCase();
       return searchIndex().map(function (it) {
         var score = 0;
@@ -245,16 +267,16 @@
   };
 
   HW.views.search = function (params) {
-    var q = String(params.q || '').trim();
+    var q = String(params.q || '').trim().slice(0, 100);
     var res = q ? HW.search.run(q) : [];
     return {
       html: '<div class="wrap"><nav class="crumb" aria-label="Breadcrumb"><a href="' + HW.link('/') + '">Home</a> &nbsp;/&nbsp; <span aria-current="page">Search</span></nav>' +
-        '<div class="listing-head"><div><div class="eyebrow" style="margin-bottom:8px" aria-live="polite">' + u.plural(res.length, 'result') + '</div>' +
-        '<h1>' + (q ? 'Results for “' + esc(q) + '”' : 'Search') + '</h1></div>' +
+        '<div class="listing-head"><div>' + (q ? '<div class="eyebrow" style="margin-bottom:8px" aria-live="polite">' + u.plural(res.length, 'result') + '</div>' : '') +
+        '<h1>' + (q ? 'Results for “' + esc(HW.seo.clip(q, 60)) + '”' : 'Search') + '</h1></div>' +
         '<form class="searchpage" role="search" data-form="search"><label class="sr-only" for="searchPageInput">Search products</label>' +
-        '<input id="searchPageInput" name="q" type="search" value="' + esc(q) + '" placeholder="Search products" autocomplete="off"><button class="btn sm" type="submit">Search</button></form></div>' +
+        '<input id="searchPageInput" name="q" type="search" maxlength="100" value="' + esc(q) + '" placeholder="Search products" autocomplete="off"><button class="btn sm" type="submit">Search</button></form></div>' +
         (res.length ? '<div class="p-grid">' + res.map(function (p) { return HW.productCard(p, { heading: 'h2' }); }).join('') + '</div>'
-          : '<div class="confirm" style="padding:10px 0 80px"><p class="muted">' + (q ? 'Nothing matched. Try a simpler word like “rug”, “towel” or a color.' : 'Type what you’re looking for.') + '</p>' +
+          : '<div class="confirm" style="padding:10px 0 80px"><p class="muted">' + (q ? (q.replace(/\s/g, '').length < 2 ? 'Type at least two letters.' : 'Nothing matched. Try a simpler word like “rug”, “towel”, a color or a size like 24x40.') : 'Type what you’re looking for.') + '</p>' +
             '<div class="subnav" style="justify-content:center">' + m.visibleCategories().map(function (c) { return '<a class="chip" href="' + HW.link('/category/' + c.slug) + '">' + esc(c.name) + '</a>'; }).join('') + '</div></div>') +
         '<div style="height:70px"></div></div>',
       seo: { title: q ? 'Search: ' + q : 'Search', noindex: true }
@@ -338,7 +360,7 @@
     set: function (level) {
       u.store.set(CKEY, { level: level, at: new Date().toISOString(), v: 1 });
       HW.consent.hide();
-      u.toast(level === 'all' ? 'Thanks — all cookies accepted' : 'Only necessary cookies will be used');
+      if (level === 'all') u.toast('Thanks — all cookies accepted');
       document.dispatchEvent(new CustomEvent('hw:consent', { detail: level }));
     },
     show: function () {

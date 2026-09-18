@@ -11,6 +11,39 @@
 
 ## After launch
 
+### QA audit fixes (report of 2026-09-18)
+- **Privacy / security**
+  - The `store` table is admin-only. Shoppers read `public_store()`, which leaves out hidden products and every promo except the newsletter code. Other codes are checked one at a time with `check_promo()`.
+  - Tracking, cancel requests, contact, newsletter and stock alerts go through the Edge Function (`/public/*`), with per-IP rate limits (IP stored only as an HMAC). Anonymous direct access to those functions and tables is revoked.
+  - Self-cancel needs proof: the tab that placed the order, the signed link in the order email (`?c=`, removed from the address bar) or the signed-in account. Knowing an order number and email is no longer enough.
+  - Signing out ends the session on the server too. The daily code-attempt cap is 20. Sign-up past the cap is silent. Welcome emails are sent once.
+  - `GET /` shows no feature list (the admin uses `/admin/health`). No `workers.dev` or Snipcart hosts in the CSP (`node tools/csp.js --snipcart` if Snipcart is switched on). `robots.txt` no longer names the admin. Source files are excluded from GitHub Pages (`_config.yml`).
+- **Orders and payments**
+  - `?payment=success` is checked against the server before showing "Thank you".
+  - Stock is held for orders being paid (advisory locks), so two shoppers can't buy the last item.
+  - US-only shipping with state/territory and ZIP checks. PR, GU, VI, AS, MP and APO/FPO are accepted.
+  - Random order numbers. Price must be above $0. Promo limits count only real orders.
+  - A late or duplicate Stripe payment on a cancelled order is released or refunded automatically. An amount mismatch is flagged for review, and a refund made in Stripe marks the order refunded.
+- **Storefront**
+  - Money shows as $1,234.50.
+  - Out-of-stock lines don't count in the cart total. Removed products leave the cart with a message. The cart "−" stops at 1.
+  - Quantity stops at 1 and at the stock level. The chosen colour and size are in the URL, and switching colour moves off a sold-out size. Out-of-stock items make no shipping promise.
+  - Category filters are in the URL, empty filter options stay visible (greyed out), and card prices follow the price filter.
+  - Search understands 24x40 / 24"x40", ignores one-letter queries and caps queries at 100 characters.
+  - The announcement bar can use `{{free_shipping}}`.
+  - Tracking steps read Received → Preparing → Shipped → Delivered.
+  - The cookie notice is informational (the store uses no tracking cookies).
+  - Featured and social sections hide when they'd look empty. There's no "Towels · Towels".
+  - Product structured data now includes shipping, returns and priceValidUntil. Static pages carry a real H1, and meta descriptions have no bullet characters.
+  - The mobile menu moves focus inside, and price sliders show keyboard focus.
+- **Admin**
+  - Inline field errors with focus (prices, promos, inventory whole numbers only, shipping).
+  - Deleted products take their stock rows with them.
+  - Order status follows a fixed path, and tracking is required for Shipped/Delivered.
+  - Revenue counts paid orders only. Dates are in US format.
+  - The active tab is kept in the URL. Built-in pages can't be deleted.
+  - Unsaved edits survive the idle sign-out.
+
 ### Sign-in page and Continue with Google
 - New sign-in page (`/account/login`, and any account page while signed out): split screen like TEENUD's — brand panel on the left, form on the right; the store header and footer are hidden there. "Continue with Google", then "or", then email (6-digit code). No password field, by design.
 - **Continue with Google** without any Google script on the site: the button goes to Google's own page (OpenID Connect) and comes back with a signed ID token; the server checks Google's RSA signature, the client ID, issuer, expiry, verified email and a one-time nonce, and the browser checks a one-time state. The token is removed from the address bar immediately. First Google sign-in fills an empty name. Only a public Client ID is needed (Admin › Storefront › Customer accounts); the button stays hidden until it's set.

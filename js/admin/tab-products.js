@@ -288,7 +288,8 @@
   function commit() {
     var p = A.clone(A.edit);
     p.name = String(p.name || '').trim();
-    if (!p.name) { u.toast('Name is required'); return false; }
+    var field = function (bind) { return document.querySelector('#adminMain [data-bind="' + bind + '"]'); };
+    if (!p.name) { A.alert(['Name is required.'], field('@name')); return false; }
     var prev = A.editKey === 'new' ? null : A.draft.products.find(function (x) { return x.id === p.id; });
     p.slug = uniqueSlug(u.slugify(p.slug || p.name).slice(0, 80), p.id);
     p.oldSlugs = Array.isArray(p.oldSlugs) ? p.oldSlugs : [];
@@ -317,12 +318,20 @@
         if (Object.keys(e).length) vs[k] = e;
       }
       p.variants = vs;
-      p.basePrice = num(p.basePrice) || 0; p.baseSalePrice = num(p.baseSalePrice);
+      p.basePrice = num(p.basePrice); p.baseSalePrice = num(p.baseSalePrice);
+      var noPrice = cOpt.values.some(function (c) { return sOpt.values.some(function (sz) {
+        var ov = vs[c.id + '__' + sz.id] || {};
+        var pr = ov.price != null ? ov.price : sz.price != null ? sz.price : p.basePrice;
+        return !(pr > 0);
+      }); });
+      if (noPrice) { A.alert(['Every color and size needs a price above $0: set the base price, or a price for each size.'], field('@basePrice')); return false; }
+      if (p.basePrice == null) p.basePrice = 0;
       p.skuPrefix = String(p.skuPrefix || '').trim(); p.inStock = true;
       delete p.price; delete p.salePrice; delete p.images; delete p.image; delete p.primary; delete p.video; delete p.sku;
     } else {
-      p.price = num(p.price) || 0; p.salePrice = num(p.salePrice);
-      if (p.salePrice != null && p.salePrice >= p.price) { u.toast('Sale price must be lower than the price'); return false; }
+      p.price = num(p.price); p.salePrice = num(p.salePrice);
+      if (!(p.price > 0)) { A.alert(['Price is required and must be above $0.'], field('@price')); return false; }
+      if (p.salePrice != null && (p.salePrice <= 0 || p.salePrice >= p.price)) { A.alert(['The sale price must be above $0 and lower than the price.'], field('@salePrice')); return false; }
       var sp = compact(p.images, p.primary);
       p.images = sp.images; p.primary = sp.primary; p.image = sp.images[sp.primary] || sp.images[0] || '';
       p.video = String(p.video || '').trim(); p.sku = String(p.sku || '').trim();

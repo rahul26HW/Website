@@ -1,6 +1,8 @@
 /* Home Weavers — admin: Pages (footer content pages, including legal pages). */
 (function (HW) {
   'use strict';
+  // Pages the site itself links to or builds features on: they can be hidden or edited, not deleted.
+  var SYSTEM = ['contact-us', 'track-your-order', 'privacy-policy', 'terms-of-service', 'refund-policy', 'shipping-returns', 'accessibility'];
 
   var A = HW.A, u = HW.u, esc = u.esc;
   var GROUPS = [['service', 'Customer service'], ['company', 'Our company'], ['legal', 'Legal (footer bottom)']];
@@ -17,7 +19,7 @@
             '<div class="muted" style="font-size:12px">/page/' + esc(p.slug) + '</div></div><div class="rowbtns">' +
             '<button class="txtbtn" type="button" data-a="page-edit" data-i="' + i + '">Edit</button>' +
             '<button class="txtbtn" type="button" data-a="page-toggle" data-i="' + i + '">' + (p.show === false ? 'Show' : 'Hide') + '</button>' +
-            '<button class="txtbtn danger" type="button" data-a="page-delete" data-i="' + i + '">Delete</button></div></div>';
+            (SYSTEM.indexOf(p.slug) > -1 ? '<span class="hint" title="The site needs this page">Built-in</span>' : '<button class="txtbtn danger" type="button" data-a="page-delete" data-i="' + i + '">Delete</button>') + '</div></div>';
         }).join('') : '<p class="muted" style="font-size:14px">No pages in this column.</p>');
       }).join('') + A.ui.saveBtn();
   }
@@ -74,6 +76,7 @@
   A.actions['page-save'] = async function () { if (!commit()) return; if (await A.saveStore('Page saved')) A.render(); else A.render(); };
   A.actions['page-toggle'] = function (el) { var p = A.draft.pages[+el.dataset.i]; p.show = p.show === false; A.render(); };
   A.actions['page-delete'] = function (el) {
+    if (SYSTEM.indexOf((A.draft.pages[+el.dataset.i] || {}).slug) > -1) { A.alert(['This page is built into the site, so it can’t be deleted. You can hide it instead.']); return; }
     var p = A.draft.pages[+el.dataset.i];
     if (['contact-us', 'track-your-order'].indexOf(p.slug) >= 0 && !confirm('“' + p.title + '” holds the ' + (p.slug === 'contact-us' ? 'contact form' : 'order lookup') + '. Delete it anyway?')) return;
     if (!confirm('Delete “' + p.title + '”? Click Save changes afterwards to publish.')) return;

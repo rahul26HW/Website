@@ -1,0 +1,13 @@
+# GitHub Pages publishes the storefront only. Source, notes and server code stay in the repo but aren't served.
+exclude:
+  - README.md
+  - CHANGELOG.md
+  - supabase-setup.sql
+  - ai-proxy.worker.js
+  - supabase
+  - tools
+  - .claude
+  - .gitignore
+include:
+  - .well-known
+plugins: []

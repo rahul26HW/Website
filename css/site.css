@@ -929,3 +929,9 @@ main#view.booting ~ footer.site{visibility:hidden}
 .hero.light .hdots{background:rgba(28,24,21,.38);border-radius:999px;padding:0 4px}
 @media(min-width:721px){.hslide.pic .bg{bottom:40px}} /* keep the slide dots off the banner's own text */
 @media(max-width:720px){.hslide.pic .bg img{object-fit:cover}}
+
+/* QA 2026-09-18: filter options with no matches; keyboard focus on the price sliders */
+.cf-none{opacity:.45;cursor:not-allowed}
+.cf-none input{cursor:not-allowed}
+.cf-slider input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--ink);outline-offset:2px}
+.cf-slider input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--ink);outline-offset:2px}

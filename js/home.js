@@ -122,7 +122,7 @@
         '</div></section>';
     }
 
-    if (feat.length) {
+    if (feat.length >= 2) {
       html += '<section class="section"><div class="wrap">' +
         '<div class="shead reveal"><div class="weave-rule">' + HW.SVG.weave + '</div><div class="eyebrow">Editors\' picks</div><h2>Featured this season</h2></div>' +
         railHTML('featRail', 'prod-rail', feat.map(function (p) { return HW.productCard(p); }).join(''), 'Featured products') +
@@ -147,7 +147,7 @@
       }).join('') + '</div></div></section>';
     }
 
-    if (g.enabled && tiles.length) {
+    if (g.enabled && tiles.some(function (t) { return /^https?:\/\//i.test(t.url); })) {
       html += '<section class="sgband">' +
         (g.heading ? '<div class="wrap"><div class="shead reveal" style="margin-bottom:18px"><div class="weave-rule">' + HW.SVG.weave + '</div><h2>' + esc(g.heading) + '</h2></div></div>' : '') +
         '<div class="sgrid">' + tiles.map(function (t) {
@@ -162,7 +162,7 @@
 
     return {
       html: html,
-      seo: { title: '', description: (DB.brand.name + ' — ' + DB.brand.tagline + '. Bath rugs, towels and home textiles with ' + (DB.shipping && DB.shipping.enabled ? 'free shipping over ' + u.money(DB.shipping.freeThreshold) : 'fast shipping') + '.'), path: '/', image: m.primaryImage(feat[0] || {}), jsonld: HW.ld && HW.ld.site() },
+      seo: { title: '', description: (DB.brand.name + ' — ' + DB.brand.tagline + '. Bath rugs, towels and home textiles with ' + (DB.shipping && DB.shipping.enabled ? 'free shipping on orders of ' + u.money(DB.shipping.freeThreshold) + ' or more' : 'fast shipping') + '.'), path: '/', image: m.primaryImage(feat[0] || {}), jsonld: HW.ld && HW.ld.site() },
       after: function () { HW.hero.init(); HW.rails.init(); }
     };
   };

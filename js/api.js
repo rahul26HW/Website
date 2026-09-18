@@ -34,7 +34,10 @@
       COD_UNAVAILABLE: 'Cash on delivery isn’t available right now. Please choose another way to pay.',
       COD_LIMIT: 'This order is above our cash-on-delivery limit. Please pay by card, or split it into smaller orders.',
       TOO_MANY_ORDERS: 'You’ve started several orders in the last hour. Please pay for an open order or try again later.',
-      RATE_LIMIT: 'You’ve sent a few messages already. Please wait a few minutes and try again.'
+      SHIPPING_COUNTRY: 'We currently ship within the United States only.',
+      INVALID_PRODUCT: 'That product isn’t available.',
+      ORDER_NOT_FOUND: 'We couldn’t find an order with that number and email.',
+      RATE_LIMIT: 'Too many tries. Please wait a while and try again.'
     };
     if (/^OUT_OF_STOCK:/.test(code)) return '“' + code.slice(13) + '” doesn’t have enough stock for your quantity.';
     return map[code] || fallback || 'Something went wrong. Please try again.';
@@ -89,21 +92,36 @@
       });
     },
 
+    /* The shopper's view of the store: no promo codes (except the one advertised to newsletter sign-ups) and
+       no draft products. The table itself is admin-only. */
     loadStoreFromDb: async function () {
-      var row = await request('/rest/v1/store?id=eq.main&select=data,updated_at', {
-        headers: headers({ Accept: 'application/vnd.pgrst.object+json' })
-      });
+      var row = await request('/rest/v1/rpc/public_store', { method: 'POST', headers: headers(), body: '{}' });
       if (row && row.data) HW.u.store.set(CACHE_KEY, { at: row.updated_at, data: row.data });
       return row;
     },
 
     /* Returns the latest store only if it changed since `at` (a tiny request when nothing changed). */
     checkFresh: async function (at) {
-      var row = await request('/rest/v1/store?id=eq.main&select=updated_at', {
-        headers: headers({ Accept: 'application/vnd.pgrst.object+json' })
-      });
-      if (!row || row.updated_at === at) return null;
+      var ts = await request('/rest/v1/rpc/public_store_version', { method: 'POST', headers: headers(), body: '{}' });
+      if (!ts || ts === at || (Date.parse(ts) && Date.parse(ts) === Date.parse(at))) return null;
       return HW.api.loadStoreFromDb();
+    },
+
+    /* The store's own server (Edge Function "hw"): visitor forms go through it so they can be rate-limited. */
+    server: async function (path, body, extraHeaders) {
+      var base = HW.serverUrl ? HW.serverUrl() : String(cfg.supabaseUrl || '').replace(/\/+$/, '') + '/functions/v1/hw';
+      var res;
+      try {
+        res = await fetch(base + path, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, extraHeaders || {}), body: JSON.stringify(body || {}) });
+      } catch (e) {
+        throw { code: 'NETWORK', message: 'We couldn’t reach the store. Check your connection and try again.' };
+      }
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) {
+        var code = data.code || (/^[A-Z_]{4,40}$/.test(data.error || '') ? data.error : '');
+        throw { code: code, status: res.status, data: data, message: code ? friendly(code, data.error) : (data.error || friendly('')) };
+      }
+      return data;
     },
 
     rpc: function (name, args) {

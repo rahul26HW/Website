@@ -52,7 +52,7 @@
       (shown.length ? shown.map(function (o) {
         var n = (o.order_items || []).reduce(function (s, i) { return s + i.qty; }, 0);
         return '<tr class="clickrow"><td><button class="txtbtn" type="button" data-a="order-open" data-id="' + o.id + '"><b>' + esc(o.order_number) + '</b></button></td>' +
-          '<td class="hint">' + esc(new Date(o.created_at).toLocaleString()) + '</td><td>' + esc(o.name) + '<div class="hint">' + esc(o.email) + '</div></td>' +
+          '<td class="hint">' + esc(new Date(o.created_at).toLocaleString('en-US')) + '</td><td>' + esc(o.name) + '<div class="hint">' + esc(o.email) + '</div></td>' +
           '<td>' + n + '</td><td>' + u.money(o.total) + '</td><td>' + payTag(o.payment_status) + '</td><td>' + statusTag(o.status) + '</td></tr>';
       }).join('') : '<tr><td colspan="7" class="muted" style="padding:16px">' + (os.list.length ? 'No orders match.' : 'No orders yet.') + '</td></tr>') +
       '</tbody></table></div></section>';
@@ -66,7 +66,7 @@
         (o.tracking_number ? 'It has shipped' + (o.carrier ? ' with ' + o.carrier : '') + '. Tracking number: ' + o.tracking_number + '\n\n' : '') + 'Best,\n' + (A.draft.brand.name || 'Home Weavers'));
     return '<p><button class="txtbtn" type="button" data-a="order-back">← All orders</button></p>' +
       '<h1 class="h1row">Order ' + esc(o.order_number) + ' <span>' + payTag(o.payment_status) + ' ' + statusTag(o.status) + '</span></h1>' +
-      '<p class="sub">Placed ' + esc(new Date(o.created_at).toLocaleString()) + ' · ' + esc(o.source === 'snipcart' ? 'Snipcart' : 'Site checkout') + (o.external_id ? ' · ' + esc(o.external_id) : '') + '</p>' +
+      '<p class="sub">Placed ' + esc(new Date(o.created_at).toLocaleString('en-US')) + ' · ' + esc(o.source === 'snipcart' ? 'Snipcart' : 'Site checkout') + (o.external_id ? ' · ' + esc(o.external_id) : '') + '</p>' +
       '<div class="grid2 alignstart">' +
       ui.panel('Items', '<table class="adt"><tbody>' + (o.order_items || []).map(function (i) {
         return '<tr><td>' + (i.image ? '<img class="thumbsm" src="' + esc(HW.asset(i.image)) + '" alt="" loading="lazy">' : '') + '</td>' +
@@ -87,7 +87,7 @@
         '<div class="btnrow" style="margin-top:12px"><a class="btn ghost sm" href="' + mail + '" data-native>Email customer</a></div>') +
       '</div>' +
       ui.panel('Payment &amp; ShipStation', paymentShipHTML(o)) +
-      ui.panel('Fulfilment',
+      ui.panel('Fulfillment',
         '<div class="grid2">' + ui.field('Status', '@status', draft.status, { options: STATUSES }) + ui.field('Payment', '@payment_status', draft.payment_status, { options: PAYMENTS }) + '</div>' +
         '<div class="grid2">' + ui.field('Carrier', '@carrier', draft.carrier || '', { placeholder: 'USPS, UPS, FedEx…', type: 'trim' }) +
         ui.field('Tracking number', '@tracking_number', draft.tracking_number || '', { type: 'trim' }) + '</div>' +
@@ -103,7 +103,7 @@
     var pay = o.payment_status === 'cod'
       ? '<p style="margin:0 0 6px"><b>Cash on delivery</b> — collect <b>' + u.money(o.total) + '</b>' + (Number(o.cod_fee) ? ' (includes ' + u.money(o.cod_fee) + ' fee)' : '') + ' when it’s delivered. Once the cash is in, set Payment to <b>Paid</b>.</p>'
       : o.payment_status === 'paid'
-      ? '<p style="margin:0 0 6px">✓ Paid' + (o.payment_method === 'cod' ? ' (cash on delivery)' : '') + (o.paid_at ? ' ' + esc(new Date(o.paid_at).toLocaleString()) : '') + refLink + '</p>'
+      ? '<p style="margin:0 0 6px">✓ Paid' + (o.payment_method === 'cod' ? ' (cash on delivery)' : '') + (o.paid_at ? ' ' + esc(new Date(o.paid_at).toLocaleString('en-US')) : '') + refLink + '</p>'
       : o.payment_status === 'authorized'
         ? '<p style="margin:0 0 6px">Card approved, not charged yet — it’s charged when the order is accepted' + refLink + '</p>'
       : o.payment_status === 'voided'
@@ -114,7 +114,7 @@
         ? '<p class="hint" style="margin:0 0 6px">Cancelled: the Stripe payment page expired without payment.</p>'
         : '<p class="hint" style="margin:0 0 6px">' + (/^cs_/.test(ref) ? 'The customer opened the Stripe payment page but hasn’t paid yet.' : 'No online payment.') + '</p>';
     var ship = o.shipstation_order_id
-      ? '<p style="margin:0 0 6px">✓ In ShipStation (order ' + esc(o.shipstation_order_id) + (o.shipstation_synced_at ? ', sent ' + esc(new Date(o.shipstation_synced_at).toLocaleString()) : '') + ')</p>'
+      ? '<p style="margin:0 0 6px">✓ In ShipStation (order ' + esc(o.shipstation_order_id) + (o.shipstation_synced_at ? ', sent ' + esc(new Date(o.shipstation_synced_at).toLocaleString('en-US')) : '') + ')</p>'
       : '<p class="hint" style="margin:0 0 6px">Not in ShipStation yet.' + (/^(paid|authorized|cod)$/.test(o.payment_status) ? '' : ' Paid orders are sent automatically.') + '</p>';
     var err = o.shipstation_error ? '<p class="badmsg" style="margin:0 0 6px">ShipStation said: ' + esc(o.shipstation_error) + '</p>' : '';
     var mins = Number((A.draft.settings || {}).cancelMinutes);
@@ -128,13 +128,15 @@
           : 'Waiting to be accepted — it goes to ShipStation by itself within a few minutes.') + '</div>' +
         '<div class="btnrow"><button class="btn loom sm" type="button" data-a="order-accept">' + (o.payment_status === 'authorized' ? 'Accept, charge card &amp; send to ShipStation' : 'Accept order &amp; send to ShipStation') + '</button></div>'
       : '';
+    var review = o.review_reason && o.status === 'new'
+      ? '<div class="adwarn" style="margin:0 0 10px"><b>Needs a look:</b> ' + esc(o.review_reason) + '. It won’t be accepted automatically — check it in Stripe, then accept or cancel it here.</div>' : '';
     var asked = o.cancel_requested_at
-      ? '<div class="adwarn" style="margin:10px 0 0"><b>Customer asked to cancel</b> on ' + esc(new Date(o.cancel_requested_at).toLocaleString()) +
+      ? '<div class="adwarn" style="margin:10px 0 0"><b>Customer asked to cancel</b> on ' + esc(new Date(o.cancel_requested_at).toLocaleString('en-US')) +
         (o.cancel_reason ? ': “' + esc(o.cancel_reason) + '”' : '') +
         (/^(shipped|delivered|cancelled|refunded)$/.test(o.status) ? '' : ' — if you agree, refund it in Stripe and set the status to Cancelled.') + '</div>'
       : '';
     if (o.return_requested_at) {
-      asked += '<div class="adwarn" style="margin:10px 0 0"><b>Customer asked to return items</b> on ' + esc(new Date(o.return_requested_at).toLocaleString()) +
+      asked += '<div class="adwarn" style="margin:10px 0 0"><b>Customer asked to return items</b> on ' + esc(new Date(o.return_requested_at).toLocaleString('en-US')) +
         (o.return_reason ? ': “' + esc(o.return_reason) + '”' : '') +
         (/^(refunded|cancelled)$/.test(o.status) ? '' : ' — email them how to send it back; when it arrives, refund in Stripe (the order changes to Refunded by itself).') + '</div>';
     }
@@ -146,8 +148,8 @@
         (o.shipstation_order_id && /^(new|accepted|packed)$/.test(o.status) ? '<button class="btn ghost sm" type="button" data-a="order-sync">Get tracking from ShipStation</button>' : '') + '</div>';
     // ShipStation sends a ship date without a time (stored as midnight UTC), so show just the date then.
     var sd = o.shipped_at ? new Date(o.shipped_at) : null;
-    var shippedText = sd ? (/T00:00:00(\.0+)?(Z|\+00:00)$/.test(o.shipped_at) ? sd.toLocaleDateString(undefined, { timeZone: 'UTC' }) : sd.toLocaleString()) : '';
-    return accept + pay + ship + err + btn + (sd ? '<p class="hint">Shipped ' + esc(shippedText) + '</p>' : '') + asked;
+    var shippedText = sd ? (/T00:00:00(\.0+)?(Z|\+00:00)$/.test(o.shipped_at) ? sd.toLocaleDateString('en-US', { timeZone: 'UTC' }) : sd.toLocaleString('en-US')) : '';
+    return review + accept + pay + ship + err + btn + (sd ? '<p class="hint">Shipped ' + esc(shippedText) + '</p>' : '') + asked;
   }
 
   A.tabs.orders = {
@@ -184,7 +186,16 @@
   A.actions['order-save'] = async function () {
     var o = os.list.find(function (x) { return x.id === os.open; });
     var patch = A.clone(A.edit);
-    if (patch.status === 'shipped' && !patch.tracking_number && !confirm('Mark as shipped without a tracking number?')) return;
+    // Orders move forward one way only; shipped/delivered need a tracking number.
+    var NEXT = { new: ['accepted', 'packed', 'shipped', 'cancelled'], accepted: ['packed', 'shipped', 'cancelled'], packed: ['shipped', 'cancelled'],
+      shipped: ['delivered', 'refunded'], delivered: ['refunded'], cancelled: [], refunded: [] };
+    if (patch.status !== o.status && (NEXT[o.status] || []).indexOf(patch.status) < 0) {
+      A.alert(['An order that is “' + o.status + '” can’t be changed to “' + patch.status + '”.' + (o.status === 'cancelled' || o.status === 'refunded' ? ' It’s closed.' : '')]); return;
+    }
+    if (/^(shipped|delivered)$/.test(patch.status) && !String(patch.tracking_number || '').trim()) {
+      A.alert(['Add the tracking number before marking it ' + patch.status + ' (ShipStation fills it in by itself when you ship there).'], document.querySelector('#adminMain [data-bind="@tracking_number"]')); return;
+    }
+    if (patch.payment_status === 'paid' && /^(cancelled)$/.test(patch.status) && o.payment_status !== 'paid') { A.alert(['A cancelled order can’t be marked paid.']); return; }
     var r = await A.sb.from('orders').update(patch).eq('id', o.id).select('*, order_items(*)');
     if (r.error || !r.data || !r.data.length) { u.toast('Save failed: ' + (r.error ? r.error.message : 'not allowed')); return; }
     Object.assign(o, r.data[0]);
@@ -273,11 +284,11 @@
         (ms.list.length ? ms.list.map(function (x) {
           var open = ms.open === x.id;
           var reply = 'mailto:' + encodeURIComponent(x.email) + '?subject=' + encodeURIComponent('Re: ' + (x.subject || 'Your message to ' + (A.draft.brand.name || 'Home Weavers'))) +
-            '&body=' + encodeURIComponent('\n\n---\nOn ' + new Date(x.created_at).toLocaleString() + ', ' + x.name + ' wrote:\n' + x.message);
+            '&body=' + encodeURIComponent('\n\n---\nOn ' + new Date(x.created_at).toLocaleString('en-US') + ', ' + x.name + ' wrote:\n' + x.message);
           return '<section class="panel msg' + (x.is_read ? '' : ' unread') + '">' +
             '<button class="msghead" type="button" data-a="msg-open" data-id="' + x.id + '" aria-expanded="' + open + '">' +
             '<span>' + (x.is_read ? '' : '<span class="dot" aria-label="Unread"></span>') + '<b>' + esc(x.name) + '</b> <span class="hint">&lt;' + esc(x.email) + '&gt;</span></span>' +
-            '<span class="hint">' + esc(x.subject || '(no subject)') + ' · ' + esc(new Date(x.created_at).toLocaleString()) + '</span></button>' +
+            '<span class="hint">' + esc(x.subject || '(no subject)') + ' · ' + esc(new Date(x.created_at).toLocaleString('en-US')) + '</span></button>' +
             (open ? '<div class="msgbody"><p style="white-space:pre-wrap;margin:12px 0">' + esc(x.message) + '</p>' +
               (x.phone ? '<p class="hint">Phone: <a href="tel:' + esc(x.phone) + '">' + esc(x.phone) + '</a></p>' : '') +
               '<div class="btnrow"><a class="btn loom sm" href="' + reply + '" data-native>Reply by email</a>' +

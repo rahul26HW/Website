@@ -62,7 +62,7 @@
           ui.saveBtn()) +
 
         ui.panel('Announcement bar',
-          ui.field('Message', 'announcement', d.announcement, { hint: 'The thin bar at the very top. Leave blank to hide it.', maxlength: 140 }) + ui.saveBtn()) +
+          ui.field('Message', 'announcement', d.announcement, { hint: 'The thin bar at the very top. Leave blank to hide it. Write {{free_shipping}} to show the free-shipping threshold from Promotions, e.g. “Free shipping on orders of {{free_shipping}} or more”.', maxlength: 140 }) + ui.saveBtn()) +
 
         ui.panel('Contact details',
           '<p class="hint" style="margin:-6px 0 12px">Shown on the Contact us page next to the contact form. Blank fields are hidden.</p>' +
@@ -89,8 +89,8 @@
           }).join('') + '</div>' + ui.saveBtn()) +
 
         ui.panel('Newsletter welcome email (optional)',
-          '<p class="hint" style="margin:-6px 0 12px">Sign-ups always see their code on screen. To also email it, set up the AI worker with a free Brevo key (see README) and paste the worker URL here.</p>' +
-          ui.field('Worker URL', 'newsletter.emailEndpoint', nl.emailEndpoint || '', { type: 'trim', placeholder: 'https://home-weavers-ai.yourname.workers.dev' }) + ui.saveBtn()) +
+          '<p class="hint" style="margin:-6px 0 12px">Sign-ups always see their code on screen. Emailing it too is optional (it needs a Brevo key on the server — README › “Newsletter welcome email”). Leave blank to keep it off.</p>' +
+          ui.field('Welcome email address (optional)', 'newsletter.emailEndpoint', nl.emailEndpoint || '', { type: 'trim', placeholder: A.defaultWorkerUrl() + '/welcome' }) + ui.saveBtn()) +
 
         ui.panel('Customer accounts',
           '<p class="hint" style="margin:-6px 0 12px">Customers sign in on <b>Your account</b> with a 6-digit code sent to their email — no passwords. ' +
@@ -111,7 +111,7 @@
           '<p class="hint" style="margin:-6px 0 12px">Shoppers pay on a secure Stripe page after checkout. Paid orders (and cash-on-delivery orders) are sent to ShipStation, and when you ship there the carrier and tracking number come back to the order. ' +
           'All keys live in your Supabase Edge Function “hw” (Supabase › Edge Functions › Secrets) — never here. Setup steps: README › “Card payments and ShipStation”.</p>' +
           ui.field('Free cancellation window (minutes)', 'settings.cancelMinutes', (d.settings || {}).cancelMinutes, { type: 'int', min: 0, max: 1440,
-            hint: 'After payment the customer can cancel themselves for this long and get an automatic refund. The order is then sent to ShipStation by itself. 0 = no self-service cancelling.' }) +
+            hint: 'After checkout the customer can cancel themselves for this long: the card hold is released (or the payment refunded) automatically. The order is then sent to ShipStation by itself. 0 = no self-service cancelling.' }) +
           ui.field('Server address (optional)', 'payments.workerUrl', pay.workerUrl, { type: 'trim', placeholder: A.defaultWorkerUrl(),
             hint: 'Leave blank to use your Supabase Edge Function. Leave Stripe off until “Check server” shows Stripe ready.' }) +
           (sn.enabled && pay.stripe ? '<p class="adwarn">Snipcart is also on. While Snipcart is on, shoppers use Snipcart’s checkout and Stripe isn’t used.</p>' : '') +
@@ -154,8 +154,8 @@
     if (!/^https:\/\//.test(base)) { out.innerHTML = '<p class="badmsg">The server address must start with https://</p>'; return; }
     out.innerHTML = '<p class="hint">Checking…</p>';
     try {
-      var res = await fetch(base + '/', { cache: 'no-store' });
-      var data = await res.json();
+      // Only a signed-in admin may see which services are set up.
+      var data = await A.workerCall('/admin/health', {});
       var f = data.features;
       if (!f) throw new Error('The server is an older version. Deploy the latest supabase/functions/hw/index.ts.');
       var row = function (on, text, fix) { return '<li class="' + (on ? 'ok' : 'warn') + '"><span>' + (on ? '✓' : '⚠') + '</span><span>' + text + (on ? '' : ' — ' + fix) + '</span></li>'; };

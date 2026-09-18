@@ -147,6 +147,12 @@
     }
   };
 
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return;
+    var b = document.querySelector('form[data-form="checkout"] button[type=submit]');
+    if (b && b.disabled && /Opening secure payment|Saving your order/.test(b.textContent)) HW.router.run({ scroll: false });
+  });
+
   function wireEvents() {
     document.addEventListener('click', function (e) {
       var el = e.target.closest('[data-act]');

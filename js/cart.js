@@ -7,6 +7,7 @@
   var KEY = 'hw:cart:v2';
   var state = u.store.get(KEY, { lines: [], promo: '' });
   if (!state || !Array.isArray(state.lines)) state = { lines: [], promo: '' };
+  if (state.promoData && state.promoData.code) HW.promoCache[String(state.promoData.code).toLowerCase()] = state.promoData;
   var promoMsg = '';
   var release = null;
 
@@ -42,7 +43,11 @@
     prune: function () {
       var before = state.lines.length;
       state.lines = state.lines.filter(function (l) { return !!resolve(l); });
-      if (state.lines.length !== before) save();
+      if (state.lines.length !== before) {
+        save();
+        var gone = before - state.lines.length;
+        setTimeout(function () { u.toast(gone === 1 ? 'An item in your cart is no longer available, so we removed it.' : gone + ' items in your cart are no longer available, so we removed them.'); }, 600);
+      }
     },
 
     add: function (id, qty, colorId, sizeId) {
@@ -71,10 +76,17 @@
       if (r && q > Math.min(r.max, 99)) { u.toast('Only ' + r.max + ' available.'); return; }
       if (q <= 0) state.lines = state.lines.filter(function (x) { return x.key !== key; });
       else l.qty = q;
+      promoMsg = '';
       save(); cart.render();
+      // Keep keyboard focus on the same button after the list is redrawn.
+      var again = document.querySelector('#cartItems [data-act="cart-qty"][data-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"][data-d="' + d + '"]');
+      if (again && again.disabled) again = again.parentNode.querySelector('[data-d="' + (-d) + '"]');
+      if (again) again.focus();
+      else { var first = document.querySelector('#cartItems button, #cartDrawer .iconbtn'); if (first) first.focus(); }
     },
     remove: function (key) {
       state.lines = state.lines.filter(function (x) { return x.key !== key; });
+      promoMsg = '';
       save(); cart.render();
       var first = document.querySelector('#cartItems button, #cartDrawer .iconbtn');
       if (first) first.focus();
@@ -82,34 +94,41 @@
     clear: function () { state = { lines: [], promo: '' }; promoMsg = ''; save(); cart.render(); },
 
     promoCode: function () { return state.promo || ''; },
-    applyPromo: function (code) {
-      code = String(code || '').trim();
+    applyPromo: async function (code) {
+      code = String(code || '').trim().slice(0, 40);
       if (!code) { promoMsg = ''; cart.render(); return; }
       var found = m.findPromo(code);
-      if (!found) { state.promo = ''; promoMsg = 'err:That code isn’t valid.'; save(); cart.render(); focusPromo(); return; }
-      state.promo = found.code; promoMsg = ''; save(); cart.render();
+      if (!found) {
+        try { found = await HW.api.rpc('check_promo', { p_code: code }); } catch (e) { found = null; }
+        if (found && found.code) HW.promoCache[String(found.code).toLowerCase()] = found;
+      }
+      if (!found || !found.code) { state.promo = ''; state.promoData = null; promoMsg = 'err:That code isn’t valid.'; save(); cart.render(); focusPromo(); return; }
+      state.promo = found.code; state.promoData = found; promoMsg = ''; save(); cart.render();
       var t = cart.totals();
       if (t.promoValid) u.toast(found.code + ' applied');
     },
-    removePromo: function () { state.promo = ''; promoMsg = ''; save(); cart.render(); focusPromo(); },
+    removePromo: function () { state.promo = ''; state.promoData = null; promoMsg = ''; save(); cart.render(); focusPromo(); },
 
     totals: function () {
       var lines = cart.lines();
-      var sub = u.round2(lines.reduce(function (s, l) { return s + l.price * l.qty; }, 0));
+      // Out-of-stock lines stay visible (to be removed) but never count toward the totals.
+      var subCents = lines.reduce(function (s, l) { return s + (l.inStock ? Math.round(l.price * 100) * l.qty : 0); }, 0);
+      var sub = subCents / 100;
       var sh = HW.DB.shipping || { enabled: true, freeThreshold: 75, flatRate: 9.95 };
       var promo = state.promo ? m.findPromo(state.promo) : null;
       var discount = 0, promoValid = true, promoNote = '';
       if (promo) {
         promoNote = m.promoProblem(promo, sub);
         if (promoNote) promoValid = false;
-        else discount = promo.type === 'percent' ? u.round2(sub * promo.value / 100) : Math.min(promo.value, sub);
+        // Whole cents, rounded like the database (half away from zero), so the total shown is the total charged.
+        else discount = promo.type === 'percent' ? Math.round(subCents * Number(promo.value) / 100) / 100 : Math.min(Math.round(Number(promo.value) * 100), subCents) / 100;
       }
       var ship = 0, freeShip = true, remaining = 0;
       if (sh.enabled) {
         if (sub >= sh.freeThreshold || sub === 0) { freeShip = true; ship = 0; }
         else { freeShip = false; ship = Number(sh.flatRate) || 0; remaining = u.round2(sh.freeThreshold - sub); }
       }
-      return { lines: lines, sub: sub, discount: discount, ship: ship, total: u.round2(Math.max(0, sub - discount) + ship),
+      return { lines: lines, sub: sub, discount: discount, ship: ship, total: (Math.max(0, subCents - Math.round(discount * 100)) + Math.round(ship * 100)) / 100,
         promo: promo, promoValid: promoValid, promoNote: promoNote, freeShip: freeShip, remaining: remaining, sh: sh };
     },
 
@@ -121,10 +140,11 @@
       if (btn && !(HW.snip && HW.snip.enabled())) btn.setAttribute('aria-label', 'Cart, ' + u.plural(n, 'item'));
       var items = document.getElementById('cartItems'), foot = document.getElementById('cartFoot');
       if (!items) return;
-      if (state.promo && !m.findPromo(state.promo)) { state.promo = ''; save(); }
+      if (state.promo && !m.findPromo(state.promo)) { state.promo = ''; state.promoData = null; save(); }
       var t = cart.totals();
       if (!t.lines.length) {
         promoMsg = '';
+        if (state.promo) { state.promo = ''; state.promoData = null; save(); } // an empty cart keeps no code
         items.innerHTML = '<div class="empty-cart"><div class="weave-rule" style="margin-bottom:14px">' + HW.SVG.weaveLight + '</div><p>Your cart is empty.</p><a class="link-u" href="' + HW.link('/') + '" data-act="cart-close">Start shopping</a></div>';
         foot.innerHTML = '';
         return;
@@ -137,7 +157,7 @@
           (!l.inStock ? '<div style="font-size:12.5px;color:var(--clay);font-weight:600">Out of stock — please remove</div>' : '') +
           '<div class="muted" style="font-size:13px">' + u.money(l.price) + ' each</div>' +
           '<div class="stepper" role="group" aria-label="Quantity for ' + esc(HW.seo.clip(l.name, 40)) + '" style="margin-top:8px;transform:scale(.85);transform-origin:left">' +
-          '<button type="button" data-act="cart-qty" data-key="' + esc(l.key) + '" data-d="-1" aria-label="Decrease quantity">–</button><span>' + l.qty + '</span>' +
+          '<button type="button" data-act="cart-qty" data-key="' + esc(l.key) + '" data-d="-1" aria-label="Decrease quantity"' + (l.qty <= 1 ? ' disabled' : '') + '>–</button><span>' + l.qty + '</span>' +
           '<button type="button" data-act="cart-qty" data-key="' + esc(l.key) + '" data-d="1" aria-label="Increase quantity">+</button></div></div>' +
           '<div style="text-align:right"><div style="font-weight:600">' + u.money(l.price * l.qty) + '</div>' +
           '<button class="rm" type="button" data-act="cart-remove" data-key="' + esc(l.key) + '">Remove<span class="sr-only"> ' + esc(HW.seo.clip(l.name, 40)) + '</span></button></div></li>';

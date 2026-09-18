@@ -5,6 +5,7 @@
   var u = HW.u, esc = u.esc;
   var cfg = window.HW_CONFIG || {};
   var IDLE_MINUTES = 30;
+  var ACTIVE_KEY = 'hw:adminActive', UNSAVED_KEY = 'hw:adminUnsaved';
 
   var A = HW.A = {
     sb: null, user: null,
@@ -86,6 +87,8 @@
     var btn = form.querySelector('button[type=submit]');
     var email = form.elements.email.value.trim(), pw = form.elements.password.value;
     if (!email || !pw) { err.textContent = 'Enter your email and password.'; return; }
+    if (!u.isEmail(email)) { err.textContent = 'Enter a valid email address.'; form.elements.email.setAttribute('aria-invalid', 'true'); form.elements.email.focus(); return; }
+    A.freshLogin = true;
     btn.disabled = true; err.textContent = 'Signing in…';
     var r = await A.sb.auth.signInWithPassword({ email: email, password: pw });
     btn.disabled = false;
@@ -108,10 +111,26 @@
       return false;
     }
     A.user = user;
-    A.lastActive = Date.now();
+    var prevActive = Number(u.store.get(ACTIVE_KEY, 0)) || 0;
+    if (prevActive && Date.now() - prevActive > IDLE_MINUTES * 60000 && !A.freshLogin) {
+      // Reloading doesn't reset the idle clock.
+      await A.sb.auth.signOut().catch(function () {});
+      A.user = null;
+      A.loginNote = 'You were signed out after ' + IDLE_MINUTES + ' minutes of inactivity.';
+      return false;
+    }
+    A.freshLogin = false;
+    A.lastActive = Date.now(); u.store.set(ACTIVE_KEY, A.lastActive);
     var loaded = await A.loadAll();
     if (!loaded) return false;
+    var unsaved = u.store.get(UNSAVED_KEY, null);
+    if (unsaved && unsaved.draft && confirm('You had unsaved changes from ' + new Date(unsaved.at).toLocaleString('en-US') + ' when you were signed out. Restore them? (They are not saved until you press Save.)')) {
+      A.draft = unsaved.draft; if (unsaved.privDraft) A.privDraft = unsaved.privDraft;
+    }
+    u.store.del(UNSAVED_KEY);
+    if (location.hash && A.tabs[location.hash.slice(1)]) A.tab = location.hash.slice(1);
     A.render();
+    if (A.dirty && A.dirty()) refreshDirtyBar();
     return true;
   }
 
@@ -126,6 +145,8 @@
   function idleCheck() {
     if (!A.user || !HW.isAdminView()) return;
     if (Date.now() - A.lastActive > IDLE_MINUTES * 60000) {
+      // Keep unsaved work on this device so it can be restored after signing in again.
+      try { if (A.dirty && A.dirty()) u.store.set(UNSAVED_KEY, { at: Date.now(), draft: A.draft, privDraft: A.privDraft }); } catch (e) {}
       A.user = null;
       A.sb.auth.signOut().catch(function () {});
       A.draft = null; A.privDraft = null; A.edit = null;
@@ -192,9 +213,10 @@
 
   /* Saves the whole store draft. Returns true only if the database confirmed it. */
   A.saveStore = async function (successMsg) {
-    var data = HW.schema.normalizeStore(clone(A.draft));
+    var data = A.pruneInventory(HW.schema.normalizeStore(clone(A.draft)));
     var problems = A.validateStore(data);
-    if (problems.length) { u.toast(problems[0]); return false; }
+    if (problems.length) { A.alert(problems); return false; }
+    A.alert([]);
     setSaving(true);
     var r = await A.sb.rpc('save_store', { p_data: data, p_expected: A.storeAt });
     setSaving(false);
@@ -215,7 +237,10 @@
      The site checks the database for newer data, so a failed or slow copy never shows stale prices for long. */
   async function publishSnapshot(data, at) {
     try {
-      var blob = new Blob([JSON.stringify({ at: at, data: data })], { type: 'application/json' });
+      // Publish the shopper's view (no private promo codes, no draft products) — the same filter the site uses.
+      var pub = await A.sb.rpc('public_store');
+      if (pub.error || !pub.data || !pub.data.data) { console.warn('Store snapshot not published:', pub.error && pub.error.message); return; }
+      var blob = new Blob([JSON.stringify({ at: pub.data.updated_at || at, data: pub.data.data })], { type: 'application/json' });
       var r = await A.sb.storage.from('media').upload('public/store.json', blob, { upsert: true, cacheControl: '60', contentType: 'application/json' });
       if (r.error) console.warn('Store snapshot not published:', r.error.message);
     } catch (e) { console.warn('Store snapshot not published:', e); }
@@ -264,7 +289,64 @@
     (d.pages || []).forEach(function (p) { if (ps[p.slug]) out.push('Two pages use "' + p.slug + '".'); ps[p.slug] = 1; });
     var codes = {};
     (d.promos || []).forEach(function (p) { if (codes[p.code]) out.push('Two promo codes are both "' + p.code + '".'); codes[p.code] = 1; });
+    // Every product must cost more than $0 (a blank price would otherwise go live as free).
+    var money = function (v) { var n = Number(v); return v === null || v === undefined || v === '' || isNaN(n) ? null : n; };
+    (d.products || []).forEach(function (p) {
+      var name = '“' + (p.name || 'Untitled') + '”';
+      if (HW.m.isCollection(p)) {
+        var colors = HW.m.optColor(p).values, sizes = HW.m.optSize(p).values, bad = false;
+        colors.forEach(function (c) { sizes.forEach(function (sz) {
+          var ov = (p.variants || {})[HW.m.vKey(c.id, sz.id)] || {};
+          var pr = money(ov.price) != null ? money(ov.price) : money(sz.price) != null ? money(sz.price) : money(p.basePrice);
+          if (!(pr > 0)) bad = true;
+        }); });
+        if (bad) out.push(name + ' has a color or size without a price above $0. Set a base price or a price for every size.');
+      } else if (!(money(p.price) > 0)) out.push(name + ' needs a price above $0.');
+    });
+    // Promo codes: sensible values and dates.
+    (d.promos || []).forEach(function (p) {
+      var c = '“' + (p.code || '?') + '”', v = Number(p.value);
+      if (!/^[A-Za-z0-9_-]{3,40}$/.test(String(p.code || ''))) out.push('Promo ' + c + ': use 3–40 letters, numbers, - or _.');
+      if (p.type === 'percent' ? !(v > 0 && v <= 100) : !(v > 0)) out.push('Promo ' + c + ': ' + (p.type === 'percent' ? 'the percentage must be between 1 and 100.' : 'the amount off must be above $0.'));
+      if (Number(p.minOrder || 0) < 0) out.push('Promo ' + c + ': the minimum order can’t be negative.');
+      if (p.usageLimit != null && p.usageLimit !== '' && !(Number.isInteger(Number(p.usageLimit)) && Number(p.usageLimit) >= 0)) out.push('Promo ' + c + ': the usage limit must be a whole number (0 = unlimited).');
+      if (p.startsAt && p.endsAt && p.endsAt < p.startsAt) out.push('Promo ' + c + ': the end date is before the start date.');
+    });
+    Object.keys(d.inventory || {}).forEach(function (k) {
+      var q = d.inventory[k];
+      if (!(Number.isInteger(Number(q)) && Number(q) >= 0)) out.push('Stock for ' + k + ' must be a whole number, 0 or more.');
+    });
+    var sh = d.shipping || {};
+    if (!(Number(sh.flatRate) >= 0) || !(Number(sh.freeThreshold) >= 0)) out.push('Shipping: the flat rate and the free-shipping amount must be numbers (0 or more).');
     return out;
+  };
+
+  /* Problems stay on screen (not a passing toast) until fixed or closed. */
+  A.alert = function (list, focusEl) {
+    list = [].concat(list || []).filter(Boolean);
+    var main = document.getElementById('adminMain') || document.getElementById('admin');
+    var box = document.getElementById('adminAlert');
+    if (!list.length) { if (box) box.remove(); return; }
+    if (!box) { box = document.createElement('div'); box.id = 'adminAlert'; box.className = 'adalert'; box.setAttribute('role', 'alert'); box.tabIndex = -1; main.insertBefore(box, main.firstChild); }
+    box.innerHTML = '<b>' + (list.length === 1 ? 'Please fix this before saving:' : 'Please fix these before saving:') + '</b><ul>' + list.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' +
+      '<button class="txtbtn" type="button" data-a="alert-close">Close</button>';
+    if (focusEl) { focusEl.setAttribute('aria-invalid', 'true'); focusEl.focus(); focusEl.addEventListener('input', function () { focusEl.removeAttribute('aria-invalid'); }, { once: true }); }
+    else { box.scrollIntoView({ block: 'center' }); box.focus(); }
+  };
+
+  /* Stock rows whose product or option no longer exists. */
+  A.pruneInventory = function (d) {
+    var keep = {};
+    (d.products || []).forEach(function (p) {
+      if (HW.m.isCollection(p)) {
+        HW.m.optColor(p).values.forEach(function (c) { HW.m.optSize(p).values.forEach(function (sz) {
+          var ov = (p.variants || {})[HW.m.vKey(c.id, sz.id)] || {};
+          keep[String(ov.sku || '').trim() || HW.m.genSku(p, c, sz)] = 1;
+        }); });
+      } else { keep[HW.m.simpleSku(p)] = 1; keep[p.id] = 1; }
+    });
+    Object.keys(d.inventory || {}).forEach(function (k) { if (!keep[k]) delete d.inventory[k]; });
+    return d;
   };
 
   function setSaving(on) {
@@ -279,6 +361,7 @@
   A.go = function (tab) {
     if (A.edit && A.editDirty && A.editDirty() && !confirm('Leave this editor? Changes you haven’t applied will be lost.')) return;
     A.tab = tab; A.edit = null; A.editKey = null; A.commitEdit = null; A.editDirty = null;
+    try { history.replaceState(null, '', location.pathname + location.search + '#' + tab); } catch (e) {}
     A.render();
     var main = document.querySelector('.admain'); if (main) { main.scrollTop = 0; window.scrollTo(0, 0); }
   };
@@ -542,8 +625,10 @@
   A.toCsv = function (rows) {
     return rows.map(function (r) {
       return r.map(function (c) {
+        var isNum = typeof c === 'number';
         c = String(c == null ? '' : c);
-        if (/^[=+\-@]/.test(c)) c = "'" + c; // stop spreadsheet formula injection
+        // Stop spreadsheet formula injection (also behind spaces, tabs or line breaks) without mangling negative numbers.
+        if (!isNum && !/^-?\d+(\.\d+)?$/.test(c) && /^[\t\r\n ]*[=+\-@]/.test(c)) c = "'" + c;
         return /[",\n\r]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c;
       }).join(',');
     }).join('\n');
@@ -619,7 +704,10 @@
     });
 
     ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(function (t) {
-      document.addEventListener(t, function () { A.lastActive = Date.now(); }, { passive: true });
+      document.addEventListener(t, function () {
+        A.lastActive = Date.now();
+        if (!A._activeSaved || A.lastActive - A._activeSaved > 30000) { A._activeSaved = A.lastActive; u.store.set(ACTIVE_KEY, A.lastActive); }
+      }, { passive: true });
     });
     setInterval(idleCheck, 30000);
 
@@ -643,6 +731,7 @@
   A.actions.tab = function (el) { A.go(el.dataset.tab); };
   A.actions.signout = function () { A.signOut(); };
   A.actions['save-all'] = function () { return A.saveAll(); };
+  A.actions['alert-close'] = function () { A.alert([]); };
   A.actions.discard = function () { A.discard(); };
   A.actions.upload = async function (el) {
     var input = document.getElementById(el.dataset.for);
@@ -663,7 +752,7 @@
     } finally { el.disabled = false; el.textContent = label; }
   };
   /* The server that holds the Stripe and ShipStation keys: the Supabase Edge Function "hw", unless another address is entered
-     in Storefront › Card payments (for example a Cloudflare Worker). */
+     in Storefront › Card payments. */
   A.defaultWorkerUrl = function () { return String((window.HW_CONFIG || {}).supabaseUrl || '').replace(/\/+$/, '') + '/functions/v1/hw'; };
   A.workerUrl = function () {
     return String(((A.draft && A.draft.payments) || {}).workerUrl || '').trim().replace(/\/+$/, '') || A.defaultWorkerUrl();

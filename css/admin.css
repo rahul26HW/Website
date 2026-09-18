@@ -257,3 +257,9 @@ details.colgroup .gbody{padding:4px 14px 14px}
 .switches input[type=checkbox]:checked{background:#3A5A52}
 .switches input[type=checkbox]:checked::after{transform:translateX(20px)}
 .switches input[type=checkbox]:focus-visible{outline:2px solid #3A5A52;outline-offset:2px}
+
+/* Problems that block saving: stay on screen until fixed */
+.adalert{background:#FBEDEA;border:1px solid #E3B4A8;border-left:4px solid #B5503A;border-radius:6px;padding:12px 16px;margin:0 0 16px;color:#5a1f12}
+.adalert ul{margin:6px 0 6px 18px;padding:0}
+.adalert:focus{outline:2px solid #B5503A;outline-offset:2px}
+[aria-invalid="true"]{border-color:#B5503A!important;box-shadow:0 0 0 1px #B5503A}

@@ -1,5 +1,5 @@
 /* Home Weavers — admin: Marketing studio (AI operator, daily tasks, results log, content generation).
-   AI calls go ONLY to your Cloudflare Worker, signed with your admin session. No API keys in the browser. */
+   AI calls go ONLY to your own server (the Supabase Edge Function “hw”), signed with your admin session. No API keys in the browser. */
 (function (HW) {
   'use strict';
 
@@ -14,7 +14,7 @@
   function endpointProblem(url) {
     url = String(url || '').trim();
     if (!url) return 'not set';
-    if (/api\.anthropic\.com|api\.openai\.com/i.test(url)) return 'This is the AI company’s own address. The browser must never call it directly (your secret key would be exposed). Paste your Cloudflare Worker URL instead.';
+    if (/api\.anthropic\.com|api\.openai\.com/i.test(url)) return 'This is the AI company’s own address. The browser must never call it directly (your secret key would be exposed). Paste your own server address instead (the Supabase Edge Function “hw” + /ai).';
     if (!/^https:\/\/[^\s/]+/i.test(url)) return 'The worker URL must start with https://';
     return '';
   }
@@ -106,9 +106,9 @@
       var log = (m.log || []).slice().reverse().slice(0, 12);
 
       return '<h1>Marketing studio</h1><p class="sub">Your marketing routine, AI content and a results log — all from your real catalog. Plans, checkmarks and logged results save automatically; settings use the Save button.</p>' +
-        (!ready ? '<section class="panel setup"><h2 class="ph3">Set up AI worker</h2><p style="margin:0 0 8px">The AI buttons are off until you connect your Cloudflare Worker. ' +
+        (!ready ? '<section class="panel setup"><h2 class="ph3">Set up AI</h2><p style="margin:0 0 8px">The AI buttons are off until you connect your server. ' +
           (prob === 'not set' ? '' : '<span class="bad">' + esc(prob) + '</span>') + '</p>' +
-          '<ol class="hint"><li>Create the free worker from <b>ai-proxy.worker.js</b> (steps in README → AI worker).</li><li>Paste its URL in <b>AI worker</b> below and click Save.</li></ol></section>' : '') +
+          '<ol class="hint"><li>Add the secret <b>ANTHROPIC_API_KEY</b> in Supabase › Edge Functions › Secrets.</li><li>Paste <b>' + esc(A.defaultWorkerUrl() + '/ai') + '</b> in <b>AI server address</b> below and click Save.</li></ol></section>' : '') +
 
         '<section class="panel operator"><h2 class="ph3">🧭 AI Operator — your marketing manager</h2>' +
         '<p class="hint" style="margin:-6px 0 10px">Goal: <b>$' + Math.round(g.amount).toLocaleString() + '</b> in ' + g.weeks + ' weeks · <b>Week ' + w + '</b> · ' + esc(goalPhase(w)) + '</p>' +
@@ -161,8 +161,8 @@
 
         ui.panel('Brand voice &amp; AI worker',
           ui.field('Brand voice', 'priv.marketing.voice', m.voice, { textarea: true, rows: 3, hint: 'How your brand should sound, e.g. “warm, understated, slow-living; celebrates natural fibers and craftsmanship.”' }) +
-          ui.field('AI worker URL', 'priv.marketing.endpoint', m.endpoint, { type: 'trim', live: 'endpointCheck', placeholder: 'https://home-weavers-ai.yourname.workers.dev',
-            hint: '<span id="epMsg" class="' + (prob && prob !== 'not set' ? 'bad' : '') + '">' + (prob && prob !== 'not set' ? '⚠ ' + esc(prob) : 'Your Cloudflare Worker URL. It holds the API key and only answers signed-in admins.') + '</span>' }) +
+          ui.field('AI server address', 'priv.marketing.endpoint', m.endpoint, { type: 'trim', live: 'endpointCheck', placeholder: A.defaultWorkerUrl() + '/ai',
+            hint: '<span id="epMsg" class="' + (prob && prob !== 'not set' ? 'bad' : '') + '">' + (prob && prob !== 'not set' ? '⚠ ' + esc(prob) : 'Your server (Supabase Edge Function “hw”). It holds the API key and only answers signed-in admins.') + '</span>' }) +
           ui.field('Image worker URL (optional)', 'priv.marketing.imageEndpoint', m.imageEndpoint, { type: 'trim', placeholder: 'Blank = the AI worker’s /image route', hint: 'Only if you run image generation on a separate worker.' }) +
           '<div class="btnrow">' + '<button class="btn ghost sm" type="button" data-a="mkt-test"' + dis + '>Test connection</button></div><div id="mktTest" aria-live="polite"></div>' +
           ui.saveBtn());
@@ -183,7 +183,7 @@
     var msg = document.getElementById('epMsg'); if (!msg) return;
     var p = endpointProblem(el.value);
     msg.className = p && p !== 'not set' ? 'bad' : '';
-    msg.textContent = p && p !== 'not set' ? '⚠ ' + p : (p ? 'Your Cloudflare Worker URL.' : 'Looks good — click Save, then Test connection.');
+    msg.textContent = p && p !== 'not set' ? '⚠ ' + p : (p ? 'Your server address (the Supabase Edge Function “hw”).' : 'Looks good — click Save, then Test connection.');
   };
 
   /* Auto-saved workflow data: saves only the marketing fields that changed, keeps unsaved settings as they are. */
