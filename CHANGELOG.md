@@ -11,6 +11,12 @@
 
 ## After launch
 
+### Sales tax and checkout quantities (2026-09-18)
+- Admin › Promotions › **Sales tax**: on/off, a rate per state, and whether shipping is taxed. Live: New Jersey 6.625 % on items and shipping.
+- `place_order` works the tax out (stored in `orders.tax`), Stripe shows it as a “Sales tax” line, and emails, the confirmation page, account and admin show it. Checkout shows it once a state is chosen.
+- The checkout order summary has − / + and Remove on each line.
+- Admin › Products › **Columns?** explains every CSV column.
+
 ### Bulk products, swatches, photos (2026-09-18)
 - Admin › Products: **Export CSV** (one row per SKU; collections one row per color × size), **Import CSV** with a preview of every change and error before saving, and a **Template**. Import never deletes; blank cells keep current values; `none` clears a sale price or text field. Reads UTF-8 or Excel's Windows-1252 CSV.
 - Colour swatches on the product page and cards show the fabric photo (`…swatch…` or close-up image), falling back to the colour.
