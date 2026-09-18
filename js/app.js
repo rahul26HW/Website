@@ -58,6 +58,9 @@
   function enterAdmin() {
     document.body.classList.add('admin-mode');
     HW.seo.set({ title: 'Admin', noindex: true });
+    // Never run inside another site's frame (clickjacking); GitHub Pages can't send X-Frame-Options.
+    var framed = true; try { framed = window.top !== window.self; } catch (e) {}
+    if (framed) { document.getElementById('admin').innerHTML = '<div class="loading">Open the admin in its own tab.</div>'; return; }
     if (HW.admin) { HW.admin.enter(); return; }
     var s = document.createElement('script');
     s.src = HW.asset('js/admin/admin.js');

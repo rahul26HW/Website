@@ -11,6 +11,15 @@
 
 ## After launch
 
+### Site audit (2026-09-18)
+- Crawled all 22 sitemap pages plus checkout, search, wishlist, order, admin and 404, on desktop and phone: no broken links or images, no JS or CSP errors, no third-party requests or trackers, one h1 per page, no sideways scroll.
+- 49 live security probes as an anonymous visitor all held: private tables (orders, messages, subscribers, admins, private store) unreadable and unwritable, admin functions and Edge routes refuse without an admin session, webhooks refuse unsigned calls, storage can't be listed or written, order lookup and cancel need the matching email, the public store copy holds only the public contact email and no keys.
+- **Faster home page:** the first hero picture now starts downloading from the page head (phone or desktop version) instead of after the scripts render it.
+- **Checkout, search, wishlist and admin** now have their own files, so direct visits answer 200 (not via the 404 fallback) and load one step sooner; all are `noindex`.
+- **Admin refuses to run inside another site's frame** (clickjacking); GitHub Pages can't send `X-Frame-Options`.
+- **Tap targets:** icon buttons (menu, close, search, cart) are at least 24px with a larger invisible tap area; small text buttons are 24px tall. Header layout unchanged.
+- Unknown addresses no longer request a misplaced tab icon.
+
 ### Card approved at checkout, charged on accept
 - Stripe Checkout takes cards only (Apple Pay and Google Pay show up automatically as card wallets). No pay-later or bank methods.
 - The card is authorized at checkout and captured when the order is accepted (by the admin button or the scheduled job after the 30-minute window). Cancelling inside the window releases the hold: no charge and no Stripe fee.

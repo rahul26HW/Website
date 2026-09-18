@@ -110,6 +110,15 @@ async function main() {
     fs.writeFileSync(file, html);
   });
 
+  // App screens get their own file too, so a direct visit answers 200 instead of going through 404.html.
+  // They sit next to index.html (no "../"), are never indexed, and are left out of the sitemap.
+  ['checkout', 'search', 'wishlist', 'admin'].forEach(function (r) {
+    const html = index
+      .replace(/<title>[^<]*<\/title>/, '<title>' + attr(r.charAt(0).toUpperCase() + r.slice(1) + ' | ' + brand) + '</title>')
+      .replace(/(<meta name="description"[^>]*>)/, '$1\n<meta name="robots" content="noindex">');
+    fs.writeFileSync(path.join(ROOT, r + '.html'), html);
+  });
+
   const today = new Date().toISOString().slice(0, 10);
   const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
     [''].concat(pages.map(function (p) { return p.route; })).map(function (r) { return '  <url><loc>' + attr(abs(r)) + '</loc><lastmod>' + today + '</lastmod></url>'; }).join('\n') + '\n</urlset>\n';

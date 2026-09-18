@@ -78,7 +78,11 @@
 
   r.start = function () {
     // Deep link that arrived through 404.html ("/?/product/x").
-    if (window.HW_REDIRECT) { history.replaceState(null, '', window.HW_REDIRECT); window.HW_REDIRECT = null; }
+    if (window.HW_REDIRECT) {
+      // Pin the tab icon to its full address first; relative, it would be looked up under the restored folder.
+      var icon = document.querySelector('link[rel="icon"]'); if (icon) icon.href = icon.href;
+      history.replaceState(null, '', window.HW_REDIRECT); window.HW_REDIRECT = null;
+    }
     // Legacy "#/product/x" links from the old site.
     if (/^#\//.test(location.hash)) history.replaceState({}, '', HW.link(location.hash.slice(1)));
 

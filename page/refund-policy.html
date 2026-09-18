@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-cXej5Xaf8t47EHKmWNLw/2sqIXRKVU//yX2wQdc6J5E=' 'sha256-OowlxqPUNNtem1YTZbddgYz0KFPAOdlDp0XlCBd+qd8=' 'sha256-zVKYLwZ/hIYqFlyEUt/ZLi1wYGPwrvlU9uAuqAz+Ll0=' https://cdn.snipcart.com; style-src 'self' 'unsafe-inline' https://cdn.snipcart.com; font-src 'self' https://cdn.snipcart.com; img-src 'self' data: blob: https:; media-src 'self' https:; connect-src 'self' https://soydgxrrwozmiqzutypr.supabase.co https://*.workers.dev https://app.snipcart.com https://payment.snipcart.com data: blob:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://*.snipcart.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-cXej5Xaf8t47EHKmWNLw/2sqIXRKVU//yX2wQdc6J5E=' 'sha256-jSng98kaWhXOR2Pds5/ecn3UIck9jp50aT1jRHrHRns=' 'sha256-zVKYLwZ/hIYqFlyEUt/ZLi1wYGPwrvlU9uAuqAz+Ll0=' https://cdn.snipcart.com; style-src 'self' 'unsafe-inline' https://cdn.snipcart.com; font-src 'self' https://cdn.snipcart.com; img-src 'self' data: blob: https:; media-src 'self' https:; connect-src 'self' https://soydgxrrwozmiqzutypr.supabase.co https://*.workers.dev https://app.snipcart.com https://payment.snipcart.com data: blob:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://*.snipcart.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Refund Policy | Home Weavers</title>
@@ -29,14 +29,32 @@
 <script>
   /* First visit: start downloading the store copy now, not after the scripts run (js/api.js picks it up).
      Keep the address in step with supabaseUrl in js/config.js. */
-  try {
-    if (!localStorage.getItem('hw:store:v2')) {
-      window.HW_SNAPSHOT_URL = 'https://soydgxrrwozmiqzutypr.supabase.co/storage/v1/object/public/media/public/store.json';
+  (function () {
+    var HOST = 'https://soydgxrrwozmiqzutypr.supabase.co/';
+    /* Home page: fetch the first hero picture now instead of after the scripts render it. */
+    function heroPreload(d) {
+      try {
+        var s = d && d.hero && d.hero.slides && d.hero.slides[0];
+        if (!s || !/\/(index\.html)?$/.test(location.pathname) || /^\?\//.test(location.search) || /^#\//.test(location.hash)) return;
+        var ok = function (u) { return typeof u === 'string' && u.indexOf(HOST) === 0; };
+        [[s.mobileImage, '(max-width:720px)'], [s.image, ok(s.mobileImage) ? '(min-width:721px)' : '']].forEach(function (p) {
+          if (!ok(p[0])) return;
+          var l = document.createElement('link');
+          l.rel = 'preload'; l.as = 'image'; l.href = p[0]; l.setAttribute('fetchpriority', 'high');
+          if (p[1]) l.media = p[1];
+          document.head.appendChild(l);
+        });
+      } catch (e) {}
+    }
+    try {
+      var cached = localStorage.getItem('hw:store:v2');
+      if (cached) { heroPreload((JSON.parse(cached) || {}).data); return; }
+      window.HW_SNAPSHOT_URL = HOST + 'storage/v1/object/public/media/public/store.json';
       window.HW_SNAPSHOT = fetch(window.HW_SNAPSHOT_URL)
         .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('no snapshot')); });
-      window.HW_SNAPSHOT.catch(function () {});
-    }
-  } catch (e) {}
+      window.HW_SNAPSHOT.then(function (j) { heroPreload(j && j.data); }, function () {});
+    } catch (e) {}
+  })();
 </script>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://soydgxrrwozmiqzutypr.supabase.co" crossorigin>
