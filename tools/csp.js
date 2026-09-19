@@ -30,15 +30,16 @@ function policy(html, opts) {
   return [
     "default-src 'self'",
     // Snipcart hosts are listed only while Snipcart is switched on in the admin (node tools/csp.js --snipcart).
-    "script-src 'self' " + hashes.join(' ') + (snip ? ' https://cdn.snipcart.com' : ''),
-    "style-src 'self' 'unsafe-inline'" + (snip ? ' https://cdn.snipcart.com' : ''),
+    // Google's sign-in button (loaded on the sign-in page only).
+    "script-src 'self' " + hashes.join(' ') + ' https://accounts.google.com/gsi/client' + (snip ? ' https://cdn.snipcart.com' : ''),
+    "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style" + (snip ? ' https://cdn.snipcart.com' : ''),
     "font-src 'self'" + (snip ? ' https://cdn.snipcart.com' : ''),
     // Product photos live in Supabase Storage; admins may also paste image links from other https sites.
     "img-src 'self' data: blob: https:",
     "media-src 'self' https:",
     // Database and the Edge Function (Stripe, ShipStation, email, AI) both live on the Supabase project.
-    "connect-src 'self' " + sb + (snip ? ' https://app.snipcart.com https://payment.snipcart.com' : '') + ' data: blob:',
-    'frame-src https://www.youtube-nocookie.com https://player.vimeo.com' + (snip ? ' https://*.snipcart.com' : ''),
+    "connect-src 'self' " + sb + ' https://accounts.google.com/gsi/' + (snip ? ' https://app.snipcart.com https://payment.snipcart.com' : '') + ' data: blob:',
+    'frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://accounts.google.com/gsi/' + (snip ? ' https://*.snipcart.com' : ''),
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

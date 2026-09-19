@@ -116,7 +116,6 @@
     'acct-restart': function () { HW.account.restart(); },
     'acct-resend': function (el) { HW.account.resend(el); },
     'acct-signout-all': function (el) { HW.account.signOutAll(el); },
-    'acct-google': function () { HW.account.google(); },
     'acct-delete': function (el) { HW.account.remove(el); },
     'acct-read': function () { HW.account.markRead(); },
     'acct-addr-new': function () { HW.account.addr.edit(); },

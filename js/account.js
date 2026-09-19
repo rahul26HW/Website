@@ -9,7 +9,6 @@
   var KEY = 'hw:account';          // { token, email, expires, name, checkout } — this device only; "Sign out" removes it
   var PENDING = 'hw:accountEmail'; // email waiting for its code (this tab only)
   var SEEN = 'hw:accountSeen';     // { email: time } — notifications read up to
-  var GKEY = 'hw:googleSignIn';    // { state, nonce } for one "Continue with Google" round trip (this tab only)
   var NEXT = 'hw:accountNext';     // where to go after signing in (this tab only)
   var GOOGLE_G = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A11.9 11.9 0 0 1 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
   var linkStyle = ' style="font-size:inherit;letter-spacing:0;text-transform:none"';
@@ -19,6 +18,21 @@
     var id = String(((HW.DB && HW.DB.settings) || {}).googleClientId || '').trim();
     return /^[\w.-]+\.apps\.googleusercontent\.com$/.test(id) ? id : '';
   }
+  var gsi = null;
+  function loadGsi() {
+    if (window.google && window.google.accounts && window.google.accounts.id) return Promise.resolve(window.google);
+    if (gsi) return gsi;
+    gsi = new Promise(function (ok, bad) {
+      var s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.async = true;
+      s.onload = function () { window.google && window.google.accounts ? ok(window.google) : bad(new Error('gsi')); };
+      s.onerror = function () { gsi = null; s.remove(); bad(new Error('gsi')); };
+      document.head.appendChild(s);
+    });
+    return gsi;
+  }
+
   function randomToken() {
     var b = new Uint8Array(24); crypto.getRandomValues(b);
     return btoa(String.fromCharCode.apply(null, b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -466,25 +480,31 @@
       }
     },
 
-    /* "Continue with Google": off to Google's own page; it comes back to /account/login with a signed ID token. */
-    google: function () {
+    /* "Continue with Google": Google's own button opens a Google pop-up and hands the signed ID token straight
+       to this page (never through the address bar — Chrome flags pages that receive sign-in tokens in their URL).
+       Google's script is loaded only on the sign-in page. */
+    google: function (box) {
       var cid = googleId();
-      if (!cid) return;
-      var st = { state: randomToken(), nonce: randomToken() };
-      u.session.set(GKEY, st);
-      var q = new URLSearchParams({ client_id: cid, redirect_uri: location.origin + HW.link('/account/login'), response_type: 'id_token',
-        scope: 'openid email profile', nonce: st.nonce, state: st.state, prompt: 'select_account' });
-      location.assign('https://accounts.google.com/o/oauth2/v2/auth?' + q.toString());
+      if (!cid || !box) return;
+      var nonce = randomToken();
+      loadGsi().then(function (g) {
+        if (!document.body.contains(box)) return;
+        g.accounts.id.initialize({ client_id: cid, nonce: nonce, ux_mode: 'popup', auto_select: false, itp_support: true,
+          callback: function (res) { HW.account.finishGoogle(res && res.credential, nonce); } });
+        box.innerHTML = '';
+        g.accounts.id.renderButton(box, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'rectangular',
+          logo_alignment: 'center', width: Math.max(200, Math.min(400, box.clientWidth || 360)) });
+        box.classList.add('ready');
+      }).catch(function () {
+        box.innerHTML = '<p class="auth-note">Google sign-in couldn’t load (an ad blocker may be stopping it). Please use your email below.</p>';
+      });
     },
 
-    finishGoogle: async function (q) {
-      var st = u.session.get(GKEY, null);
-      u.session.set(GKEY, null);
-      if (q.get('error')) { authMsg(q.get('error') === 'access_denied' ? 'Google sign-in was cancelled.' : 'Google sign-in didn’t work. Please try again or use your email.'); return; }
-      if (!st || !st.state || q.get('state') !== st.state || !q.get('id_token')) { authMsg('That Google sign-in expired. Please try again.'); return; }
+    finishGoogle: async function (idToken, nonce) {
+      if (!idToken) { authMsg('Google sign-in didn’t work. Please try again or use your email.'); return; }
       authMsg('Signing you in…', true);
       try {
-        var r = await post('/account/google', { id_token: q.get('id_token'), nonce: st.nonce });
+        var r = await post('/account/google', { id_token: idToken, nonce: nonce });
         u.store.set(KEY, { token: r.token, email: r.email, expires: r.expires });
         state.data = null;
         await load(true).catch(function () {});
@@ -650,7 +670,7 @@
       box = '<h1 class="auth-h">Welcome back</h1>' +
         '<p class="auth-sub">Sign in or create an account to track orders, save addresses and check out faster.</p>' +
         '<p class="form-msg" id="authMsg" role="status" hidden></p>' +
-        (gid ? '<button class="gbtn" type="button" data-act="acct-google">' + GOOGLE_G + '<span>Continue with Google</span></button><div class="auth-or"><span>or</span></div>' : '') +
+        (gid ? '<div class="gsi-box" id="gsiBox"><span class="gbtn" aria-hidden="true">' + GOOGLE_G + '<span>Continue with Google</span></span></div><div class="auth-or"><span>or</span></div>' : '') +
         '<form class="form" data-form="acct-email" novalidate aria-label="Sign in with email">' +
         '<div class="fld"><label for="ac_email">Email</label><input id="ac_email" name="email" type="email" autocomplete="email" maxlength="254" required></div>' +
         '<p class="form-msg" role="status" hidden></p>' +
@@ -665,13 +685,9 @@
       after: function () {
         document.body.classList.add('auth-page');
         paintHeader();
-        if (/[#&](id_token|error)=/.test(location.hash)) {
-          var q = new URLSearchParams(location.hash.slice(1));
-          // Take the token out of the address bar and history straight away.
-          history.replaceState(null, '', location.pathname + location.search);
-          HW.account.finishGoogle(q);
-          return;
-        }
+        // Old-style Google return (token in the address): take it out of the address bar and history, unused.
+        if (/[#&](id_token|error)=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
+        if (!pending) HW.account.google(document.getElementById('gsiBox'));
         var f = document.getElementById(pending ? 'ac_code' : 'ac_email'); if (f && pending) f.focus();
       }
     };
