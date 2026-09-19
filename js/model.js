@@ -134,16 +134,17 @@
     var start = primaryUrl ? photos.indexOf(primaryUrl) : 0;
     return { photos: photos, start: start < 0 ? 0 : start };
   };
+  /* A color's main photo: the first sold size's own photo (the product shot), else the color's shared photos
+     (those are often care / feature graphics). */
   m.colorImage = function (p, c) {
-    var u = m.firstPhoto(c.images, c.primary);
-    if (u) return u;
     var sizes = m.optSize(p).values;
     for (var i = 0; i < sizes.length; i++) {
       var ov = (p.variants && p.variants[m.vKey(c.id, sizes[i].id)]) || {};
+      if (ov.off === true) continue;
       var v = m.firstPhoto(ov.images, ov.primary);
       if (v) return v;
     }
-    return '';
+    return m.firstPhoto(c.images, c.primary) || '';
   };
   /* A photo of the fabric itself for the colour button: a set swatch image, else a photo named "…swatch…",
      else a close-up. None found → the colour dot is used. */
