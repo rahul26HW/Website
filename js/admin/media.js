@@ -36,6 +36,32 @@
     return { blob: out, ext: 'webp', type: 'image/webp', width: cw, height: ch };
   }
 
+  /* Gets an image as a Blob. The page's security policy only lets scripts download from our own servers,
+     so a linked photo (e.g. Dropbox) is loaded like a normal <img> (allowed) and redrawn on a canvas.
+     This works when the host allows cross-origin use (Dropbox does). */
+  async function imageBlob(url) {
+    try {
+      var res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.blob();
+    } catch (e) {
+      if (isOurs(url)) throw e;
+      var img = await new Promise(function (resolve, reject) {
+        var im = new Image();
+        im.crossOrigin = 'anonymous';
+        im.onload = function () { resolve(im); };
+        im.onerror = function () { reject(new Error('Could not load the image')); };
+        im.src = url;
+      });
+      var c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      var b = await new Promise(function (resolve) { c.toBlob(resolve, 'image/jpeg', 0.95); });
+      if (!b) throw new Error('Could not read the image');
+      return b;
+    }
+  }
+
   function isOurs(url) {
     var base = (window.HW_CONFIG || {}).supabaseUrl || '';
     return !!base && String(url || '').indexOf(base + '/storage/v1/object/public/' + BUCKET + '/') === 0;
@@ -68,9 +94,7 @@
           if (shouldStop && shouldStop()) return;
           var url = queue.shift(), r = used[url];
           try {
-            var res = await fetch(url);
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            var conv = await toWebp(await res.blob(), 700, 0.78);
+            var conv = await toWebp(await imageBlob(url), 700, 0.78);
             var name = decodeURIComponent(url.split('?')[0].split('/').pop() || 'image');
             var path = 'thumbs/' + r.folder + '/' + safeName(name) + '-' + rand() + '.' + conv.ext;
             var up = await A.sb.storage.from(BUCKET).upload(path, conv.blob, { contentType: conv.type, cacheControl: '31536000', upsert: false });
@@ -146,9 +170,7 @@
           var url = queue.shift();
           var first = byUrl[url][0];
           try {
-            var res = await fetch(url, { mode: 'cors' });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            var blob = await res.blob();
+            var blob = await imageBlob(url);
             if (!/^image\//.test(blob.type)) throw new Error('not an image (' + (blob.type || 'unknown type') + ')');
             var name = decodeURIComponent((url.split('?')[0].split('/').pop() || 'image'));
             var isLogo = first.folder === 'logo';
