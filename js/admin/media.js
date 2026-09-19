@@ -51,9 +51,10 @@
       if (isOurs(url)) throw e;
       var img = await new Promise(function (resolve, reject) {
         var im = new Image();
+        var timer = setTimeout(function () { im.src = ''; reject(new Error('The image took too long to load')); }, 30000);
         im.crossOrigin = 'anonymous';
-        im.onload = function () { resolve(im); };
-        im.onerror = function () { reject(new Error('Could not load the image')); };
+        im.onload = function () { clearTimeout(timer); resolve(im); };
+        im.onerror = function () { clearTimeout(timer); reject(new Error('Could not load the image')); };
         im.src = url;
       });
       return img; // toWebp draws it straight to the target size
