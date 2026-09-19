@@ -79,6 +79,7 @@
       effective: (sale != null && sale < price) ? sale : price,
       onSale: sale != null && sale < price,
       available: !off,
+      upc: ov.upc || '',
       sku: sku, inStock: !off && m.invInStock(sku, baseStock),
       rawImages: rawImgs, primary: hasOwn ? (ov.primary || 0) : (color.primary || 0),
       video: hasOwn ? (ov.video || '') : (color.video || '')

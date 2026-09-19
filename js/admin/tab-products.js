@@ -149,7 +149,7 @@
   function variantGroup(p, color, sOpt, open) {
     return '<details class="colgroup"' + (open ? ' open' : '') + ' data-color="' + esc(color.id) + '">' +
       '<summary><span class="swatchdot" style="background:' + esc(color.hex) + '"></span>' + esc(color.label) + ' <span class="muted" style="font-weight:400;font-size:12px">· ' + sOpt.values.length + ' sizes</span></summary>' +
-      '<div class="gbody"><div class="tablewrap"><table class="vartable"><thead><tr><th>Size</th><th>SKU code</th><th>Price override</th><th>Sale override</th><th style="text-align:center">In stock</th><th style="text-align:center">Not sold</th></tr></thead><tbody>' +
+      '<div class="gbody"><div class="tablewrap"><table class="vartable"><thead><tr><th>Size</th><th>SKU code</th><th>UPC</th><th>Price override</th><th>Sale override</th><th style="text-align:center">In stock</th><th style="text-align:center">Not sold</th></tr></thead><tbody>' +
       sOpt.values.map(function (s) {
         var key = color.id + '__' + s.id;
         var ov = (p.variants && p.variants[key]) || {};
@@ -158,11 +158,12 @@
         var def = s.price != null && s.price !== '' ? s.price : (p.basePrice || 0);
         return '<tr><td style="white-space:nowrap">' + esc(s.label) + '</td>' +
           '<td><input type="text" value="' + esc(ov.sku || '') + '" placeholder="' + esc(m.genSku(p, color, s)) + '" aria-label="SKU for ' + esc(color.label + ' ' + s.label) + '" data-bind="' + vb + '.sku" data-type="trim"></td>' +
+          '<td><input type="text" inputmode="numeric" value="' + esc(ov.upc || '') + '" aria-label="UPC for ' + esc(color.label + ' ' + s.label) + '" data-bind="' + vb + '.upc" data-type="trim" style="width:9.5em"></td>' +
           '<td><input type="number" step="0.01" min="0" value="' + (ov.price == null ? '' : ov.price) + '" placeholder="' + def + '" aria-label="Price for ' + esc(color.label + ' ' + s.label) + '" data-bind="' + vb + '.price" data-type="number"></td>' +
           '<td><input type="number" step="0.01" min="0" value="' + (ov.salePrice == null ? '' : ov.salePrice) + '" aria-label="Sale price for ' + esc(color.label + ' ' + s.label) + '" data-bind="' + vb + '.salePrice" data-type="number"></td>' +
           '<td style="text-align:center"><input type="checkbox"' + (ov.inStock !== false ? ' checked' : '') + ' aria-label="In stock: ' + esc(color.label + ' ' + s.label) + '" data-bind="' + vb + '.inStock"></td>' +
           '<td style="text-align:center"><input type="checkbox"' + (ov.off === true ? ' checked' : '') + ' aria-label="Not sold: ' + esc(color.label + ' ' + s.label) + '" title="Hide this color/size from the store" data-bind="' + vb + '.off"></td></tr>' +
-          '<tr><td colspan="6" style="padding:0 0 10px"><details class="vphotos"' + (A.openVariant === key ? ' open' : '') + ' data-key="' + esc(key) + '">' +
+          '<tr><td colspan="7" style="padding:0 0 10px"><details class="vphotos"' + (A.openVariant === key ? ' open' : '') + ' data-key="' + esc(key) + '">' +
           '<summary style="cursor:pointer;font-size:12.5px;padding:4px 0;color:' + (nOwn ? 'var(--loom)' : 'var(--ink-soft)') + '">📷 Photos for ' + esc(s.label) + ' — ' +
           (nOwn ? '<b>' + nOwn + ' photo' + (nOwn > 1 ? 's' : '') + '</b>' : (nColor ? 'using the color’s photos' : '<b style="color:var(--clay)">no photos yet</b>')) + '</summary>' +
           '<div style="padding:8px 0 4px">' +
@@ -315,6 +316,7 @@
         if (sa != null) e.salePrice = sa;
         if (o.inStock === false) e.inStock = false;
         if (o.off === true) e.off = true;
+        if (String(o.upc || '').trim()) e.upc = String(o.upc).trim();
         if (sku) { if (skus[sku]) { u.toast('SKU ' + sku + ' is used twice in this product'); return false; } skus[sku] = 1; e.sku = sku; }
         var cp2 = compact(o.images, o.primary);
         if (cp2.images.length) { e.images = cp2.images; if (cp2.primary) e.primary = cp2.primary; if (String(o.video || '').trim()) e.video = String(o.video).trim(); }

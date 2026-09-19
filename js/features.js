@@ -56,6 +56,7 @@
         data.offers = { '@type': 'AggregateOffer', priceCurrency: 'USD', lowPrice: r.min.toFixed(2), highPrice: r.max.toFixed(2), offerCount: count, availability: availability, url: url };
       } else {
         data.sku = p.sku || undefined;
+        if (/^\d{12,14}$/.test(String(p.upc || ''))) data['gtin' + String(p.upc).length] = String(p.upc);
         data.offers = { '@type': 'Offer', priceCurrency: 'USD', price: m.simplePrice(p).effective.toFixed(2), availability: availability, itemCondition: 'https://schema.org/NewCondition', url: url };
       }
       // Shipping and returns, as Google shows them in results.

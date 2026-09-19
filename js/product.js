@@ -192,7 +192,8 @@
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
         (inStock ? '' : notifyHTML(p, m.simpleSku(p), 'This item')),
       inStock: inStock,
-      specs: [{ label: 'SKU', value: p.sku }, { label: 'Material', value: p.material }, { label: 'Origin', value: p.origin }, { label: 'Availability', value: m.stockLabel(qtyKey, inStock) }]
+      specs: [{ label: 'SKU', value: p.sku }, { label: 'UPC', value: p.upc }, { label: 'Dimensions', value: p.dims }, { label: 'Pile height', value: p.pileHeight },
+        { label: 'Backing', value: p.backing }, { label: 'Shape', value: p.shape }, { label: 'Material', value: p.material }, { label: 'Origin', value: p.origin }, { label: 'Availability', value: m.stockLabel(qtyKey, inStock) }]
     };
   }
 
@@ -242,7 +243,9 @@
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
         (v.inStock ? '' : notifyHTML(p, v.sku, v.color.label + ' / ' + v.size.label)),
       inStock: v.inStock,
-      specs: [{ label: 'SKU', value: v.sku }, { label: 'Material', value: p.material }, { label: 'Origin', value: p.origin }]
+      specs: [{ label: 'SKU', value: v.sku }, { label: 'UPC', value: v.upc }, { label: cOpt.name || 'Color', value: v.color.label },
+        { label: sOpt.name || 'Size', value: v.size.label }, { label: 'Dimensions', value: v.size.dims || p.dims }, { label: 'Pile height', value: p.pileHeight },
+        { label: 'Backing', value: p.backing }, { label: 'Shape', value: p.shape }, { label: 'Material', value: p.material }, { label: 'Origin', value: p.origin }]
     };
   }
 

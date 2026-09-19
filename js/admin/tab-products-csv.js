@@ -5,7 +5,7 @@
   'use strict';
 
   var A = HW.A, u = HW.u, esc = u.esc;
-  var COLS = ['handle', 'name', 'type', 'category', 'subcategory', 'sku', 'color', 'size', 'price', 'sale_price', 'stock',
+  var COLS = ['handle', 'name', 'type', 'category', 'subcategory', 'sku', 'upc', 'color', 'size', 'price', 'sale_price', 'stock',
     'images', 'description', 'features', 'care', 'material', 'origin', 'badge', 'featured', 'hidden',
     'seo_title', 'seo_description', 'image_alt'];
   var OLD_COLS = ['color_hex', 'color_images', 'weight']; // older exports: still understood, no longer written
@@ -71,13 +71,13 @@
             if (v.off === true) return;
             var price = v.price != null ? v.price : sz.price != null ? sz.price : p.basePrice;
             var sale = v.salePrice != null ? v.salePrice : sz.salePrice != null ? sz.salePrice : p.baseSalePrice;
-            push(Object.assign({}, base, { type: 'collection', sku: v.sku || '', color: col.label, color_hex: col.hex || '', size: sz.label,
+            push(Object.assign({}, base, { type: 'collection', sku: v.sku || '', upc: v.upc || '', color: col.label, color_hex: col.hex || '', size: sz.label,
               price: price, sale_price: sale, stock: stock(v.sku), images: photos(v.images, v.primary).join(SEP), color_images: photos(col.images, col.primary).join(SEP) }));
           });
         });
       } else {
         var key = p.sku && has(inv, p.sku) ? p.sku : has(inv, p.id) ? p.id : p.sku;
-        push(Object.assign({}, base, { type: 'simple', sku: p.sku || '', price: p.price, sale_price: p.salePrice, stock: stock(key), images: photos(p.images, p.primary).join(SEP) }));
+        push(Object.assign({}, base, { type: 'simple', sku: p.sku || '', upc: p.upc || '', price: p.price, sale_price: p.salePrice, stock: stock(key), images: photos(p.images, p.primary).join(SEP) }));
       }
     });
     return rows;
@@ -220,6 +220,7 @@
       if (rows.length > 1) errors.push('A simple product has one row (lines ' + res.lines.join(', ') + '); use color/size columns for a collection');
       var r = rows[0];
       if (r.sku) { takeSku(r.sku, r.line, p.id); p.sku = r.sku; }
+      if (r.upc) p.upc = CLEAR.test(r.upc) ? '' : r.upc.replace(/\.0+$/, '');
       var pr = priceOf(r, 'price'), sa = priceOf(r, 'sale_price');
       if (pr !== undefined) p.price = pr;
       if (sa !== undefined) p.salePrice = sa;
@@ -242,6 +243,7 @@
         var v = p.variants[key] = p.variants[key] || {};
         delete v.off; // a row in the file means this color/size is sold
         if (r.sku) { takeSku(r.sku, r.line, p.id + key); v.sku = r.sku; }
+        if (r.upc) { if (CLEAR.test(r.upc)) delete v.upc; else v.upc = r.upc.replace(/\.0+$/, ''); }
         // Price: unchanged values are left alone. A new size takes its price from its first row; any other
         // different price becomes that color/size's own price, so other colors keep theirs.
         [['price', 'price', 'basePrice'], ['sale_price', 'salePrice', 'baseSalePrice']].forEach(function (f) {
@@ -329,6 +331,7 @@
     ['type', '<code>simple</code> (one SKU) or <code>collection</code> (colors × sizes, one row each).'],
     ['category / subcategory', 'Must match names under Categories.'],
     ['sku', 'Your SKU for this row.'],
+    ['upc', 'The barcode number (UPC) for this row. Optional.'],
     ['color / size', 'Collections only: the color name and size name of this row.'],
     ['price / sale_price', 'In dollars. Leave sale_price empty for no sale; type <code>none</code> to remove a sale.'],
     ['stock', 'Quantity on hand (whole number).'],
