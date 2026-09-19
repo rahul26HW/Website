@@ -89,9 +89,13 @@
     var list = (d && d.profile && d.profile.addresses) || [];
     return list.find(function (x) { return x.is_default; }) || list[0] || null;
   }
+  /* The customer's name: from Settings, else a saved address (default first), the last order, or what checkout remembered. */
   function fullName(d) {
     var p = (d && d.profile) || {};
-    return [p.first_name, p.last_name].filter(Boolean).join(' ') || (d && d.lastAddress && d.lastAddress.name) || '';
+    var saved = (defaultAddress(d) || {}).name || (p.addresses || []).map(function (x) { return x && x.name; }).filter(Boolean)[0];
+    var a = get() || {};
+    return [p.first_name, p.last_name].filter(Boolean).join(' ') || saved || (d && d.lastAddress && d.lastAddress.name) ||
+      (a.checkout && a.checkout.name) || a.name || '';
   }
   /* Keeps what checkout needs on this device (the default address, or the last order's). */
   function remember(d) {
@@ -233,7 +237,7 @@
     '': function (d, a) {
       var w = HW.wishlist ? HW.wishlist.ids().filter(prod).length : 0;
       var stat = function (key, label, n, ic) { return '<a class="astat" href="' + HW.link('/account/' + key) + '"><span><span class="alabel">' + label + '</span><b>' + n + '</b></span>' + icon(ic, 22) + '</a>'; };
-      return head('Overview', 'Hi' + (first(d) ? ', ' + first(d) : ' there'), 'Here’s what’s happening with your account.') +
+      return head('Overview', first(d) ? 'Hi, ' + first(d) : 'Welcome back', 'Here’s what’s happening with your account.') +
         '<div class="astats">' + stat('orders', 'Orders', d.orders.length, 'orders') + stat('wishlist', 'Wishlist', w, 'wishlist') + stat('addresses', 'Addresses', d.profile.addresses.length, 'addresses') + '</div>' +
         '<div class="asec-head"><h2>Recent orders</h2>' + (d.orders.length ? '<a href="' + HW.link('/account/orders') + '">View all</a>' : '') + '</div>' +
         (d.orders.length ? '<div class="arows">' + d.orders.slice(0, 3).map(orderRow).join('') + '</div>'
