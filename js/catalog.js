@@ -25,7 +25,7 @@
       action = out
         ? '<button class="btn block sm" type="button" disabled>Out of stock</button>'
         : '<a class="btn block sm loom" href="' + url + '" aria-label="Select options for ' + esc(p.name) + '">Select options</a>';
-      var cols = m.optColor(p).values;
+      var cols = m.offeredColors(p);
       swatches = '<div class="cardswatch">' + cols.slice(0, 6).map(function (c) {
         var sw = m.swatchImage(p, c);
         return '<span role="img" aria-label="' + esc(c.label) + '" title="' + esc(c.label) + '" style="background:' + esc(c.hex) + '"' + (sw ? ' class="has-img"' : '') + '>' +
@@ -53,7 +53,7 @@
   var ctx = null;
 
   function emptyFilter() { return { subs: new Set(), colors: new Set(), materials: new Set(), min: null, max: null }; }
-  function colorsOf(p) { return m.isCollection(p) ? m.optColor(p).values.map(function (v) { return { label: v.label, hex: v.hex }; }) : []; }
+  function colorsOf(p) { return m.isCollection(p) ? m.offeredColors(p).map(function (v) { return { label: v.label, hex: v.hex }; }) : []; }
 
   function matches(p, f, skip) {
     if (skip !== 'subs' && f.subs.size && !f.subs.has(p.subcategoryId)) return false;

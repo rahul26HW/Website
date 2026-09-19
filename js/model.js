@@ -68,14 +68,18 @@
         : (p.baseSalePrice != null && p.baseSalePrice !== '' ? +p.baseSalePrice : null));
     var sku = ov.sku || m.genSku(p, color, size);
     var baseStock = ov.inStock != null ? ov.inStock : (p.inStock !== false);
+    var off = ov.off === true; // a color/size combination that isn't sold
     var ownImgs = (ov.images || []).filter(Boolean);
     var hasOwn = ownImgs.length > 0;
-    var rawImgs = hasOwn ? (ov.images || []) : (color.images || []);
+    // The variant's own photos first, then the color's shared photos (care, colour chart…) not already shown.
+    var colorImgs = (color.images || []).filter(Boolean);
+    var rawImgs = hasOwn ? (ov.images || []).concat(colorImgs.filter(function (x) { return ownImgs.indexOf(x) < 0; })) : (color.images || []);
     return {
       color: color, size: size, price: price, salePrice: sale,
       effective: (sale != null && sale < price) ? sale : price,
       onSale: sale != null && sale < price,
-      sku: sku, inStock: m.invInStock(sku, baseStock),
+      available: !off,
+      sku: sku, inStock: !off && m.invInStock(sku, baseStock),
       rawImages: rawImgs, primary: hasOwn ? (ov.primary || 0) : (color.primary || 0),
       video: hasOwn ? (ov.video || '') : (color.video || '')
     };
@@ -84,8 +88,14 @@
   m.eachVariant = function (p, fn) {
     if (!m.isCollection(p)) return;
     m.optColor(p).values.forEach(function (c) {
-      m.optSize(p).values.forEach(function (s) { fn(m.resolveVariant(p, c.id, s.id), c, s); });
+      m.optSize(p).values.forEach(function (s) { var v = m.resolveVariant(p, c.id, s.id); if (v.available) fn(v, c, s); });
     });
+  };
+  m.isOffered = function (p, colorId, sizeId) { var ov = (p.variants && p.variants[m.vKey(colorId, sizeId)]) || {}; return ov.off !== true; };
+  /* Colors that have at least one combination for sale. */
+  m.offeredColors = function (p) {
+    var sizes = m.optSize(p).values;
+    return m.optColor(p).values.filter(function (c) { return sizes.some(function (s) { return m.isOffered(p, c.id, s.id); }); });
   };
 
   /* ---------- prices ---------- */

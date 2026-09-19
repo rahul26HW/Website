@@ -68,6 +68,7 @@
         optC(p).values.forEach(function (col) {
           optS(p).values.forEach(function (sz) {
             var v = (p.variants || {})[col.id + '__' + sz.id] || {};
+            if (v.off === true) return;
             var price = v.price != null ? v.price : sz.price != null ? sz.price : p.basePrice;
             var sale = v.salePrice != null ? v.salePrice : sz.salePrice != null ? sz.salePrice : p.baseSalePrice;
             push(Object.assign({}, base, { type: 'collection', sku: v.sku || '', color: col.label, color_hex: col.hex || '', size: sz.label,
@@ -239,6 +240,7 @@
         var key = col.id + '__' + sz.id;
         p.variants = p.variants || {};
         var v = p.variants[key] = p.variants[key] || {};
+        delete v.off; // a row in the file means this color/size is sold
         if (r.sku) { takeSku(r.sku, r.line, p.id + key); v.sku = r.sku; }
         // Price: unchanged values are left alone. A new size takes its price from its first row; any other
         // different price becomes that color/size's own price, so other colors keep theirs.
@@ -258,6 +260,7 @@
       cOpt.values.forEach(function (c) {
         sOpt.values.forEach(function (s) {
           var o = p.variants[c.id + '__' + s.id] || {};
+          if (o.off === true) return;
           var pr2 = o.price != null ? o.price : s.price != null ? s.price : p.basePrice;
           var sa2 = o.salePrice != null ? o.salePrice : s.salePrice != null ? s.salePrice : p.baseSalePrice;
           if (!(pr2 > 0)) errors.push(c.label + ' / ' + s.label + ' has no price');

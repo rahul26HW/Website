@@ -196,12 +196,25 @@
     };
   }
 
+  /* Size / pack buttons. Sizes with a "group" (e.g. Bath towels, Sets) are shown under small headings. */
+  function sizeButtons(p, list, v) {
+    var btn = function (s) {
+      var rv = m.resolveVariant(p, v.color.id, s.id);
+      var on = s.id === v.size.id;
+      return '<button class="size-btn ' + (on ? 'active' : '') + (rv.inStock ? '' : ' oos') + '" type="button" data-act="size" data-id="' + esc(s.id) + '" aria-pressed="' + on + '" aria-label="' + esc(s.label) + (rv.inStock ? '' : ' (sold out)') + '">' + esc(s.label) + '</button>';
+    };
+    if (!list.some(function (s) { return s.group; })) return '<div class="sizes">' + list.map(btn).join('') + '</div>';
+    var groups = [], by = {};
+    list.forEach(function (s) { var g = s.group || 'Other'; if (!by[g]) { by[g] = []; groups.push(g); } by[g].push(s); });
+    return groups.map(function (g) { return '<div class="sizegroup"><div class="sg-h">' + esc(g) + '</div><div class="sizes">' + by[g].map(btn).join('') + '</div></div>'; }).join('');
+  }
+
   function collectionInfo(p, cat, sub) {
     var cOpt = m.optColor(p), sOpt = m.optSize(p);
     var v = m.resolveVariant(p, sel.colorId, sel.sizeId);
     var swatches = '<fieldset class="optblock"><legend class="sr-only">' + esc(cOpt.name || 'Color') + '</legend>' +
       '<div class="lab" aria-hidden="true"><span class="t">' + esc(cOpt.name || 'Color') + '</span><span class="v">' + esc(v.color.label) + '</span></div>' +
-      '<div class="swatches">' + cOpt.values.map(function (c) {
+      '<div class="swatches">' + m.offeredColors(p).map(function (c) {
         var anyIn = sOpt.values.some(function (s) { return m.resolveVariant(p, c.id, s.id).inStock; });
         var on = c.id === v.color.id;
         var sw = m.swatchImage(p, c);
@@ -211,11 +224,7 @@
     var sizes = '<fieldset class="optblock"><legend class="sr-only">' + esc(sOpt.name || 'Size') + '</legend>' +
       '<div class="lab"><span class="t" aria-hidden="true">' + esc(sOpt.name || 'Size') + '</span><span class="v"><span aria-hidden="true">' + esc(v.size.label) + '</span>' +
       (HW.sizeGuide && HW.sizeGuide.available() ? ' <button class="sglink" type="button" data-act="size-guide">Size guide</button>' : '') + '</span></div>' +
-      '<div class="sizes">' + sOpt.values.map(function (s) {
-        var rv = m.resolveVariant(p, v.color.id, s.id);
-        var on = s.id === v.size.id;
-        return '<button class="size-btn ' + (on ? 'active' : '') + (rv.inStock ? '' : ' oos') + '" type="button" data-act="size" data-id="' + esc(s.id) + '" aria-pressed="' + on + '" aria-label="' + esc(s.label) + (rv.inStock ? '' : ' (sold out)') + '">' + esc(s.label) + '</button>';
-      }).join('') + '</div></fieldset>';
+      sizeButtons(p, sOpt.values.filter(function (s) { return m.isOffered(p, v.color.id, s.id); }), v) + '</fieldset>';
 
     var buy;
     if (!v.inStock) buy = '<button class="btn loom" type="button" style="flex:1;justify-content:center" disabled>Sold out</button>';
@@ -280,7 +289,9 @@
     color: function (id) {
       var p = current(); sel.colorId = id; sel.qty = 1;
       if (p && m.isCollection(p) && !m.resolveVariant(p, id, sel.sizeId).inStock) {
-        var s = m.optSize(p).values.find(function (x) { return m.resolveVariant(p, id, x.id).inStock; });
+        var sizes = m.optSize(p).values;
+        var s = sizes.find(function (x) { return m.resolveVariant(p, id, x.id).inStock; }) ||
+          (m.isOffered(p, id, sel.sizeId) ? null : sizes.find(function (x) { return m.isOffered(p, id, x.id); }));
         if (s) sel.sizeId = s.id;
       }
       rerender(); writeVariant();
@@ -353,13 +364,13 @@
       if (m.isCollection(p)) {
         var cOpt = m.optColor(p), sOpt = m.optSize(p);
         // First color with stock, then its first size with stock.
-        var color = cOpt.values.find(function (c) { return sOpt.values.some(function (s) { return m.resolveVariant(p, c.id, s.id).inStock; }); }) || cOpt.values[0];
-        var size = sOpt.values.find(function (s) { return m.resolveVariant(p, color.id, s.id).inStock; }) || sOpt.values[0];
+        var color = cOpt.values.find(function (c) { return sOpt.values.some(function (s) { return m.resolveVariant(p, c.id, s.id).inStock; }); }) || m.offeredColors(p)[0] || cOpt.values[0];
+        var size = sOpt.values.find(function (s) { return m.resolveVariant(p, color.id, s.id).inStock; }) || sOpt.values.find(function (s) { return m.isOffered(p, color.id, s.id); }) || sOpt.values[0];
         // A shared link can ask for a colour and size (?color=coral&size=21-x-54).
         var pick = function (vals, want) { want = String(want || '').toLowerCase(); return want ? vals.find(function (x) { return u.slugify(x.label) === want || String(x.id) === want; }) : null; };
         var wc = pick(cOpt.values, params.color), ws = pick(sOpt.values, params.size);
-        if (wc) { color = wc; size = sOpt.values.find(function (s) { return m.resolveVariant(p, color.id, s.id).inStock; }) || sOpt.values[0]; }
-        if (ws) size = ws;
+        if (wc) { color = wc; size = sOpt.values.find(function (s) { return m.resolveVariant(p, color.id, s.id).inStock; }) || sOpt.values.find(function (s) { return m.isOffered(p, color.id, s.id); }) || sOpt.values[0]; }
+        if (ws && m.isOffered(p, color.id, ws.id)) size = ws;
         sel.colorId = color.id; sel.sizeId = size.id;
       }
     }

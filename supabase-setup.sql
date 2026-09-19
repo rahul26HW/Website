@@ -566,6 +566,9 @@ begin
         raise exception 'VARIANT_NOT_FOUND' using errcode = '22023';
       end if;
       v_ov    := coalesce(v_prod->'variants'->((v_color->>'id') || '__' || (v_size->>'id')), '{}'::jsonb);
+      if coalesce(v_ov->>'off', 'false') = 'true' then
+        raise exception 'VARIANT_NOT_FOUND' using errcode = '22023';  -- this color/size isn't sold
+      end if;
       v_price := coalesce(public._num(v_ov->>'price'), public._num(v_size->>'price'), public._num(v_prod->>'basePrice'));
       v_sale  := coalesce(public._num(v_ov->>'salePrice'), public._num(v_size->>'salePrice'), public._num(v_prod->>'baseSalePrice'));
       v_sku   := coalesce(nullif(v_ov->>'sku',''), public._gen_sku(v_prod, v_color, v_size));

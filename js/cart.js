@@ -22,6 +22,7 @@
       var cOk = m.optColor(p).values.some(function (c) { return c.id === line.colorId; });
       var sOk = m.optSize(p).values.some(function (s) { return s.id === line.sizeId; });
       if (!cOk || !sOk) return null;
+      if (!m.isOffered(p, line.colorId, line.sizeId)) return null;
       var v = m.resolveVariant(p, line.colorId, line.sizeId);
       return { p: p, name: p.name, variant: v.color.label + ' / ' + v.size.label, price: v.effective, sku: v.sku, inStock: v.inStock,
         image: m.firstPhoto(v.rawImages, v.primary) || m.colorImage(p, v.color) || m.weaveSwatch(v.color.hex, v.color.label),

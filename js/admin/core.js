@@ -297,6 +297,7 @@
         var colors = HW.m.optColor(p).values, sizes = HW.m.optSize(p).values, bad = false;
         colors.forEach(function (c) { sizes.forEach(function (sz) {
           var ov = (p.variants || {})[HW.m.vKey(c.id, sz.id)] || {};
+          if (ov.off === true) return; // not sold, so no price needed
           var pr = money(ov.price) != null ? money(ov.price) : money(sz.price) != null ? money(sz.price) : money(p.basePrice);
           if (!(pr > 0)) bad = true;
         }); });
