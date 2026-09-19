@@ -5,9 +5,10 @@
   'use strict';
 
   var A = HW.A, u = HW.u, esc = u.esc;
-  var COLS = ['handle', 'name', 'type', 'category', 'subcategory', 'sku', 'color', 'color_hex', 'size', 'price', 'sale_price', 'stock',
-    'images', 'color_images', 'description', 'features', 'care', 'material', 'origin', 'weight', 'badge', 'featured', 'hidden',
+  var COLS = ['handle', 'name', 'type', 'category', 'subcategory', 'sku', 'color', 'size', 'price', 'sale_price', 'stock',
+    'images', 'description', 'features', 'care', 'material', 'origin', 'badge', 'featured', 'hidden',
     'seo_title', 'seo_description', 'image_alt'];
+  var OLD_COLS = ['color_hex', 'color_images', 'weight']; // older exports: still understood, no longer written
   var SEP = ' | ';
   var MEDIA = 'https://soydgxrrwozmiqzutypr.supabase.co/storage/v1/object/public/media/products/';
   /* Filled-in examples at the top of every export and template. Import skips any handle that starts with "example-". */
@@ -17,16 +18,16 @@
       images: MEDIA + 'willow-collection-bath-towels-set-of-2-2/2026/twi2pc27bl-liv-mb2q2o.webp' + SEP + MEDIA + 'willow-collection-bath-towels-set-of-2-2/2026/twi2pc27bl-wbg-mj4pxs.webp',
       description: 'Soft, absorbent cotton bath towels. (Sample row: copy it, change the handle, then fill in your product.)',
       features: '100% cotton' + SEP + '630 GSM, thick and plush' + SEP + 'Size: 27 x 54 inches', care: 'Machine wash cold. Tumble dry low.',
-      material: '100% cotton', origin: 'India', weight: 1200, badge: 'New', featured: 'no', hidden: 'yes',
+      material: '100% cotton', origin: 'India', badge: 'New', featured: 'no', hidden: 'yes',
       seo_title: 'Cotton Bath Towels, Set of 2', seo_description: 'Soft, absorbent 630 GSM cotton bath towels.', image_alt: 'Two folded blue cotton bath towels' },
     { handle: 'example-bath-rug-collection', name: 'EXAMPLE – Striped Bath Rug', type: 'collection', category: 'Rugs', subcategory: 'Bath Rugs',
-      sku: 'EX-RUG-BL-2020', color: 'Blue', color_hex: '#5E86B5', size: '20"x20"', price: '19.99', stock: 10,
+      sku: 'EX-RUG-BL-2020', color: 'Blue', size: '20"x20"', price: '19.99', stock: 10, badge: 'Best Seller',
       images: MEDIA + 'gradiation-rug-collection/2026/bgrd2020bl-s3wj4i.webp',
       description: 'A collection: one row per color × size. Product details go on the first row; later rows only need handle, sku, color, size, price and stock.',
       features: 'Soft cotton' + SEP + 'Non-slip backing', care: 'Machine wash cold.', material: '100% cotton', origin: 'India', featured: 'no', hidden: 'yes' },
     { handle: 'example-bath-rug-collection', sku: 'EX-RUG-BL-2134', color: 'Blue', size: '21"x34"', price: '24.99', stock: 8,
       images: MEDIA + 'gradiation-rug-collection/2026/bgrd2134bl-zz8k6x.webp' },
-    { handle: 'example-bath-rug-collection', sku: 'EX-RUG-PK-2020', color: 'Pink', color_hex: '#E8A9B4', size: '20"x20"', price: '19.99', stock: 0 }
+    { handle: 'example-bath-rug-collection', sku: 'EX-RUG-PK-2020', color: 'Pink', size: '20"x20"', price: '19.99', stock: 0 }
   ];
   var isSample = function (h) { return /^example-/i.test(String(h || '').trim()); };
   function sampleRows() { return SAMPLE.map(function (o) { return COLS.map(function (k) { return o[k] == null ? '' : o[k]; }); }); }
@@ -111,7 +112,7 @@
   function plan(table) {
     var d = A.draft, head = (table[0] || []).map(function (h) { return str(h).toLowerCase().replace(/[\s-]+/g, '_'); });
     if (head.indexOf('handle') < 0 && head.indexOf('name') < 0) return { fatal: 'The first row must be the column names (download the template or an export to see them).' };
-    var unknown = head.filter(function (h) { return h && COLS.indexOf(h) < 0; });
+    var unknown = head.filter(function (h) { return h && COLS.indexOf(h) < 0 && OLD_COLS.indexOf(h) < 0; });
 
     // Rows → objects; group by handle.
     var groups = {}, order = [], samples = 0;
@@ -166,7 +167,13 @@
     }
 
     // ---- product fields (blank = keep) ----
-    var text = { name: 'name', description: 'description', care: 'care', material: 'material', origin: 'origin', badge: 'badge', seo_title: 'seoTitle', seo_description: 'seoDescription', image_alt: 'imageAlt' };
+    var text = { name: 'name', description: 'description', care: 'care', material: 'material', origin: 'origin', seo_title: 'seoTitle', seo_description: 'seoDescription', image_alt: 'imageAlt' };
+    if (first('badge')) {
+      var bv = first('badge'), known = HW.m.BADGES.find(function (b) { return same(b, bv); });
+      if (CLEAR.test(bv)) p.badge = '';
+      else if (known) p.badge = known;
+      else errors.push('Badge “' + bv + '” isn’t in the list: ' + HW.m.BADGES.join(', ') + ' (or none)');
+    }
     Object.keys(text).forEach(function (k) { var v = first(k); if (v) p[text[k]] = CLEAR.test(v) && k !== 'name' ? '' : v; });
     if (first('features')) p.features = CLEAR.test(first('features')) ? [] : list(first('features'));
     ['featured', 'hidden'].forEach(function (k) {
@@ -320,14 +327,11 @@
     ['category / subcategory', 'Must match names under Categories.'],
     ['sku', 'Your SKU for this row.'],
     ['color / size', 'Collections only: the color name and size name of this row.'],
-    ['color_hex', 'Collections only: the color’s dot as a hex code, e.g. <code>#5E86B5</code>. Only used when there’s no swatch or close-up photo.'],
     ['price / sale_price', 'In dollars. Leave sale_price empty for no sale; type <code>none</code> to remove a sale.'],
     ['stock', 'Quantity on hand (whole number).'],
     ['images', 'Photo links for this SKU (https://…), separated by <code> | </code>. The first is the main photo.'],
-    ['color_images', 'Collections only: photos shared by every size of that color. Usually empty — images per row is enough.'],
     ['description / features / care / material / origin', 'Product text. Features: one bullet per item, separated by <code> | </code>.'],
-    ['weight', 'Shipping weight in grams. Optional — not used by the current checkout.'],
-    ['badge', 'Small label on the product card, e.g. <code>New</code> or <code>Best seller</code> (optional).'],
+    ['badge', 'Optional label on the product card. One of: ' + HW.m.BADGES.map(function (b) { return '<code>' + b + '</code>'; }).join(', ') + '. Type <code>none</code> to remove it.'],
     ['featured', '<code>yes</code> puts it in “Featured this season” on the homepage.'],
     ['hidden', '<code>yes</code> keeps it off the store (a draft) — handy for new products until photos are ready.'],
     ['seo_title / seo_description', 'Optional title and summary for Google. Leave empty to use the name and description.'],

@@ -192,7 +192,8 @@
       ui.panel('Placement',
         '<div class="grid2">' + ui.field('Category', '@categoryId', p.categoryId, { options: d.categories.map(function (c) { return [c.id, c.name]; }), live: 'productCat' }) +
         ui.field('Subcategory', '@subcategoryId', p.subcategoryId || '', { options: subOpts, id: 'pSub' }) + '</div>' +
-        ui.field('Badge (optional)', '@badge', p.badge, { placeholder: 'e.g. New, Bestseller, Sale', maxlength: 20 }) +
+        ui.field('Badge (optional)', '@badge', p.badge, { options: [['', 'No badge']].concat(m.BADGES.concat(p.badge && m.BADGES.indexOf(p.badge) < 0 ? [p.badge] : []).map(function (b) { return [b, b]; })),
+          hint: 'Small label on the product card.' }) +
         ui.check('Featured on homepage', '@featured', p.featured) + ui.check('Hide from shoppers (draft)', '@hidden', p.hidden)) +
       '<section class="panel"><h2 class="ph3">Product type</h2><div class="ptype">' +
       '<button class="' + (!coll ? 'active' : '') + '" type="button" data-a="p-type" data-type="simple" aria-pressed="' + !coll + '"><b>Simple product</b><span>One price, one set of photos.</span></button>' +

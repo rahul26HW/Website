@@ -148,6 +148,8 @@
     var name = function (u) { return u.split('/').pop(); };
     return all.find(function (u) { return /swatch/i.test(name(u)); }) || all.find(function (u) { return /close-?up/i.test(name(u)); }) || '';
   };
+  /* Labels a product card can carry (Admin › Products › Badge and the CSV "badge" column). */
+  m.BADGES = ['New', 'Best Seller', 'Clearance Sale', 'Sale', 'Limited Edition', 'Back in Stock', 'Low Stock'];
   m.primaryImage = function (p) {
     if (m.isCollection(p)) {
       var cols = m.optColor(p).values;
