@@ -56,7 +56,8 @@
        Entries for images no longer used are dropped. */
     makeThumbs: async function (d, onProgress, shouldStop) {
       d.thumbs = d.thumbs && typeof d.thumbs === 'object' ? d.thumbs : {};
-      var refs = A.media.collect(d, true).filter(function (r) { return !/^(logo|hero|home)$/.test(r.folder); });
+      // Our own photos and linked ones (e.g. Dropbox): the small copy always lives in our Storage.
+      var refs = A.media.collect(d, true).concat(A.media.collect(d, false)).filter(function (r) { return !/^(logo|hero|home)$/.test(r.folder); });
       var used = {};
       refs.forEach(function (r) { used[r.url] = r; });
       Object.keys(d.thumbs).forEach(function (k) { if (!used[k]) delete d.thumbs[k]; });
@@ -117,7 +118,10 @@
         add(p, 'image', folder, p.name);
         (p.images || []).forEach(function (x, i) { add(p.images, i, folder, p.name); });
         (p.options || []).forEach(function (o) {
-          (o.values || []).forEach(function (c) { (c.images || []).forEach(function (x, i) { add(c.images, i, folder, p.name + ' — ' + c.label); }); });
+          (o.values || []).forEach(function (c) {
+            (c.images || []).forEach(function (x, i) { add(c.images, i, folder, p.name + ' — ' + c.label); });
+            add(c, 'swatchImage', folder, p.name + ' — ' + c.label + ' swatch');
+          });
         });
         Object.keys(p.variants || {}).forEach(function (k) {
           var v = p.variants[k];
