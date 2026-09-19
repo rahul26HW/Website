@@ -11,6 +11,13 @@
 
 ## After launch
 
+### Rugs, accessories, curtain; product details; speed (2026-09-19)
+- Towels split per COMBO: 14 listings (e.g. "Willow Bath Towels - 27x54"), variations Color × Size ("Set of 2", "3 Pieces (1 Bath, 1 Hand, 1 Wash)").
+- Added Impression, Glamour, Element, Essence rugs (Micro Bath Rug = Color × 17x24…24x40; one listing per set combo, e.g. "Bath Rug Set - 17x24 + 20x32" with "2 Pieces - 17x24, 20x32"), Ashford 4-Piece Ceramic Bathroom Accessory Set, Elmstone Printed Shower Curtain - 70x72. 32 listings.
+- Details tab: SKU, UPC, color, size, dimensions, pile height, backing, shape, material, origin (from the PIM). Admin variant table has a UPC column; product CSV has `upc`.
+- Speed: the store sent to every page is now a light catalog (one photo per colour, no per-size photo lists, only the small images it uses): 1.84 MB → ~0.37 MB. The product page loads its full product with `public_product(slug)`.
+- Catalog SQL is split in two files because the Supabase SQL editor limits query size.
+
 ### Catalog from the PIM: towel collections (2026-09-19)
 - All old products removed (copy kept in `public.store_backups`). Listed one product per collection from **HW_PIM (1).xlsx**: **Willow Towel** (13 colors × 25 packs, all 325 SKUs), **Hazel Towel** (261 SKUs) and **Elegance Essentials Towel** (67 SKUs).
 - Prices: marketplace price from **OVERALL SKU+PRICE(PIM)** shown crossed out, with 10 % off as the sale price. Stock: not tracked (all in stock) until an inventory file is uploaded.
