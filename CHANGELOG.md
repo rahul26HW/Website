@@ -11,6 +11,15 @@
 
 ## After launch
 
+### Catalog from the PIM: towel collections (2026-09-19)
+- All old products removed (copy kept in `public.store_backups`). Listed one product per collection from **HW_PIM (1).xlsx**: **Willow Towel** (13 colors × 25 packs, all 325 SKUs), **Hazel Towel** (261 SKUs) and **Elegance Essentials Towel** (67 SKUs).
+- Prices: marketplace price from **OVERALL SKU+PRICE(PIM)** shown crossed out, with 10 % off as the sale price. Stock: not tracked (all in stock) until an inventory file is uploaded.
+- Color/pack combinations without a price are marked `off`: hidden on the site, removed from carts and refused by `place_order`. Admin › product › Variants has a "Not sold" column.
+- Pack options can carry a `group` (Bath towels, Hand towels, Washcloths, sets) and show under headings on the product page.
+- A variant's gallery is its own photos followed by the color's shared photos (stored once per color).
+- Photos are linked from Dropbox; "Create small images" now also makes 700 px copies of linked photos (loaded as images, which the security policy allows).
+- One-off SQL: `supabase/catalog-towels-2026-09-19.sql` (built by a script from the two sheets).
+
 ### Sales tax and checkout quantities (2026-09-18)
 - Admin › Promotions › **Sales tax**: on/off, a rate per state, and whether shipping is taxed. Live: New Jersey 6.625 % on items and shipping.
 - `place_order` works the tax out (stored in `orders.tax`), Stripe shows it as a “Sales tax” line, and emails, the confirmation page, account and admin show it. Checkout shows it once a state is chosen.

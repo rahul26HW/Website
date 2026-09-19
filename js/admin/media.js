@@ -11,6 +11,7 @@
 
   /* Resize to fit max × max and encode as WebP. SVG and GIF are uploaded unchanged. */
   async function toWebp(blob, max, quality) {
+    if (blob && blob.tagName === 'IMG') return drawWebp(blob, blob.naturalWidth, blob.naturalHeight, max, quality);
     if (/svg|gif/i.test(blob.type)) return { blob: blob, ext: /svg/i.test(blob.type) ? 'svg' : 'gif', type: blob.type };
     var bmp;
     try { bmp = await createImageBitmap(blob); }
@@ -22,7 +23,9 @@
         img.src = URL.createObjectURL(blob);
       });
     }
-    var w = bmp.width, h = bmp.height;
+    return drawWebp(bmp, bmp.width, bmp.height, max, quality);
+  }
+  async function drawWebp(bmp, w, h, max, quality) {
     var scale = Math.min(1, max / Math.max(w, h));
     var cw = Math.round(w * scale), ch = Math.round(h * scale);
     var canvas = document.createElement('canvas');
@@ -53,12 +56,7 @@
         im.onerror = function () { reject(new Error('Could not load the image')); };
         im.src = url;
       });
-      var c = document.createElement('canvas');
-      c.width = img.naturalWidth; c.height = img.naturalHeight;
-      c.getContext('2d').drawImage(img, 0, 0);
-      var b = await new Promise(function (resolve) { c.toBlob(resolve, 'image/jpeg', 0.95); });
-      if (!b) throw new Error('Could not read the image');
-      return b;
+      return img; // toWebp draws it straight to the target size
     }
   }
 
@@ -107,7 +105,7 @@
           onProgress && onProgress(done, total, failures);
         }
       }
-      await Promise.all([worker(), worker(), worker(), worker()]);
+      await Promise.all([worker(), worker(), worker(), worker(), worker(), worker(), worker(), worker()]);
       return { total: total, done: done, failures: failures };
     },
 
@@ -171,6 +169,7 @@
           var first = byUrl[url][0];
           try {
             var blob = await imageBlob(url);
+            if (blob.tagName === 'IMG') blob = (await toWebp(blob, 2400, 0.9)).blob;
             if (!/^image\//.test(blob.type)) throw new Error('not an image (' + (blob.type || 'unknown type') + ')');
             var name = decodeURIComponent((url.split('?')[0].split('/').pop() || 'image'));
             var isLogo = first.folder === 'logo';
