@@ -845,6 +845,50 @@ alter table public.subscribers add column if not exists welcome_sent_at timestam
 -- 10d. What shoppers may read: the store without promo codes (except the one advertised to newsletter
 --      sign-ups) and without draft products. The site and the published copy (store.json) both use this.
 -- ---------------------------------------------------------------------
+-- A product without its per-size photo lists: each colour keeps one photo (the first sold size's product shot)
+-- and its swatch. Listings, cards, cart and search need nothing more; the product page loads the rest.
+create or replace function public._slim_product(p jsonb)
+returns jsonb language plpgsql immutable set search_path = '' as $$
+declare v_color jsonb; v_size jsonb; v_colors jsonb := '[]'::jsonb; c jsonb; s jsonb; v jsonb; v_img text; v_vars jsonb := '{}'::jsonb; k text; i int;
+begin
+  select o into v_color from jsonb_array_elements(coalesce(p->'options', '[]'::jsonb)) o where o->>'type' = 'color' limit 1;
+  select o into v_size  from jsonb_array_elements(coalesce(p->'options', '[]'::jsonb)) o where o->>'type' = 'size'  limit 1;
+  if v_color is null or v_size is null then
+    -- Simple product: the main photo only.
+    return p || jsonb_build_object('images', jsonb_build_array(coalesce(nullif(p->>'image', ''),
+              (select x from jsonb_array_elements_text(coalesce(p->'images', '[]'::jsonb)) x where x <> '' limit 1), '')),
+              'primary', 0, 'summary', true);
+  end if;
+  for c in select * from jsonb_array_elements(coalesce(v_color->'values', '[]'::jsonb)) loop
+    v_img := null;
+    for s in select * from jsonb_array_elements(coalesce(v_size->'values', '[]'::jsonb)) loop
+      v := p->'variants'->((c->>'id') || '__' || (s->>'id'));
+      if v is not null and coalesce(v->>'off', 'false') <> 'true' and jsonb_typeof(v->'images') = 'array' then
+        i := coalesce((v->>'primary')::int, 0);
+        v_img := nullif(v->'images'->>i, '');
+        if v_img is null then select x into v_img from jsonb_array_elements_text(v->'images') x where x <> '' limit 1; end if;
+        exit when v_img is not null;
+      end if;
+    end loop;
+    if v_img is null then select x into v_img from jsonb_array_elements_text(coalesce(c->'images', '[]'::jsonb)) x where x <> '' limit 1; end if;
+    v_colors := v_colors || jsonb_build_array(c || jsonb_build_object('images', jsonb_build_array(coalesce(v_img, '')), 'primary', 0, 'video', ''));
+  end loop;
+  for k, v in select * from jsonb_each(coalesce(p->'variants', '{}'::jsonb)) loop
+    v_vars := v_vars || jsonb_build_object(k, v - 'images' - 'primary' - 'video');
+  end loop;
+  return p || jsonb_build_object('variants', v_vars, 'summary', true,
+    'options', (select jsonb_agg(case when o->>'type' = 'color' then o || jsonb_build_object('values', v_colors) else o end)
+                  from jsonb_array_elements(p->'options') o));
+end $$;
+
+-- Only the small-image entries for photos that appear in d.
+create or replace function public._thumbs_for(d jsonb, thumbs jsonb)
+returns jsonb language sql immutable set search_path = '' as $$
+  select coalesce(jsonb_object_agg(t.key, t.value), '{}'::jsonb)
+    from jsonb_each(coalesce(thumbs, '{}'::jsonb)) t
+   where t.key in (select u #>> '{}' from jsonb_path_query(d, 'strict $.** ? (@.type() == "string" && @ starts with "http")') u);
+$$;
+
 create or replace function public.public_store()
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_data jsonb; v_at timestamptz; v_code text;
@@ -853,13 +897,30 @@ begin
   if v_data is null then return null; end if;
   v_code := upper(coalesce(v_data->'newsletter'->>'couponCode', ''));
   v_data := v_data
-    || jsonb_build_object('products', coalesce((select jsonb_agg(p) from jsonb_array_elements(coalesce(v_data->'products', '[]'::jsonb)) p
+    || jsonb_build_object('products', coalesce((select jsonb_agg(public._slim_product(p)) from jsonb_array_elements(coalesce(v_data->'products', '[]'::jsonb)) p
                                                  where coalesce(p->>'hidden', 'false') <> 'true'), '[]'::jsonb))
     || jsonb_build_object('promos', coalesce((select jsonb_agg(jsonb_build_object('id', p->'id', 'code', p->'code', 'type', p->'type', 'value', p->'value',
                                                  'minOrder', p->'minOrder', 'active', p->'active', 'startsAt', p->'startsAt', 'endsAt', p->'endsAt'))
                                                from jsonb_array_elements(coalesce(v_data->'promos', '[]'::jsonb)) p
                                               where v_code <> '' and upper(p->>'code') = v_code and coalesce(p->>'active', 'false') = 'true'), '[]'::jsonb));
+  -- Small images only for the photos the light catalog still uses (the product page brings its own).
+  v_data := jsonb_set(v_data, '{thumbs}', public._thumbs_for(v_data - 'thumbs', v_data->'thumbs'));
   return jsonb_build_object('data', v_data, 'updated_at', v_at);
+end $$;
+
+-- One product with all its photos and details, for the product page (hidden products never).
+create or replace function public.public_product(p_slug text)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_data jsonb; v_p jsonb; v_at timestamptz;
+begin
+  if length(coalesce(p_slug, '')) not between 1 and 120 then return null; end if;
+  select s.data, s.updated_at into v_data, v_at from public.store s where s.id = 'main';
+  select p into v_p from jsonb_array_elements(coalesce(v_data->'products', '[]'::jsonb)) p
+   where coalesce(p->>'hidden', 'false') <> 'true'
+     and (p->>'slug' = p_slug or coalesce(p->'oldSlugs', '[]'::jsonb) ? p_slug)
+   limit 1;
+  if v_p is null then return null; end if;
+  return jsonb_build_object('product', v_p, 'thumbs', public._thumbs_for(v_p, v_data->'thumbs'), 'updated_at', v_at);
 end $$;
 
 create or replace function public.public_store_version()
@@ -933,6 +994,9 @@ revoke all on function public.request_stock_alert(text, text, text, text) from p
 revoke all on function public.request_cancel(text, text, text)            from public;
 revoke all on function public.public_store()                      from public;
 revoke all on function public.public_store_version()              from public;
+revoke all on function public.public_product(text)                 from public;
+revoke all on function public._slim_product(jsonb)                 from public, anon, authenticated;
+revoke all on function public._thumbs_for(jsonb, jsonb)            from public, anon, authenticated;
 revoke all on function public.check_promo(text)                   from public;
 -- Earlier versions let visitors call these directly; now only the Edge Function may.
 revoke execute on function public.track_order(text, text)          from anon, authenticated;
@@ -946,6 +1010,7 @@ grant execute on function public.save_private(jsonb, timestamptz) to authenticat
 grant execute on function public.place_order(jsonb)               to anon, authenticated;
 grant execute on function public.public_store()                   to anon, authenticated, service_role;
 grant execute on function public.public_store_version()           to anon, authenticated, service_role;
+grant execute on function public.public_product(text)              to anon, authenticated, service_role;
 grant execute on function public.check_promo(text)                to anon, authenticated, service_role;
 grant execute on function public.place_order(jsonb)               to service_role;
 grant execute on function public.track_order(text, text)          to service_role;

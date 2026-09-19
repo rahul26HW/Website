@@ -108,6 +108,11 @@
     },
 
     /* The store's own server (Edge Function "hw"): visitor forms go through it so they can be rate-limited. */
+    /* One product with all photos (the store itself only carries a light copy for listings). */
+    product: async function (slug) {
+      var r = await HW.api.rpc('public_product', { p_slug: slug });
+      return r && r.product ? r : null;
+    },
     server: async function (path, body, extraHeaders) {
       var base = HW.serverUrl ? HW.serverUrl() : String(cfg.supabaseUrl || '').replace(/\/+$/, '') + '/functions/v1/hw';
       var res;

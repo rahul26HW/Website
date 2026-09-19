@@ -356,6 +356,29 @@
     }
   };
 
+  /* The store carries a light copy of each product (one photo per colour). On the product page,
+     fetch the full product once and redraw in place. */
+  var full = {};
+  function useFull(p, r) {
+    var i = HW.DB.products.findIndex(function (x) { return x.id === p.id; });
+    if (i < 0) return false;
+    HW.DB.products[i] = r.product;
+    HW.DB.thumbs = Object.assign({}, HW.DB.thumbs || {}, r.thumbs || {});
+    return true;
+  }
+  async function loadFull(p) {
+    // Kept per loaded store: new store data (after a change in the admin) fetches again.
+    var hit = full[p.id], r = hit && hit.db === HW.DB ? hit.r : null;
+    if (!r) {
+      try { r = await HW.api.product(p.slug); } catch (e) { r = null; }
+      if (!r || !r.product || r.product.id !== p.id) return;
+      full[p.id] = { r: r, db: HW.DB };
+    }
+    var now = current();
+    if (!useFull(p, r) || !now || now.id !== p.id) return;
+    rerender();
+  }
+
   HW.views = HW.views || {};
   HW.views.product = function (params) {
     var p = m.productBySlug(params.slug);
@@ -396,7 +419,7 @@
         jsonld: [HW.ld.product(p), HW.ld.breadcrumb([['Home', '/']].concat(cat ? [[cat.name, '/category/' + cat.slug]] : []).concat([[p.name, '/product/' + p.slug]]))],
         image: m.primaryImage(p)
       },
-      after: function () { HW.gallery.fit(); HW.recent.add(p.id); }
+      after: function () { HW.gallery.fit(); HW.recent.add(p.id); if (p.summary) loadFull(p); }
     };
   };
 })(window.HW = window.HW || {});
