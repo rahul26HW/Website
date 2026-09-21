@@ -1,5 +1,12 @@
 # Changelog — Home Weavers rebuild
 
+## 2026-09-21 — CSV import: rename instead of duplicate
+
+- The product CSV matched colors and sizes **by name**, so an edited name read as a new color: the old one stayed and a copy was added (Glamour ended up with both "Green (new)" and "Green"). The import now recognises the color and size a **SKU** already belongs to and renames those.
+- A rename that would leave two colors (or sizes) with the same name is refused with a clear message, and duplicate names are reported.
+- Image links with a space in the filename are encoded instead of rejected (two Dropbox photos were being skipped).
+- Catalog: the 7 duplicate colors that the old import created were merged back, keeping the name that was wanted (Green, Navy, Brown).
+
 ## 2026-09-21 — QA re-audit fixes
 
 - **Cash on delivery limit** is shown in the cart and on checkout, and blocks before the address is typed; the message no longer suggests paying by card while Stripe is off.
