@@ -89,6 +89,7 @@
     'hero-toggle': function (el) { HW.hero.toggle(el); },
     rail: function (el) { HW.rails.scroll(el.dataset.rail, +el.dataset.dir); },
     color: function (el) { HW.pdp.color(el.dataset.id); },
+    'sw-scroll': function (el) { HW.pdp.swScroll(+el.dataset.dir); },
     size: function (el) { HW.pdp.size(el.dataset.id); },
     qty: function (el) { HW.pdp.qty(+el.dataset.d); },
     tab: function (el) { HW.pdp.tab(el.dataset.tab); },
@@ -211,6 +212,7 @@
     window.addEventListener('resize', u.debounce(function () {
       if (HW.rails) HW.rails.init();
       if (HW.gallery) HW.gallery.fit();
+      if (HW.fitSwatches) HW.fitSwatches();
     }, 150));
   }
 

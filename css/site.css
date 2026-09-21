@@ -489,7 +489,16 @@ fieldset.fld legend{font-size:13px;font-weight:600;margin:0 0 6px;padding:0}
 .optblock .lab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px}
 .optblock .lab .t{font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:600}
 .optblock .lab .v{font-size:14px;color:var(--ink-soft)}
+.swatchwrap{position:relative;min-width:0;max-width:100%}
 .swatches{display:flex;flex-wrap:wrap;gap:12px}
+/* Too many colors to show in two rows: the strip slides sideways instead of growing downwards. */
+.swatchwrap.slide .swatches{display:grid;grid-auto-flow:column;grid-template-rows:repeat(2,auto);grid-auto-columns:max-content;justify-content:start;min-width:0;max-width:100%;overflow-x:auto;scroll-behavior:smooth;scrollbar-width:none;-ms-overflow-style:none;padding:2px;margin:-2px}
+.swatchwrap.slide .swatches::-webkit-scrollbar{display:none}
+.sw-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:28px;height:44px;border:1px solid var(--line);background:var(--card);border-radius:8px;cursor:pointer;color:var(--ink-soft);font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 6px rgba(42,38,34,.12)}
+.sw-nav:hover{color:var(--ink);border-color:var(--ink)}
+.sw-nav[hidden]{display:none}
+.sw-nav.prev{left:-6px}
+.sw-nav.next{right:-6px}
 /* Square and large enough to read the weave in the photo. */
 .swatch-btn{width:58px;height:58px;border-radius:6px;border:1px solid rgba(42,38,34,.18);cursor:pointer;position:relative;box-shadow:inset 0 0 0 2px #fff;transition:.15s;padding:0}
 .swatch-btn.active{box-shadow:inset 0 0 0 2px #fff,0 0 0 2px var(--ink)}
@@ -940,7 +949,7 @@ main#view.booting ~ footer.site{visibility:hidden}
 .cf-slider input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--ink);outline-offset:2px}
 .cf-slider input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--ink);outline-offset:2px}
 /* Colour buttons that show a photo of the fabric (the colour dot stays underneath while it loads) */
-.swatch-btn.has-img{padding:2px;overflow:hidden}
+.swatch-btn.has-img{padding:2px}
 .swatch-btn.has-img .sw-img{display:block;width:100%;height:100%;border-radius:4px;background-size:190%;background-repeat:no-repeat}
 .cardswatch span.has-img{overflow:hidden;position:relative}
 .cardswatch span.has-img img{position:absolute;inset:2px;width:calc(100% - 4px);height:calc(100% - 4px);border-radius:999px;object-fit:cover;transform:scale(2.8)}

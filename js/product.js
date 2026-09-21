@@ -218,14 +218,17 @@
     var cOpt = m.optColor(p), sOpt = m.optSize(p);
     var v = m.resolveVariant(p, sel.colorId, sel.sizeId);
     var swatches = '<fieldset class="optblock"><legend class="sr-only">' + esc(cOpt.name || 'Color') + '</legend>' +
-      '<div class="lab" aria-hidden="true"><span class="t">' + esc(cOpt.name || 'Color') + '</span><span class="v">' + esc(v.color.label) + '</span></div>' +
-      '<div class="swatches">' + m.offeredColors(p).map(function (c) {
+      '<div class="lab" aria-hidden="true"><span class="t">' + esc(cOpt.name || 'Color') + '</span><span class="v" id="swatchName" data-sel="' + esc(v.color.label) + '">' + esc(v.color.label) + '</span></div>' +
+      '<div class="swatchwrap" id="swatchWrap">' +
+      '<button class="sw-nav prev" type="button" data-act="sw-scroll" data-dir="-1" aria-label="Show earlier colors" hidden>‹</button>' +
+      '<button class="sw-nav next" type="button" data-act="sw-scroll" data-dir="1" aria-label="Show more colors" hidden>›</button>' +
+      '<div class="swatches" id="swatchRow">' + m.offeredColors(p).map(function (c) {
         var anyIn = sOpt.values.some(function (s) { return m.resolveVariant(p, c.id, s.id).inStock; });
         var on = c.id === v.color.id;
         var sw = m.swatchImage(p, c);
-        return '<button class="swatch-btn ' + (on ? 'active' : '') + (anyIn ? '' : ' oos') + (sw ? ' has-img' : '') + '" type="button" style="background:' + esc(c.hex) + '" data-act="color" data-id="' + esc(c.id) + '" data-tip="' + esc(c.label) + '" aria-label="' + esc(c.label) + (anyIn ? '' : ' (sold out)') + '" aria-pressed="' + on + '">' +
+        return '<button class="swatch-btn ' + (on ? 'active' : '') + (anyIn ? '' : ' oos') + (sw ? ' has-img' : '') + '" type="button" style="background:' + esc(c.hex) + '" data-act="color" data-id="' + esc(c.id) + '" data-tip="' + esc(c.label) + '" title="' + esc(c.label) + '" aria-label="' + esc(c.label) + (anyIn ? '' : ' (sold out)') + '" aria-pressed="' + on + '">' +
           (sw ? '<span class="sw-img" aria-hidden="true" style="background-image:url(' + esc(JSON.stringify(HW.asset(m.thumb(sw)))) + ');background-position:50% ' + (/swatch/i.test(sw.split('/').pop()) ? '85%' : '25%') + '"></span>' : '') + '</button>';
-      }).join('') + '</div></fieldset>';
+      }).join('') + '</div></div></fieldset>';
     var sizes = '<fieldset class="optblock"><legend class="sr-only">' + esc(sOpt.name || 'Size') + '</legend>' +
       '<div class="lab"><span class="t" aria-hidden="true">' + esc(sOpt.name || 'Size') + '</span><span class="v"><span aria-hidden="true">' + esc(v.size.label) + '</span>' +
       (HW.sizeGuide && HW.sizeGuide.available() ? ' <button class="sglink" type="button" data-act="size-guide">Size guide</button>' : '') + '</span></div>' +
@@ -289,10 +292,59 @@
     if (tabs) tabs.innerHTML = r.tabs;
     if (focusSel) { var f = holder.querySelector(focusSel); if (f) f.focus(); }
     HW.gallery.fit();
+    fitSwatches();
     HW.snip && HW.snip.refresh();
   }
 
+  /* Colors stay two rows deep. When there are more than fit, the strip slides sideways instead of
+     pushing the price and Add to cart further down the page. */
+  function swatchStep() {
+    var row = document.getElementById('swatchRow');
+    if (!row || !row.firstElementChild) return 0;
+    var w = row.firstElementChild.getBoundingClientRect().width;
+    var gap = parseFloat(getComputedStyle(row).columnGap) || 12;
+    return Math.max(1, Math.floor(row.clientWidth / (w + gap)) - 1) * (w + gap);
+  }
+  function swatchArrows() {
+    var wrap = document.getElementById('swatchWrap'), row = document.getElementById('swatchRow');
+    if (!wrap || !row) return;
+    var slide = wrap.classList.contains('slide');
+    var prev = wrap.querySelector('.sw-nav.prev'), next = wrap.querySelector('.sw-nav.next');
+    prev.hidden = !slide || row.scrollLeft < 4;
+    next.hidden = !slide || row.scrollLeft + row.clientWidth >= row.scrollWidth - 4;
+  }
+  function fitSwatches(again) {
+    var wrap = document.getElementById('swatchWrap'), row = document.getElementById('swatchRow');
+    if (!wrap || !row || !row.firstElementChild) return;
+    // Measure again on the next frame: the first run can land before the column has its final width.
+    if (!again) requestAnimationFrame(function () { fitSwatches(true); });
+    wrap.classList.remove('slide');
+    var w = row.firstElementChild.getBoundingClientRect().width;
+    var gap = parseFloat(getComputedStyle(row).columnGap) || 12;
+    var perRow = Math.max(1, Math.floor((row.clientWidth + gap) / (w + gap)));
+    if (row.children.length > perRow * 2) wrap.classList.add('slide');
+    row.onscroll = swatchArrows;
+    swatchArrows();
+  }
+  HW.fitSwatches = fitSwatches;
+
+  /* Hovering a swatch names the colour next to the "Color" label, where nothing can clip it. */
+  function swatchName(e, leaving) {
+    var lab = document.getElementById('swatchName');
+    if (!lab) return;
+    var btn = e.target.closest && e.target.closest('.swatch-btn');
+    lab.textContent = !leaving && btn ? btn.getAttribute('data-tip') : lab.getAttribute('data-sel');
+  }
+  document.addEventListener('mouseover', function (e) { swatchName(e, false); });
+  document.addEventListener('mouseout', function (e) { if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.swatch-btn')) swatchName(e, true); });
+  document.addEventListener('focusin', function (e) { swatchName(e, false); });
+  document.addEventListener('focusout', function (e) { swatchName(e, true); });
+
   HW.pdp = {
+    swScroll: function (d) {
+      var row = document.getElementById('swatchRow');
+      if (row) row.scrollBy({ left: d * swatchStep(), behavior: 'smooth' });
+    },
     zoom: function () { if (gal) HW.lightbox.open(gal.items, gal.idx, gal.alt); },
     color: function (id) {
       var p = current(); sel.colorId = id; sel.qty = 1;
@@ -424,7 +476,7 @@
         jsonld: [HW.ld.product(p), HW.ld.breadcrumb([['Home', '/']].concat(cat ? [[cat.name, '/category/' + cat.slug]] : []).concat([[p.name, '/product/' + p.slug]]))],
         image: m.primaryImage(p)
       },
-      after: function () { HW.gallery.fit(); HW.recent.add(p.id); if (p.summary) loadFull(p); }
+      after: function () { HW.gallery.fit(); fitSwatches(); HW.recent.add(p.id); if (p.summary) loadFull(p); }
     };
   };
 })(window.HW = window.HW || {});
