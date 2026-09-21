@@ -1013,7 +1013,7 @@ function buildOrderEmail(kind, order, data, extra = {}) {
     subject = `We’ve got your order ${order.order_number}`;
     title = "Thank you for your order";
     body = hi + (order.payment_method === "cod" && order.payment_status !== "paid"
-        ? p(`We’ve received order <b>${num}</b>. You’ll pay <b>${money(order.total)}</b> in cash when it’s delivered${Number(order.cod_fee) > 0 ? ` (this includes a ${money(order.cod_fee)} cash-on-delivery fee)` : ""}.`)
+        ? p(`We’ve received order <b>${num}</b>. You’ll pay <b>${money(order.total)}</b> in cash when it’s delivered${Number(order.cod_fee) > 0 ? ` (this includes a ${money(order.cod_fee)} cash-on-delivery fee)` : ""}. Please have the amount ready — the courier may not carry change — and make sure someone over 18 is at the address to take the parcel.`)
         : order.payment_status === "authorized"
         ? p(`We’ve received order <b>${num}</b>. Your card is approved for <b>${money(order.total)}</b>; you’ll only be charged when we start preparing your order.`)
         : p(`Your payment went through and we’ve received order <b>${num}</b>.`)) +

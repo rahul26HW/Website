@@ -25,25 +25,6 @@
     return out;
   }
 
-  /* Sales tax: a rate for each state you collect in. Checkout shows it and the database adds it to the order. */
-  function taxPanel() {
-    var ui = A.ui, tx = A.draft.tax = A.draft.tax || { enabled: false, rates: [] };
-    tx.rates = tx.rates || [];
-    var states = (HW.checkout && HW.checkout.states ? HW.checkout.states() : []).map(function (s) { return [s[0], s[1] + ' (' + s[0] + ')']; });
-    return ui.panel('Sales tax',
-      '<p class="hint" style="margin:-6px 0 12px">Charge sales tax for the states where you’re registered to collect it (for example New Jersey, where you ship from). ' +
-      'Orders to other states have no tax. Check the rates and which states apply with your accountant.</p>' +
-      ui.check('Charge sales tax at checkout', 'tax.enabled', tx.enabled) +
-      (tx.rates.length ? '<div class="tablewrap"><table class="adt"><thead><tr><th scope="col">State</th><th scope="col">Rate (%)</th><th scope="col">Tax shipping too</th><th scope="col"><span class="sr-only">Remove</span></th></tr></thead><tbody>' +
-        tx.rates.map(function (r, i) {
-          return '<tr><td>' + ui.field('<span class="sr-only">State</span>', 'tax.rates.' + i + '.state', r.state, { options: [['', 'Choose…']].concat(states) }) + '</td>' +
-            '<td>' + ui.field('<span class="sr-only">Rate</span>', 'tax.rates.' + i + '.rate', r.rate, { type: 'number', min: 0, step: '0.001' }) + '</td>' +
-            '<td>' + ui.check('<span class="sr-only">Tax shipping</span>', 'tax.rates.' + i + '.shipping', r.shipping !== false) + '</td>' +
-            '<td><button class="txtbtn danger" type="button" data-a="tax-remove" data-i="' + i + '">Remove</button></td></tr>';
-        }).join('') + '</tbody></table></div>' : '<p class="hint">No states yet.</p>') +
-      '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-a="tax-add">+ Add a state</button></div>' + ui.saveBtn());
-  }
-
   A.tabs.promotions = {
     render: function () {
       var ui = A.ui, d = A.draft, sh = d.shipping, promos = d.promos || [];
@@ -54,8 +35,6 @@
           '<div class="grid2">' + ui.field('Free shipping at or above ($)', 'shipping.freeThreshold', sh.freeThreshold, { type: 'number', min: 0 }) +
           ui.field('Flat rate below threshold ($)', 'shipping.flatRate', sh.flatRate, { type: 'number', min: 0 }) + '</div>' +
           '<p class="hint">The announcement bar follows this automatically when it uses {{free_shipping}}.</p>' + ui.saveBtn()) +
-
-        taxPanel() +
 
         '<section class="panel"><h2 class="ph3 h1row" style="font-size:14px">Discount codes <button class="btn loom sm" type="button" data-a="promo-add">+ New code</button></h2>' +
         welcomeWarning() +
@@ -115,8 +94,6 @@
 
   A.live.promoActive = function () { var y = window.scrollY; A.render(); window.scrollTo(0, y); };
 
-  A.actions['tax-add'] = function () { A.draft.tax.rates.push({ state: '', rate: null, shipping: true }); A.render(); };
-  A.actions['tax-remove'] = function (el) { A.draft.tax.rates.splice(+el.dataset.i, 1); A.render(); };
   A.actions['promo-add'] = function () {
     var n = (A.draft.promos || []).length + 1, code = 'NEWCODE' + n;
     while (A.draft.promos.some(function (p) { return p.code === code; })) code = 'NEWCODE' + (++n);

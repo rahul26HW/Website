@@ -12,6 +12,12 @@
     ['PR', 'Puerto Rico'], ['GU', 'Guam'], ['VI', 'U.S. Virgin Islands'], ['AS', 'American Samoa'], ['MP', 'Northern Mariana Islands'],
     ['AA', 'Armed Forces Americas (AA)'], ['AE', 'Armed Forces Europe (AE)'], ['AP', 'Armed Forces Pacific (AP)']];
 
+  /* A US phone number: 10 digits, or 11 starting with 1. */
+  function isPhone(s) {
+    var d = String(s || '').replace(/\D/g, '');
+    return d.length === 10 || (d.length === 11 && d.charAt(0) === '1');
+  }
+
   function field(id, label, type, opts) {
     opts = opts || {};
     var d = u.session.get(DRAFT, {}) || {};
@@ -26,10 +32,21 @@
       return '<div class="fld">' + lab + '<textarea id="co_' + id + '" name="' + id + '" maxlength="1000" style="min-height:80px">' + esc(val) + '</textarea></div>';
     }
     return '<div class="fld">' + lab + '<input id="co_' + id + '" name="' + id + '" type="' + type + '" value="' + esc(val) + '" autocomplete="' + (opts.ac || 'off') + '"' +
-      (opts.inputmode ? ' inputmode="' + opts.inputmode + '"' : '') + (opts.pattern ? ' pattern="' + opts.pattern + '"' : '') + (opts.max ? ' maxlength="' + opts.max + '"' : '') + req + '></div>';
+      (opts.inputmode ? ' inputmode="' + opts.inputmode + '"' : '') + (opts.pattern ? ' pattern="' + opts.pattern + '"' : '') + (opts.max ? ' maxlength="' + opts.max + '"' : '') + req + '>' +
+      (opts.hint ? '<span class="fld-hint">' + esc(opts.hint) + '</span>' : '') + '</div>';
   }
 
   function codFee() { var p = (HW.DB && HW.DB.payments) || {}; return Number(p.codFee) || 0; }
+  function codMax() { var p = (HW.DB && HW.DB.payments) || {}; return Number(p.codMax) || 500; }
+
+  /* Cash on delivery has a ceiling. Say so here, instead of letting the server refuse a filled-in order. */
+  function codBlock(t, pay) {
+    if (pay !== 'cod') return '';
+    var total = t.total + codFee() + HW.cart.tax(t, formState(), codFee()).tax;
+    if (total <= codMax()) return '';
+    return 'This order is ' + u.money(total) + ', above our ' + u.money(codMax()) + ' cash-on-delivery limit. ' +
+      (HW.checkout.cardPayments() ? 'Please pay by card instead, or remove a few items.' : 'Please remove a few items, or place it as two smaller orders.');
+  }
   function method(form) {
     var el = (form || document).querySelector('input[name=pay]:checked') || (form || document).querySelector('input[name=pay]');
     return el ? el.value : 'card';
@@ -119,7 +136,7 @@
         (acct ? '<p class="muted" style="font-size:13.5px;margin:0 0 10px">Signed in as <b>' + esc(acct.email) + '</b>.' + (acct.profile ? ' Your details are filled in from your last order.' : ' This order will appear in your account.') + '</p>'
           : '<p class="muted" style="font-size:13.5px;margin:0 0 10px">Checking out as a guest. <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/account') + '?next=checkout">Sign in or create an account</a> (optional) to see your orders later and check out faster.</p>') +
         field('email', 'Email', 'email', { ac: 'email', max: 254 }) +
-        '<div class="row2">' + field('name', 'Full name', 'text', { ac: 'name', max: 120 }) + field('phone', 'Phone', 'tel', { ac: 'tel', optional: true, max: 40 }) + '</div>' +
+        '<div class="row2">' + field('name', 'Full name', 'text', { ac: 'name', max: 120 }) + field('phone', 'Phone', 'tel', { ac: 'tel', max: 40, inputmode: 'tel', hint: 'For delivery updates from the courier.' }) + '</div>' +
         '<h2>Shipping address</h2>' +
         field('line1', 'Address', 'text', { ac: 'address-line1', max: 200 }) +
         field('line2', 'Apartment, suite, etc.', 'text', { ac: 'address-line2', optional: true, max: 200 }) +
@@ -130,7 +147,8 @@
         field('note', 'Order note', 'textarea', { optional: true }) +
         payBlock +
         '<p class="form-msg" id="coMsg" role="alert" hidden></p>' +
-        '<button class="btn loom block" id="coSubmit" type="submit"' + (anyOut ? ' disabled' : '') + '>' + submitLabel(pay, t) + '</button>' +
+        '<button class="btn loom block" id="coSubmit" type="submit"' + (anyOut || codBlock(t, pay) ? ' disabled' : '') + '>' + submitLabel(pay, t) + '</button>' +
+        '<p class="form-msg err" id="coCodNote" role="alert"' + (codBlock(t, pay) ? '' : ' hidden') + '>' + esc(codBlock(t, pay)) + '</p>' +
         (anyOut ? '<p class="muted" style="font-size:13px">Remove out-of-stock items from your cart to continue.</p>' : '') +
         '<p class="muted" style="font-size:12.5px;margin:0">By continuing you agree to our <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/terms-of-service') + '">Terms</a> and <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/page/privacy-policy') + '">Privacy Policy</a>.</p>' +
         '</form>' +
@@ -222,8 +240,11 @@
       if (form) HW.checkout.payChanged(form);
     },
     payChanged: function (form) {
-      var t = HW.cart.totals(), pay = method(form);
-      var b = document.getElementById('coSubmit'); if (b) b.textContent = submitLabel(pay, t);
+      var t = HW.cart.totals(), pay = method(form), block = codBlock(t, pay);
+      var b = document.getElementById('coSubmit');
+      if (b) { b.textContent = submitLabel(pay, t); b.disabled = !!block || t.lines.some(function (l) { return !l.inStock; }); }
+      var note = document.getElementById('coCodNote');
+      if (note) { note.textContent = block; note.hidden = !block; }
       var s = document.getElementById('coSummary'); if (s) s.innerHTML = summaryHTML(t, pay);
       HW.checkout.saveDraft(form);
     },
@@ -305,6 +326,7 @@
       if (!get('city')) bad('city', 'Enter your city.');
       if (!get('state')) bad('state', 'Choose your state.');
       if (!/^\d{5}(-\d{4})?$/.test(get('zip'))) bad('zip', 'Enter a 5-digit ZIP code.');
+      if (!isPhone(get('phone'))) bad('phone', 'Enter a phone number the courier can call (10 digits).');
       if (errors.length) {
         msg.hidden = false; msg.className = 'form-msg err';
         msg.textContent = errors.map(function (e) { return e.text; }).join(' ');
@@ -313,6 +335,8 @@
       }
       var t = HW.cart.totals(), pay = method(form);
       if (!t.lines.length || !(pay === 'cod' ? HW.checkout.codPayments() : HW.checkout.cardPayments())) { HW.router.navigate('/checkout'); return; }
+      var block = codBlock(t, pay);
+      if (block) { msg.hidden = false; msg.className = 'form-msg err'; msg.textContent = block; return; }
       if (t.promo && !t.promoValid) { msg.hidden = false; msg.className = 'form-msg err'; msg.textContent = t.promoNote + ' Remove the code from your cart to continue.'; return; }
 
       btn.disabled = true;
@@ -412,6 +436,12 @@
         '<p class="form-msg err" id="cancelMsg" role="alert" hidden></p>' +
         '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="cancel-order" data-n="' + esc(o.order_number) + '" data-e="' + esc(o.email) + '">Cancel this order</button></div></div>'
       : '';
+    // Cash on delivery only works if someone is there with the money, so say what to have ready.
+    var codBox = o.paid && o.cod && !o.cancelled
+      ? '<div class="notice" role="note" style="text-align:left"><b>Paying in cash.</b> Please have <b>' + u.money(o.total) +
+        '</b> ready for the courier — they may not carry change. Someone over 18 needs to be at the address to take the parcel and pay. ' +
+        'If the address or phone number is wrong, tell us before it ships.</div>'
+      : '';
     var next = o.paid
       ? '<p>A receipt goes to <b>' + esc(o.email) + '</b>. Orders ship within ' + esc(m.shippingDays()) + '. Follow it any time in <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + HW.link('/account') + '">your account</a> — just sign in with this email.</p>'
       : unpaid
@@ -424,7 +454,7 @@
         '<div class="weave-rule">' + HW.SVG.weave + '</div>' +
         head +
         '<div class="ordno">Order ' + esc(o.order_number) + '</div>' +
-        next + cancelBox +
+        next + codBox + cancelBox +
         '<div class="panelbox">' + (o.items || []).map(function (l) {
           return '<div class="sumrow"><span>' + esc(HW.seo.clip(l.name, 60)) + (l.variant ? ' <span class="muted">(' + esc(l.variant) + ')</span>' : '') + ' × ' + l.qty + '</span><span>' + u.money(l.line_total) + '</span></div>';
         }).join('') +

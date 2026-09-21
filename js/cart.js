@@ -9,6 +9,12 @@
   if (!state || !Array.isArray(state.lines)) state = { lines: [], promo: '' };
   if (state.promoData && state.promoData.code) HW.promoCache[String(state.promoData.code).toLowerCase()] = state.promoData;
   var promoMsg = '';
+  var UNTRACKED_MAX = 10;   // the most of one line a shopper can order while stock isn't tracked
+
+  /* "Only 3 available" when we count stock; a plain per-order limit when we don't. */
+  function capNote(r) {
+    return r && r.max < UNTRACKED_MAX ? 'Only ' + r.max + ' available.' : 'You can order up to ' + UNTRACKED_MAX + ' of this at a time.';
+  }
   var release = null;
 
   function save() { u.store.set(KEY, state); }
@@ -26,12 +32,12 @@
       var v = m.resolveVariant(p, line.colorId, line.sizeId);
       return { p: p, name: p.name, variant: v.color.label + ' / ' + v.size.label, price: v.effective, sku: v.sku, inStock: v.inStock,
         image: m.firstPhoto(v.rawImages, v.primary) || m.colorImage(p, v.color) || m.weaveSwatch(v.color.hex, v.color.label),
-        max: m.invTracked(v.sku) ? m.invQty(v.sku) : 99 };
+        max: m.invTracked(v.sku) ? m.invQty(v.sku) : UNTRACKED_MAX };
     }
     var sp = m.simplePrice(p);
     var key = m.simpleQtyKey(p);
     return { p: p, name: p.name, variant: '', price: sp.effective, sku: m.simpleSku(p), inStock: m.simpleInStock(p),
-      image: m.imageOrSwatch(p), max: m.invTracked(key) ? m.invQty(key) : 99 };
+      image: m.imageOrSwatch(p), max: m.invTracked(key) ? m.invQty(key) : UNTRACKED_MAX };
   }
 
   var cart = HW.cart = {
@@ -62,9 +68,9 @@
       var ex = state.lines.find(function (l) { return l.key === key; });
       var have = ex ? ex.qty : 0;
       var next = Math.min(have + qty, r.max, 99);
-      if (next <= have) { u.toast('Only ' + r.max + ' available.'); return; }
+      if (next <= have) { u.toast(capNote(r)); return; }
       if (ex) ex.qty = next; else state.lines.push({ key: key, id: id, colorId: colorId || null, sizeId: sizeId || null, qty: next });
-      if (next < have + qty) u.toast('Only ' + r.max + ' available — added what we have.');
+      if (next < have + qty) u.toast(capNote(r) + ' Added what we could.');
       save();
       cart.render();
       cart.open();
@@ -74,7 +80,7 @@
       if (!l) return;
       var r = resolve(l);
       var q = l.qty + d;
-      if (r && q > Math.min(r.max, 99)) { u.toast('Only ' + r.max + ' available.'); return; }
+      if (r && q > Math.min(r.max, 99)) { u.toast(capNote(r)); return; }
       if (q <= 0) state.lines = state.lines.filter(function (x) { return x.key !== key; });
       else l.qty = q;
       promoMsg = '';
@@ -149,7 +155,7 @@
       var l = state.lines.find(function (x) { return x.key === key; });
       if (!l) return false;
       var r = resolve(l), q = l.qty + d;
-      if (r && q > Math.min(r.max, 99)) { u.toast('Only ' + r.max + ' available.'); return false; }
+      if (r && q > Math.min(r.max, 99)) { u.toast(capNote(r)); return false; }
       if (q <= 0) state.lines = state.lines.filter(function (x) { return x.key !== key; }); else l.qty = q;
       save(); cart.render();
       return true;
@@ -207,14 +213,18 @@
           (promoMsg ? '<div id="promoNote" class="promo-note ' + (err ? 'err' : 'ok') + '" role="alert">' + esc(promoMsg.replace(/^err:/, '')) + '</div>' : '') + '</form>';
       }
       var anyOut = t.lines.some(function (l) { return !l.inStock; });
+      var pay = HW.DB.payments || {};
+      // Cash on delivery is capped. Say it here rather than after a filled-in checkout form.
+      var overCod = pay.cod && !pay.stripe && t.total > (Number(pay.codMax) || 500);
       foot.innerHTML = shipBar + promoArea +
         '<div class="sumrow"><span>Subtotal</span><span>' + u.money(t.sub) + '</span></div>' +
         (t.discount > 0 ? '<div class="sumrow"><span class="disc">Discount (' + esc(t.promo.code) + ')</span><span class="disc">−' + u.money(t.discount) + '</span></div>' : '') +
         '<div class="sumrow"><span>Shipping</span><span>' + (t.sh.enabled ? (t.ship ? u.money(t.ship) : 'Free') : 'Calculated at checkout') + '</span></div>' +
         '<div class="sumrow total"><span>Total</span><span>' + u.money(t.total) + '</span></div>' +
         (cart.taxOn() ? '<p class="muted center" style="font-size:12px;margin:-4px 0 12px">Sales tax, if any, is added at checkout.</p>' : '') +
-        (anyOut
-          ? '<button class="btn loom block" type="button" disabled>Checkout</button><p class="muted center" style="font-size:12px;margin:12px 0 0">Remove out-of-stock items to continue.</p>'
+        (anyOut || overCod
+          ? '<button class="btn loom block" type="button" disabled>Checkout</button><p class="muted center" style="font-size:12px;margin:12px 0 0">' +
+            (anyOut ? 'Remove out-of-stock items to continue.' : 'Orders are paid in cash on delivery, up to ' + u.money(Number(pay.codMax) || 500) + '. Please remove a few items, or order in two parts.') + '</p>'
           : '<a class="btn loom block" href="' + HW.link('/checkout') + '" data-act="cart-close">Checkout</a>');
     },
 

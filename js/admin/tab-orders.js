@@ -15,6 +15,17 @@
   }
   function payTag(s) { return A.ui.tag((PAYMENTS.find(function (x) { return x[0] === s; }) || [s, s])[1], s === 'paid' ? 'green' : (/^(unpaid|failed)$/.test(s) ? 'clay' : '')); }
 
+  /* US style: a comma between city and state, a space before the ZIP, and nothing at all for the parts the order didn’t have. */
+  function addressHTML(a) {
+    var cityState = [a.city, a.state].filter(Boolean).join(', ');
+    var lastLine = [cityState, a.zip].filter(Boolean).join(' ');
+    return [a.line1, a.line2, lastLine, a.country].filter(Boolean).map(function (line) { return esc(line); }).join('<br>');
+  }
+  /* Checkout doesn’t police the phone field, so a tel: link on something like “abc” is just a dead link. */
+  function phoneHTML(p) {
+    return String(p).replace(/\D/g, '').length >= 7 ? '<a href="tel:' + esc(p) + '">' + esc(p) + '</a>' : esc(p);
+  }
+
   /* ================================================================ *
    * Orders
    * ================================================================ */
@@ -78,11 +89,14 @@
         '<div class="sumrow"><span>Shipping</span><span>' + (Number(o.shipping) ? u.money(o.shipping) : 'Free') + '</span></div>' +
         (Number(o.tax) ? '<div class="sumrow"><span>Tax</span><span>' + u.money(o.tax) + '</span></div>' : '') +
         '<div class="sumrow total"><span>Total</span><span>' + u.money(o.total) + '</span></div></div>' +
-        (!o.stock_deducted ? '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-deduct">Deduct items from inventory</button></div><p class="hint">Do this once when you pack the order.</p>' : '<p class="hint">✓ Items were deducted from inventory.</p>')) +
+        // A cancelled or refunded order is never packed, so deducting its items would take stock the store still has.
+        (o.stock_deducted ? '<p class="hint">✓ Items were deducted from inventory.</p>'
+          : /^(cancelled|refunded)$/.test(o.status) ? '<p class="hint">Nothing was deducted from inventory — this order is ' + esc(o.status) + '.</p>'
+          : '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-deduct">Deduct items from inventory</button></div><p class="hint">Do this once when you pack the order.</p>')) +
       ui.panel('Customer',
         '<p style="margin:0 0 4px"><b>' + esc(o.name) + '</b></p><p style="margin:0 0 4px"><a href="mailto:' + esc(o.email) + '">' + esc(o.email) + '</a></p>' +
-        (o.phone ? '<p style="margin:0 0 10px"><a href="tel:' + esc(o.phone) + '">' + esc(o.phone) + '</a></p>' : '') +
-        '<p style="margin:10px 0 0;line-height:1.6">' + esc(a.line1 || '') + (a.line2 ? '<br>' + esc(a.line2) : '') + '<br>' + esc([a.city, a.state, a.zip].filter(Boolean).join(', ')) + '<br>' + esc(a.country || '') + '</p>' +
+        (o.phone ? '<p style="margin:0 0 10px">' + phoneHTML(o.phone) + '</p>' : '') +
+        '<p style="margin:10px 0 0;line-height:1.6">' + addressHTML(a) + '</p>' +
         (o.customer_note ? '<div class="adwarn" style="margin-top:12px"><b>Customer note:</b> ' + esc(o.customer_note) + '</div>' : '') +
         '<div class="btnrow" style="margin-top:12px"><a class="btn ghost sm" href="' + mail + '" data-native>Email customer</a></div>') +
       '</div>' +
@@ -241,6 +255,7 @@
   };
   A.actions['order-deduct'] = async function () {
     var o = os.list.find(function (x) { return x.id === os.open; });
+    if (!o || /^(cancelled|refunded)$/.test(o.status)) { u.toast('Nothing went out for this order, so there’s nothing to deduct.'); return; }
     if (A.dirtyStore() && !confirm('You have unsaved store changes. They will be saved together with the new stock. Continue?')) return;
     var lines = (o.order_items || []).filter(function (i) { return i.sku; });
     var untracked = lines.filter(function (i) { return A.draft.inventory[i.sku] == null; }).map(function (i) { return i.sku; });
@@ -290,7 +305,7 @@
             '<span>' + (x.is_read ? '' : '<span class="dot" aria-label="Unread"></span>') + '<b>' + esc(x.name) + '</b> <span class="hint">&lt;' + esc(x.email) + '&gt;</span></span>' +
             '<span class="hint">' + esc(x.subject || '(no subject)') + ' · ' + esc(new Date(x.created_at).toLocaleString('en-US')) + '</span></button>' +
             (open ? '<div class="msgbody"><p style="white-space:pre-wrap;margin:12px 0">' + esc(x.message) + '</p>' +
-              (x.phone ? '<p class="hint">Phone: <a href="tel:' + esc(x.phone) + '">' + esc(x.phone) + '</a></p>' : '') +
+              (x.phone ? '<p class="hint">Phone: ' + phoneHTML(x.phone) + '</p>' : '') +
               '<div class="btnrow"><a class="btn loom sm" href="' + reply + '" data-native>Reply by email</a>' +
               '<button class="btn ghost sm" type="button" data-a="msg-unread" data-id="' + x.id + '">Mark unread</button>' +
               '<button class="btn ghost sm dangerbtn" type="button" data-a="msg-delete" data-id="' + x.id + '">Delete</button></div></div>' : '') +

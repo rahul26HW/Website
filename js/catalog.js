@@ -69,8 +69,10 @@
 
   function sorted(list, sort) {
     var arr = list.slice();
+    // Cheapest first goes by the bottom of each range, dearest first by the top — otherwise a wide
+    // range like $15–$144 would be ranked by its $15 end and land far too low.
     if (sort === 'price-asc') arr.sort(function (a, b) { return m.priceRange(a).min - m.priceRange(b).min; });
-    else if (sort === 'price-desc') arr.sort(function (a, b) { return m.priceRange(b).min - m.priceRange(a).min; });
+    else if (sort === 'price-desc') arr.sort(function (a, b) { return m.priceRange(b).max - m.priceRange(a).max; });
     else if (sort === 'name') arr.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
     // Out-of-stock always last, stable within groups.
     return m.stockSort(arr);
@@ -104,7 +106,10 @@
   function groupHTML(key) {
     var cat = ctx.cat, fcfg = ctx.fcfg, all = ctx.all, inner = '';
     if (key === 'subs' && fcfg.type) {
-      inner = facet('subs', cat.subcategories.map(function (s) { return s.id; }), function (id) {
+      var subIds = cat.subcategories.map(function (s) { return s.id; });
+      // One lone checkbox just repeats the category name ("Towels (14)") and filters nothing, so hide the group.
+      if (subIds.length < 2) return '';
+      inner = facet('subs', subIds, function (id) {
         var s = cat.subcategories.find(function (x) { return x.id === id; }); return s ? s.name : id;
       });
       return inner ? '<fieldset class="cf-group"><legend class="h4">Type</legend>' + inner + '</fieldset>' : '';
@@ -292,7 +297,8 @@
     if (isFinite(parseFloat(params.min))) ctx.f.min = parseFloat(params.min);
     if (isFinite(parseFloat(params.max))) ctx.f.max = parseFloat(params.max);
     var items = results();
-    var anyFilter = all.length > 1 && ((fcfg.type && cat.subcategories.length) || fcfg.color || fcfg.material || fcfg.price);
+    // Type needs two subcategories to be worth showing, so it alone can't open the sidebar.
+    var anyFilter = all.length > 1 && ((fcfg.type && cat.subcategories.length > 1) || fcfg.color || fcfg.material || fcfg.price);
     var sortSel = '<div class="listing-tools"><label for="catSort">Sort</label><select id="catSort" data-act="sort">' +
       [['featured', 'Featured'], ['price-asc', 'Price: low to high'], ['price-desc', 'Price: high to low'], ['name', 'Name: A–Z']].map(function (o) {
         return '<option value="' + o[0] + '"' + (ctx.sort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';

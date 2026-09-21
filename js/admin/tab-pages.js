@@ -31,7 +31,7 @@
         ui.field('URL slug', '@slug', p.slug, { type: 'slug', id: 'pgSlug', hint: 'Link: /page/<b>slug</b>' }) + '</div>' +
         '<div class="grid2">' + ui.field('Footer column', '@group', p.group, { options: GROUPS }) +
         '<div class="field"><span class="flabel">Visibility</span>' + ui.check('Show in footer', '@show', p.show !== false) + '</div></div>' +
-        ui.field('Body', '@body', p.body, { textarea: true, style: 'min-height:260px', hint: 'Formatting: <b>## Heading</b>, <b>- bullet</b>, <b>**bold**</b>, <b>[link](https://…)</b> or <b>[link](/page/contact-us)</b>. Blank line between paragraphs. Write <b>{{shipping_days}}</b> to insert the shipping-time setting.' })) +
+        ui.field('Body', '@body', p.body, { textarea: true, style: 'min-height:260px', hint: 'Formatting: <b>## Heading</b>, <b>- bullet</b>, <b>**bold**</b>, <b>[link](https://…)</b> or <b>[link](/page/contact-us)</b>. Blank line between paragraphs. Write <b>{{shipping_days}}</b>, <b>{{free_shipping}}</b>, <b>{{cod_limit}}</b>, <b>{{payment_terms}}</b> or <b>{{tax_terms}}</b> to insert the live setting, so a policy page can’t drift from what checkout does.' })) +
       ui.panel('Search engine listing (SEO)',
         ui.field('SEO title', '@seoTitle', p.seoTitle, { maxlength: 70, hint: 'Blank = page title. Up to 60 characters shows fully in Google.' }) +
         ui.field('Meta description', '@seoDescription', p.seoDescription, { textarea: true, rows: 2, maxlength: 200, hint: 'Blank = start of the page text. 120–160 characters works best.' })) +

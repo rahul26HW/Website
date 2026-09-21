@@ -44,6 +44,25 @@
     }, { once: true });
   }
 
+  /* Sales tax: a rate for each state you collect in. Checkout shows it and the database adds it to the order. */
+  function taxPanel() {
+    var ui = A.ui, tx = A.draft.tax = A.draft.tax || { enabled: false, rates: [] };
+    tx.rates = tx.rates || [];
+    var states = (HW.checkout && HW.checkout.states ? HW.checkout.states() : []).map(function (s) { return [s[0], s[1] + ' (' + s[0] + ')']; });
+    return ui.panel('Sales tax',
+      '<p class="hint" style="margin:-6px 0 12px">Charge sales tax for the states where you’re registered to collect it (for example New Jersey, where you ship from). ' +
+      'Orders to other states have no tax. Check the rates and which states apply with your accountant.</p>' +
+      ui.check('Charge sales tax at checkout', 'tax.enabled', tx.enabled) +
+      (tx.rates.length ? '<div class="tablewrap"><table class="adt"><thead><tr><th scope="col">State</th><th scope="col">Rate (%)</th><th scope="col">Tax shipping too</th><th scope="col"><span class="sr-only">Remove</span></th></tr></thead><tbody>' +
+        tx.rates.map(function (r, i) {
+          return '<tr><td>' + ui.field('<span class="sr-only">State</span>', 'tax.rates.' + i + '.state', r.state, { options: [['', 'Choose…']].concat(states) }) + '</td>' +
+            '<td>' + ui.field('<span class="sr-only">Rate</span>', 'tax.rates.' + i + '.rate', r.rate, { type: 'number', min: 0, step: '0.001' }) + '</td>' +
+            '<td>' + ui.check('<span class="sr-only">Tax shipping</span>', 'tax.rates.' + i + '.shipping', r.shipping !== false) + '</td>' +
+            '<td><button class="txtbtn danger" type="button" data-a="tax-remove" data-i="' + i + '">Remove</button></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<p class="hint">No states yet.</p>') +
+      '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-a="tax-add">+ Add a state</button></div>' + ui.saveBtn());
+  }
+
   A.tabs.storefront = {
     render: function () {
       ui = A.ui;
@@ -107,6 +126,9 @@
           ui.field('Cash on delivery fee ($)', 'payments.codFee', pay.codFee, { type: 'number', min: 0, hint: 'Added to COD orders. 0 = no fee. Up to $50.' }) +
           ui.field('Largest order for cash on delivery ($)', 'payments.codMax', pay.codMax, { type: 'int', min: 1, hint: 'Bigger orders must pay by card. Each email can also place at most 3 COD orders a day.' }) +
           '</div>' + ui.saveBtn()) +
+
+        taxPanel() +
+
         ui.panel('Card payments (Stripe) &amp; ShipStation',
           '<p class="hint" style="margin:-6px 0 12px">Shoppers pay on a secure Stripe page after checkout. Paid orders (and cash-on-delivery orders) are sent to ShipStation, and when you ship there the carrier and tracking number come back to the order. ' +
           'All keys live in your Supabase Edge Function “hw” (Supabase › Edge Functions › Secrets) — never here. Setup steps: README › “Card payments and ShipStation”.</p>' +
@@ -148,6 +170,9 @@
     var v = el.value.trim();
     el.setAttribute('aria-invalid', v && !/^https?:\/\//i.test(v) ? 'true' : 'false');
   };
+
+  A.actions['tax-add'] = function () { A.draft.tax.rates.push({ state: '', rate: null, shipping: true }); A.render(); };
+  A.actions['tax-remove'] = function (el) { A.draft.tax.rates.splice(+el.dataset.i, 1); A.render(); };
 
   A.actions['worker-check'] = async function () {
     var out = document.getElementById('workerOut'), base = A.workerUrl();

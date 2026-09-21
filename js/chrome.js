@@ -42,12 +42,44 @@
   }
   HW.wireLogoFallback = wireLogoFallback;
 
+  /* ---------- {{tokens}} ----------
+     Written text (the announcement bar, the Terms and the other policy pages) can name a figure or a way to pay
+     that the admin later changes. These tokens are filled in from the settings, so published text can't drift
+     from what the checkout actually does. */
+  var TOKENS = {
+    free_shipping: function (DB) {
+      var sh = DB.shipping || {};
+      return sh.enabled !== false && sh.freeThreshold ? u.money(sh.freeThreshold).replace(/\.00$/, '') : '';
+    },
+    cod_limit: function (DB) { return u.money(Number((DB.payments || {}).codMax) || 500); },
+    payment_terms: function (DB) {
+      var pay = DB.payments || {}, cod = !!pay.cod, card = !!pay.stripe;
+      if (card && cod) return 'You can pay by card, Apple Pay or Google Pay, or with cash on delivery on orders up to ' + TOKENS.cod_limit(DB) +
+        '. Card orders are approved at checkout and charged when we start preparing your order; an order that isn’t paid is cancelled automatically.';
+      if (cod) return 'Orders are paid with cash on delivery: you pay the courier in cash when your order arrives, on orders up to ' + TOKENS.cod_limit(DB) +
+        '. Nothing is charged online and we never see a card number.';
+      if (card) return 'We take card, Apple Pay and Google Pay. Your card is approved at checkout and charged when we start preparing your order. ' +
+        'We don’t take cash on delivery or pay-later orders, and an order that isn’t paid is cancelled automatically.';
+      return 'Checkout is closed while we finish setting up payments.';
+    },
+    tax_terms: function (DB) {
+      var tax = DB.tax || {};
+      return tax.enabled && (tax.rates || []).length ? 'Any sales tax that applies to your delivery state is shown at checkout, before you place the order.'
+        : 'The price you see is the price you pay — we don’t add sales tax at checkout.';
+    }
+  };
+  HW.tokens = function (text) {
+    var DB = HW.DB || {};
+    return String(text == null ? '' : text).replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, function (all, name) {
+      var fn = TOKENS[String(name).toLowerCase()];
+      return fn ? fn(DB) : all;
+    });
+  };
+
   /* ---------- header + footer ---------- */
   HW.paintChrome = function () {
     var DB = HW.DB, m = HW.m;
-    // {{free_shipping}} is replaced by the threshold set in Promotions, so the bar can't drift from the real rule.
-    var sh0 = DB.shipping || {};
-    var ann = (DB.announcement || '').replace(/\{\{\s*free_shipping\s*\}\}/gi, sh0.enabled !== false && sh0.freeThreshold ? u.money(sh0.freeThreshold).replace(/\.00$/, '') : '').trim();
+    var ann = HW.tokens(DB.announcement || '').trim();
     var annBar = document.getElementById('announce');
     document.getElementById('announceText').textContent = ann;
     annBar.hidden = !ann;

@@ -71,11 +71,22 @@ async function main() {
       description: c.seoDescription || ('Shop ' + c.name + ' from ' + brand + ' — ' + n.length + ' product' + (n.length === 1 ? '' : 's') + '. ' + tagline + '.'),
       image: n[0] ? m.primaryImage(n[0]) : c.image });
   });
+  const taken = new Set((data.products || []).map(function (p) { return 'product/' + p.slug; }));
   (data.products || []).filter(m.listable).forEach(function (p) {
     const img = m.primaryImage(p);
-    pages.push({ route: 'product/' + p.slug, title: p.seoTitle || p.name, type: 'product',
+    const shared = { title: p.seoTitle || p.name, type: 'product',
       preload: img ? { src: img, srcset: m.srcset(img), sizes: '(max-width: 980px) 92vw, 50vw' } : null,
-      description: p.seoDescription || text(p.description) || (p.name + ' from ' + brand + '.'), image: m.primaryImage(p) });
+      description: p.seoDescription || text(p.description) || (p.name + ' from ' + brand + '.'), image: m.primaryImage(p) };
+    pages.push(Object.assign({ route: 'product/' + p.slug }, shared));
+    // A renamed product keeps its old addresses as real files, so an old link answers 200 instead of
+    // going through 404.html. They carry the same content, point their canonical at the current slug,
+    // and stay out of the sitemap; the app rewrites the address once it loads (js/product.js).
+    (p.oldSlugs || []).forEach(function (old) {
+      const route = 'product/' + old;
+      if (!old || taken.has(route)) return;
+      taken.add(route);
+      pages.push(Object.assign({ route: route, canonical: 'product/' + p.slug, alias: true }, shared));
+    });
   });
   (data.pages || []).filter(function (p) { return p.show !== false; }).forEach(function (p) {
     pages.push({ route: 'page/' + p.slug, title: p.seoTitle || p.title,
@@ -92,7 +103,7 @@ async function main() {
   pages.forEach(function (pg) {
     const title = clip(pg.title, 60) + ' | ' + brand;
     const desc = clip(pg.description || (brand + ' — bath rugs, towels and home textiles. ' + tagline + '.'), 160);
-    const url = abs(pg.route);
+    const url = abs(pg.canonical || pg.route);
     const img = asset(pg.image);
     // Start the page's main photo (its largest element) downloading before the scripts run.
     const pre = pg.preload && /^https:\/\//.test(pg.preload.src) ? '\n<link rel="preload" as="image" href="' + attr(pg.preload.src) + '"' +
@@ -136,11 +147,13 @@ async function main() {
 
   const today = new Date().toISOString().slice(0, 10);
   const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    [''].concat(pages.map(function (p) { return p.route; })).map(function (r) { return '  <url><loc>' + attr(abs(r)) + '</loc><lastmod>' + today + '</lastmod></url>'; }).join('\n') + '\n</urlset>\n';
+    [''].concat(pages.filter(function (p) { return !p.alias; }).map(function (p) { return p.route; })).map(function (r) { return '  <url><loc>' + attr(abs(r)) + '</loc><lastmod>' + today + '</lastmod></url>'; }).join('\n') + '\n</urlset>\n';
   fs.writeFileSync(path.join(ROOT, 'sitemap.xml'), xml);
 
-  const count = (k) => pages.filter(function (p) { return p.route.indexOf(k + '/') === 0; }).length;
-  console.log('Wrote ' + pages.length + ' pages (' + count('category') + ' categories, ' + count('product') + ' products, ' + count('page') + ' info pages) and sitemap.xml.');
+  const count = (k) => pages.filter(function (p) { return !p.alias && p.route.indexOf(k + '/') === 0; }).length;
+  const aliases = pages.filter(function (p) { return p.alias; }).length;
+  console.log('Wrote ' + pages.length + ' pages (' + count('category') + ' categories, ' + count('product') + ' products, ' +
+    count('page') + ' info pages' + (aliases ? ', ' + aliases + ' old product addresses' : '') + ') and sitemap.xml.');
 }
 
 main().catch(function (e) { console.error(e.message); process.exit(1); });

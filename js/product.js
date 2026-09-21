@@ -108,8 +108,11 @@
       '<button class="desc-more" type="button" data-act="desc-more" aria-controls="pdt-description">Read full description</button>';
   }
 
+  /* With stock untracked, one shopper can still only take a reasonable number of a line. */
+  var UNTRACKED_MAX = 10;
+
   function stepper(max) {
-    sel.max = Math.max(1, Math.min(99, max || 99));
+    sel.max = Math.max(1, Math.min(99, max || UNTRACKED_MAX));
     if (sel.qty > sel.max) sel.qty = sel.max;
     return '<div class="stepper" role="group" aria-label="Quantity">' +
       '<button type="button" data-act="qty" data-d="-1" aria-label="Decrease quantity"' + (sel.qty <= 1 ? ' disabled' : '') + '>–</button>' +
@@ -187,8 +190,9 @@
         '<h1>' + esc(p.name) + '</h1>' +
         '<div class="price"><span class="now ' + (sp.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(sp.effective) + '</span>' + (sp.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(sp.price) + '</span>' : '') + '</div>' +
         descHTML(p) +
+        (p.sku ? '<div class="skuline">SKU ' + esc(p.sku) + (p.upc ? ' · UPC ' + esc(p.upc) : '') + '</div>' : '') +
         '<div class="stocknote ' + (inStock ? 'in' : 'out') + '"><span aria-hidden="true">● </span>' + esc(m.stockLabel(qtyKey, inStock)) + '</div>' +
-        '<div class="qtyrow">' + (inStock ? stepper(m.invTracked(qtyKey) ? m.invQty(qtyKey) : 99) : '') + buy + '</div>' +
+        '<div class="qtyrow">' + (inStock ? stepper(m.invTracked(qtyKey) ? m.invQty(qtyKey) : UNTRACKED_MAX) : '') + buy + '</div>' +
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
         (inStock ? '' : notifyHTML(p, m.simpleSku(p), 'This item')),
       inStock: inStock,
@@ -238,8 +242,9 @@
         '<h1>' + esc(p.name) + '</h1>' +
         '<div class="price" aria-live="polite"><span class="now ' + (v.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(v.effective) + '</span>' + (v.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(v.price) + '</span>' : '') + '</div>' +
         descHTML(p) + swatches + sizes +
+        '<div class="skuline">SKU ' + esc(v.sku) + (v.upc ? ' · UPC ' + esc(v.upc) : '') + '</div>' +
         '<div class="stocknote ' + (v.inStock ? 'in' : 'out') + '" aria-live="polite"><span aria-hidden="true">● </span>' + esc(v.inStock ? m.stockLabel(v.sku, true) : 'This option is currently sold out') + '</div>' +
-        '<div class="qtyrow">' + (v.inStock ? stepper(m.invTracked(v.sku) ? m.invQty(v.sku) : 99) : '') + buy + '</div>' +
+        '<div class="qtyrow">' + (v.inStock ? stepper(m.invTracked(v.sku) ? m.invQty(v.sku) : UNTRACKED_MAX) : '') + buy + '</div>' +
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
         (v.inStock ? '' : notifyHTML(p, v.sku, v.color.label + ' / ' + v.size.label)),
       inStock: v.inStock,

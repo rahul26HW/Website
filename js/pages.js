@@ -258,6 +258,10 @@
           (o.tracking_number ? '<p style="margin:12px 0 6px"><b>Tracking:</b> ' + esc(o.carrier ? o.carrier + ' ' : '') +
             (link ? '<a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + esc(link) + '" target="_blank" rel="noopener noreferrer">' + esc(o.tracking_number) + '</a>' : esc(o.tracking_number)) + '</p>' : '') +
           (o.payment_status === 'unpaid' && o.status === 'new' ? '<p class="muted" style="font-size:13.5px">' + 'Payment hasn’t been received for this order yet.' + '</p>' : '') +
+          // Cash on delivery only works if someone is there with the money.
+          (o.payment_method === 'cod' && !ended && o.status !== 'delivered'
+            ? '<div class="notice" role="note" style="text-align:left;margin:12px 0 0"><b>Paying in cash.</b> Please have ' + u.money(o.total) +
+              ' ready for the courier — they may not carry change — and make sure someone over 18 is at the address to take the parcel.</div>' : '') +
           cancelBlock(o, no, email) +
           '<ul class="bullets" style="margin-top:10px">' + (o.items || []).map(function (i) {
             return '<li>' + esc(HW.seo.clip(i.name, 80)) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + ' × ' + i.qty + '</li>';
@@ -280,9 +284,9 @@
     return {
       html: '<div class="wrap">' +
         '<nav class="crumb" aria-label="Breadcrumb"><a href="' + HW.link('/') + '">Home</a> &nbsp;/&nbsp; <span aria-current="page">' + esc(pg.title) + '</span></nav>' +
-        '<article class="cms"><h1>' + esc(pg.title) + '</h1><div class="cms-body">' + HW.richText(body) + extra + '</div></article>' +
+        '<article class="cms"><h1>' + esc(pg.title) + '</h1><div class="cms-body">' + HW.richText(HW.tokens(body)) + extra + '</div></article>' +
         '<div style="height:60px"></div></div>',
-      seo: { title: pg.seoTitle || pg.title, description: pg.seoDescription || body.replace(/[#*\[\]()|-]/g, ' '), path: '/page/' + pg.slug,
+      seo: { title: pg.seoTitle || pg.title, description: pg.seoDescription || HW.tokens(body).replace(/[#*\[\]()|-]/g, ' '), path: '/page/' + pg.slug,
         jsonld: HW.ld && HW.ld.breadcrumb([['Home', '/'], [pg.title, '/page/' + pg.slug]]) }
     };
   };

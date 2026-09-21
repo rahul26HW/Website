@@ -155,6 +155,17 @@
   });
 
   function wireEvents() {
+    /* A small image that fails (a CDN hiccup) would leave an empty box, so fall back to the full-size photo. */
+    document.addEventListener('error', function (e) {
+      var img = e.target;
+      if (!img || img.tagName !== 'IMG' || img.dataset.fallback) return;
+      img.dataset.fallback = '1';
+      var src = img.currentSrc || img.src, thumbs = (HW.DB && HW.DB.thumbs) || {}, full = '';
+      for (var k in thumbs) { if (HW.asset(thumbs[k]) === src) { full = k; break; } }
+      img.removeAttribute('srcset');
+      img.src = full ? HW.asset(full) : src + (src.indexOf('?') < 0 ? '?' : '&') + 'retry=1';
+    }, true);
+
     document.addEventListener('click', function (e) {
       var el = e.target.closest('[data-act]');
       if (!el || HW.isAdminView() && !el.closest('.store, #cartDrawer, #mnav')) return;
