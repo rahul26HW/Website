@@ -52,6 +52,8 @@
       return sh.enabled !== false && sh.freeThreshold ? u.money(sh.freeThreshold).replace(/\.00$/, '') : '';
     },
     cod_limit: function (DB) { return u.money(Number((DB.payments || {}).codMax) || 500); },
+    cancel_minutes: function (DB) { return String(Number((DB.payments || {}).cancelMinutes) || 30); },
+    flat_rate: function (DB) { return u.money(Number((DB.shipping || {}).flatRate) || 0); },
     payment_terms: function (DB) {
       var pay = DB.payments || {}, cod = !!pay.cod, card = !!pay.stripe;
       if (card && cod) return 'You can pay by card, Apple Pay or Google Pay, or with cash on delivery on orders up to ' + TOKENS.cod_limit(DB) +
