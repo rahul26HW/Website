@@ -639,8 +639,6 @@ footer.site{background:var(--ink);color:#E7E0D4;margin-top:10px}
   .vthumbs-wrap{width:62px}.vth{width:62px;height:62px}
 }
 @media(max-width:720px){
-  /* Narrow cards need a third line for the longest names; every card keeps the same box, so rows still line up. */
-  .pcard .meta .pname{font-size:16px;line-height:21px;height:63px;-webkit-line-clamp:3}
   .hbar,.hactions .lbl{display:none}
   .menu-toggle{display:flex}
   .htop{grid-template-columns:auto 1fr auto;gap:12px;padding:12px 18px}
@@ -972,3 +970,8 @@ main#view.booting ~ footer.site{visibility:hidden}
 .sizegroup .sg-h{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 6px}
 .fld-hint{display:block;margin-top:5px;font-size:12px;color:var(--ink-soft)}
 .skuline{font-size:12px;letter-spacing:.04em;color:var(--ink-soft);margin:-4px 0 14px}
+
+/* Narrow cards need a third line for the longest names; every card keeps the same box, so rows still line up. */
+@media(max-width:720px){
+  .pcard .meta .pname{font-size:16px;line-height:21px;height:63px;-webkit-line-clamp:3}
+}
