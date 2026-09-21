@@ -186,7 +186,8 @@
    * Search
    * ================================================================ */
   // 24"x40", 24 x 40, 24×40 and 24 in x 40 in all become 24x40 before anything else.
-  function sizes(s) { return String(s || '').replace(/(\d+(?:\.\d+)?)\s*(?:["”″]|in(?:ch(?:es)?)?\b)?\s*[x×]\s*(\d+(?:\.\d+)?)\s*(?:["”″]|in(?:ch(?:es)?)?\b)?/gi, '$1x$2'); }
+  // The unit takes its spacing with it, so "17x24 18x18" stays two words instead of running together.
+  function sizes(s) { return String(s || '').replace(/(\d+(?:\.\d+)?)(?:\s*(?:["”″]|in(?:ch(?:es)?)?\b))?\s*[x×]\s*(\d+(?:\.\d+)?)(?:\s*(?:["”″]|in(?:ch(?:es)?)?\b))?/gi, '$1x$2'); }
   function norm(s) { return sizes(String(s || '').toLowerCase().replace(/["”″′]/g, '"')).replace(/"/g, ' in ').normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
 
   function searchIndex() {
