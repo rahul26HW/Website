@@ -195,7 +195,14 @@
       }
     } else if (!p.categoryId) errors.push('Category is required for a new product');
 
-    var checkUrls = function (l, line) { l.forEach(function (x) { if (!/^https:\/\/\S+$/i.test(x)) errors.push('Line ' + line + ': image “' + HW.seo.clip(x, 40) + '” must be an https:// link'); }); return l; };
+    // A space in a filename is fine in a spreadsheet; the link needs it encoded.
+    var checkUrls = function (l, line) {
+      return l.map(function (x) {
+        var url = str(x).replace(/ /g, '%20');
+        if (!/^https:\/\/\S+$/i.test(url)) { errors.push('Line ' + line + ': image “' + HW.seo.clip(x, 40) + '” must be an https:// link'); return x; }
+        return url;
+      });
+    };
     var takeSku = function (sku, line, keyId) {
       if (!sku) return;
       if (owner[sku] && owner[sku] !== p.id) errors.push('Line ' + line + ': SKU ' + sku + ' already belongs to another product');
@@ -230,13 +237,32 @@
       takeStock(r, p.sku || p.id);
     } else {
       var cOpt = optC(p), sOpt = optS(p), newSizes = {};
+      // Which color and size a SKU already belongs to: that is how a renamed color or size is recognised
+      // as the same one, instead of being added a second time.
+      var bySku = {};
+      Object.keys(p.variants || {}).forEach(function (k) {
+        var sku = str((p.variants[k] || {}).sku).toLowerCase(), part = k.split('__');
+        if (sku && part.length === 2) bySku[sku] = { color: part[0], size: part[1] };
+      });
+      var byId = function (values, id) { return values.find(function (x) { return x.id === id; }); };
+      var rename = function (val, label, what, line) {
+        if (!val || same(val.label, label)) return;
+        var clash = (what === 'color' ? cOpt : sOpt).values.find(function (x) { return x.id !== val.id && same(x.label, label); });
+        if (clash) { errors.push('Line ' + line + ': two ' + what + 's would both be called “' + label + '” — the SKU says this is “' + val.label + '”'); return; }
+        val.label = label;
+      };
       rows.forEach(function (r) {
         if (!r.color || !r.size) { errors.push('Line ' + r.line + ': a collection row needs both color and size'); return; }
-        var col = cOpt.values.find(function (c) { return same(c.label, r.color); });
+        var was = r.sku ? bySku[str(r.sku).toLowerCase()] : null;
+        var col = was ? byId(cOpt.values, was.color) : null;
+        if (col) rename(col, r.color, 'color', r.line);
+        else col = cOpt.values.find(function (c) { return same(c.label, r.color); });
         if (!col) { col = { id: u.uid('cl'), label: r.color, hex: '#C9BBA6', images: pad8([]), primary: 0, video: '' }; cOpt.values.push(col); }
         if (r.color_hex && !same(r.color_hex, col.hex)) { if (/^#[0-9a-f]{6}$/i.test(r.color_hex)) col.hex = r.color_hex.toUpperCase(); else errors.push('Line ' + r.line + ': color_hex must look like #5E86B5'); }
         if (r.color_images && list(r.color_images).join('|') !== photos(col.images, col.primary).join('|')) { col.images = pad8(checkUrls(list(r.color_images), r.line)); col.primary = 0; }
-        var sz = sOpt.values.find(function (s) { return same(s.label, r.size); });
+        var sz = was ? byId(sOpt.values, was.size) : null;
+        if (sz) rename(sz, r.size, 'size', r.line);
+        else sz = sOpt.values.find(function (s) { return same(s.label, r.size); });
         if (!sz) { sz = { id: u.uid('sz'), label: r.size, price: null, salePrice: null }; sOpt.values.push(sz); newSizes[sz.id] = 1; }
         var key = col.id + '__' + sz.id;
         p.variants = p.variants || {};
@@ -257,6 +283,15 @@
         if (r.images && list(r.images).join('|') !== photos(v.images, v.primary).join('|')) { v.images = checkUrls(list(r.images), r.line); v.primary = 0; }
         takeStock(r, v.sku);
         if (!Object.keys(v).length) delete p.variants[key];
+      });
+      // Two colors (or sizes) with the same name are always a mistake — shoppers see two identical swatches.
+      [['color', cOpt], ['size', sOpt]].forEach(function (pair) {
+        var seen = {};
+        pair[1].values.forEach(function (v) {
+          var k = str(v.label).toLowerCase();
+          if (seen[k]) errors.push('Two ' + pair[0] + 's are both called “' + v.label + '”');
+          seen[k] = 1;
+        });
       });
       // Every color × size must end up with a price, and sale below price.
       cOpt.values.forEach(function (c) {
@@ -327,6 +362,7 @@
   /* What each column means, in the admin (a CSV can't carry notes). */
   var HELP = [
     ['handle', 'The product’s web address (…/product/<b>handle</b>). Rows with the same handle are one product. For a new product, type any short name with dashes, e.g. <code>blue-bath-towel</code>. Don’t change it on existing products — it’s how the import finds them.'],
+    ['sku', 'The code for this one color/size. Keep it and you can rename the color or size in the file — the import renames them instead of adding a second one. Change the SKU and it becomes a new color/size.'],
     ['name', 'Product name shown in the store.'],
     ['type', '<code>simple</code> (one SKU) or <code>collection</code> (colors × sizes, one row each).'],
     ['category / subcategory', 'Must match names under Categories.'],
