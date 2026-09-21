@@ -310,8 +310,8 @@
     if (!wrap || !row) return;
     var slide = wrap.classList.contains('slide');
     var prev = wrap.querySelector('.sw-nav.prev'), next = wrap.querySelector('.sw-nav.next');
-    prev.hidden = !slide || row.scrollLeft < 4;
-    next.hidden = !slide || row.scrollLeft + row.clientWidth >= row.scrollWidth - 4;
+    prev.hidden = !slide || row.scrollLeft < 8;
+    next.hidden = !slide || row.scrollLeft + row.clientWidth >= row.scrollWidth - 8;
   }
   function fitSwatches(again) {
     var wrap = document.getElementById('swatchWrap'), row = document.getElementById('swatchRow');
@@ -322,7 +322,11 @@
     var w = row.firstElementChild.getBoundingClientRect().width;
     var gap = parseFloat(getComputedStyle(row).columnGap) || 12;
     var perRow = Math.max(1, Math.floor((row.clientWidth + gap) / (w + gap)));
-    if (row.children.length > perRow * 2) wrap.classList.add('slide');
+    // More than one row's worth: lay them out two deep and keep the slide only if they really overflow.
+    if (row.children.length > perRow) {
+      wrap.classList.add('slide');
+      if (row.scrollWidth <= row.clientWidth + 8) wrap.classList.remove('slide');
+    }
     row.onscroll = swatchArrows;
     swatchArrows();
   }
