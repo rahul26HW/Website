@@ -1,5 +1,22 @@
 # Changelog — Home Weavers rebuild
 
+## 2026-09-21 — QA re-audit fixes
+
+- **Cash on delivery limit** is shown in the cart and on checkout, and blocks before the address is typed; the message no longer suggests paying by card while Stripe is off.
+- **Phone** is required and checked (10 digits), so the courier has a number that works.
+- **Quantity** per line is capped at 10 while stock is untracked, with wording that matches.
+- **Policy pages** take {{payment_terms}}, {{tax_terms}}, {{cod_limit}}, {{cancel_minutes}}, {{free_shipping}} and {{flat_rate}}, so the Terms can no longer contradict the payment, tax and shipping settings. Terms, Privacy Policy and Shipping & returns rewritten to use them.
+- **Cash-on-delivery guidance** (have the amount ready, someone over 18 at the address) on the confirmation, the tracking page, the shipping page and the order email.
+- **Privacy Policy and cookie banner** describe Google sign-in loading Google's script on the sign-in page.
+- A **small image that fails to load** falls back to the full photo instead of leaving an empty box.
+- **SKU and UPC** are shown in the buy box.
+- **Old product addresses** get their own page files, so an indexed link no longer answers 404 before the redirect.
+- **Price: high to low** sorts by the highest variant price; a Type filter with a single value is hidden.
+- **Search** finds rug sizes again (the normaliser was joining "17x24 18x18" into one word).
+- **Info pages** have their own SEO titles and descriptions.
+- **Admin:** sales tax moved from Promotions to Storefront; "Deduct items from inventory" hidden and blocked on cancelled or refunded orders; order address and phone formatting fixed.
+- **Data:** 4,988 empty photo slots removed from the catalog; small images completed for all 4,238 photos.
+
 ## Live verification (signed in as admin)
 
 - Real saves reach the database, and each one publishes the CDN copy of the store.
