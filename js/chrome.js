@@ -83,8 +83,21 @@
     var DB = HW.DB, m = HW.m;
     var ann = HW.tokens(DB.announcement || '').trim();
     var annBar = document.getElementById('announce');
-    document.getElementById('announceText').textContent = ann;
-    annBar.hidden = !ann;
+    var annText = document.getElementById('announceText');
+    // While a sale is on, the bar carries it and counts down; afterwards the usual line comes back.
+    var sale = m.saleNow ? m.saleNow() : null;
+    annBar.classList.toggle('sale', !!sale);
+    annBar.classList.toggle('sale-final', !!sale && sale.endsAt - Date.now() < 24 * 3600 * 1000);
+    if (sale) {
+      var last = sale.endsAt - Date.now() < 24 * 3600 * 1000;
+      annText.innerHTML = (last ? 'Last day — ' : '') + u.esc(sale.name) + ' · ends in ' +
+        '<b data-sale-ends="' + sale.endsAt + '" data-sale-style="bar"></b>';
+      annBar.hidden = false;
+      if (HW.saleClock) HW.saleClock.start();
+    } else {
+      annText.textContent = ann;
+      annBar.hidden = !ann;
+    }
 
     var mark = document.querySelector('header.site .brand .mark');
     mark.innerHTML = brandMarkHTML(false);

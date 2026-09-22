@@ -199,6 +199,10 @@
         if (!(left > 0)) { over = true; return; }
         var d = Math.floor(left / 86400000), h = Math.floor(left / 3600000) % 24,
             mi = Math.floor(left / 60000) % 60, sec = Math.floor(left / 1000) % 60;
+        if (el.getAttribute('data-sale-style') === 'bar') {
+          el.textContent = (d ? two(d) + 'd ' : '') + two(h) + 'h ' + two(mi) + 'm ' + two(sec) + 's';
+          return;
+        }
         var slot = el.querySelector('[data-sale-clock]') || el;
         if (slot.getAttribute('data-sale-clock') === 'parts') {
           slot.innerHTML = (d ? '<i>' + two(d) + '<em>DAYS</em></i>' : '') +
@@ -207,7 +211,11 @@
           el.textContent = 'Ends in ' + (d ? d + 'd ' : '') + two(h) + 'h ' + two(mi) + 'm' + (d ? '' : ' ' + two(sec) + 's');
         }
       });
-      if (over) { stop(); if (HW.router) HW.router.run({ scroll: false }); }
+      if (over) {
+        stop();
+        try { HW.paintChrome(); } catch (e) { /* the bar is redrawn on the next page anyway */ }
+        if (HW.router) HW.router.run({ scroll: false });
+      }
     }
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
     return {
