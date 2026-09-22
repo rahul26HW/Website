@@ -1,5 +1,13 @@
 # Changelog — Home Weavers rebuild
 
+## 2026-09-22 — Timed sale
+
+- **Admin › Promotions › Timed sale**: band text, ribbon text, an extra percentage off, start and end times, and whether it covers everything, chosen categories or chosen products.
+- **Product page**: a green band with the sale name and a days/hours/minutes/seconds countdown, and the sale price with the old one struck through.
+- **Cards** (category, search, home rails): a sale ribbon and a small "Ends in …" strip over the photo.
+- The discount is applied by the shop **and by the database**, so a sale that has ended can never be bought at the old price. At the end time the prices, the band and the ribbons go back on their own — nothing to switch off, and the countdown never restarts.
+- Sale times are stored as exact moments, so the countdown means the same thing wherever the shopper is.
+
 ## 2026-09-22 — Order emails from the admin, and un-shipping
 
 - **Cancelling, refunding or shipping an order from the admin now emails the customer.** A status changed in the admin went straight to the database, so the mail server never knew and the customer heard nothing. New admins-only `/orders/notify` route; the admin calls it and reports whether the email went.
