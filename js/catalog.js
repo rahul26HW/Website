@@ -12,16 +12,21 @@
     var coll = m.isCollection(p);
     var out = m.productOut(p);
     var url = HW.link('/product/' + p.slug);
+    var sale = m.saleFor(p);
     var badge = out
       ? '<span class="badge out">Out of stock</span>'
+      : sale ? '<span class="badge sale">' + esc(sale.ribbon) + '</span>'
       : (p.badge ? '<span class="badge ' + (/sale/i.test(p.badge) ? 'sale' : '') + '">' + esc(p.badge) + '</span>' : '');
+    // The same end time on every card, counted down by one clock (js/features.js).
+    var saleStrip = sale && !out ? '<span class="cardtimer" data-sale-ends="' + sale.endsAt + '"></span>' : '';
     var priceHtml, action, swatches = '';
 
     if (coll) {
       var r = m.priceRange(p, opts.minPrice, opts.maxPrice);
-      priceHtml = r.min === r.max
-        ? '<span class="now">' + u.money(r.min) + '</span>'
-        : '<span class="muted" style="font-size:12px;letter-spacing:.04em">from</span> <span class="now">' + u.money(r.min) + '</span>';
+      priceHtml = (r.min === r.max
+        ? '<span class="now ' + (sale ? 'on' : '') + '">' + u.money(r.min) + '</span>'
+        : '<span class="muted" style="font-size:12px;letter-spacing:.04em">from</span> <span class="now ' + (sale ? 'on' : '') + '">' + u.money(r.min) + '</span>') +
+        (sale && r.wasMin > r.min ? '<span class="was"><span class="sr-only">Was </span>' + u.money(r.wasMin) + '</span>' : '');
       action = out
         ? '<button class="btn block sm" type="button" disabled>Out of stock</button>'
         : '<a class="btn block sm loom" href="' + url + '" aria-label="Select options for ' + esc(p.name) + '">Select options</a>';
@@ -43,7 +48,7 @@
     return '<article class="pcard reveal' + (out ? ' is-out' : '') + '" data-pid="' + esc(p.id) + '">' +
       '<div class="imgwrap">' +
       '<a href="' + url + '" tabindex="-1" aria-hidden="true" data-pclick="' + esc(p.id) + '"><img class="ph" src="' + esc(HW.asset(m.thumb(m.imageOrSwatch(p)))) + '" alt="' + esc(m.imageAlt(p)) + '"' + (opts.eager ? (opts.eager === 'high' ? ' fetchpriority="high"' : '') : ' loading="lazy"') + ' decoding="async" width="600" height="770"></a>' +
-      badge + (HW.wishlist ? HW.wishlist.button(p) : '') + '<div class="quick">' + action + '</div></div>' +
+      badge + saleStrip + (HW.wishlist ? HW.wishlist.button(p) : '') + '<div class="quick">' + action + '</div></div>' +
       '<div class="meta"><div class="cat">' + esc(cat ? cat.name : '') + '</div>' +
       '<' + h + ' class="pname"><a href="' + url + '" data-pclick="' + esc(p.id) + '">' + esc(p.name) + '</a></' + h + '>' +
       '<div class="price">' + priceHtml + '</div>' + swatches + '</div></article>';

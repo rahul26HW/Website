@@ -295,7 +295,7 @@
   };
 
   A.validateStore = function (d) {
-    var out = [];
+    var out = A.saleProblems(d);
     var slugs = {};
     (d.products || []).forEach(function (p) {
       if (!String(p.name || '').trim()) out.push('Every product needs a name.');
@@ -363,6 +363,44 @@
   };
 
   /* Stock rows whose product or option no longer exists. */
+  /* Where a timed sale stands: waiting, running or finished, in words. */
+  A.saleWindow = function (sale) {
+    sale = sale || {};
+    var from = Date.parse(sale.startsAt), to = Date.parse(sale.endsAt);
+    var fmt = function (t) { return new Date(t).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }); };
+    if (!sale.enabled || !(sale.percent > 0) || !isFinite(from) || !isFinite(to)) return { state: 'off' };
+    var now = Date.now();
+    var left = to - now;
+    var words = function (ms) {
+      var d = Math.floor(ms / 86400000), h = Math.floor(ms / 3600000) % 24, mi = Math.floor(ms / 60000) % 60;
+      return (d ? d + ' day' + (d === 1 ? '' : 's') + ' ' : '') + (d || h ? h + ' hr ' : '') + mi + ' min';
+    };
+    if (now < from) return { state: 'waiting', startsText: fmt(from), endsText: fmt(to) };
+    if (left <= 0) return { state: 'done', endsText: fmt(to) };
+    return { state: 'live', endsText: fmt(to), leftText: words(left) };
+  };
+
+  /* A sale has to make sense before it can be saved. */
+  A.saleProblems = function (d) {
+    var s = d.sale || {}, out = [];
+    if (!s.enabled) return out;
+    var from = Date.parse(s.startsAt), to = Date.parse(s.endsAt);
+    if (!isFinite(from) || !isFinite(to)) out.push('The sale needs a start and an end time.');
+    else if (to <= from) out.push('The sale ends before it starts.');
+    else if (to - from > 90 * 86400000) out.push('A sale can run for at most 90 days.');
+    if (!(s.percent >= 1 && s.percent <= 70)) out.push('The extra discount has to be between 1% and 70%.');
+    if (!String(s.name || '').trim()) out.push('The sale needs band text — shoppers see it on the product page.');
+    if (s.scope === 'categories' && !(s.categoryIds || []).length) out.push('Choose at least one category for the sale, or set it to every product.');
+    if (s.scope === 'products' && !(s.productIds || []).length) out.push('List at least one product for the sale, or set it to every product.');
+    if (s.scope === 'products') {
+      var unknown = (s.productIds || []).filter(function (h) {
+        return !(d.products || []).some(function (p) { return p.slug === h || p.id === h; });
+      });
+      if (unknown.length) out.push('No product with the handle ' + unknown.slice(0, 3).join(', ') + '.');
+    }
+    return out;
+  };
+
   A.pruneInventory = function (d) {
     var keep = {};
     (d.products || []).forEach(function (p) {

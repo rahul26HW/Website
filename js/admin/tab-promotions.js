@@ -29,7 +29,38 @@
     render: function () {
       var ui = A.ui, d = A.draft, sh = d.shipping, promos = d.promos || [];
       var today = new Date().toISOString().slice(0, 10);
-      return '<h1>Promotions</h1><p class="sub">Discount codes shoppers enter in the cart, your free-shipping rule, and newsletter sign-ups.</p>' +
+      var sale = d.sale || {};
+      var running = A.saleWindow(sale);
+      var cats = (d.categories || []).map(function (c) { return [c.id, c.name]; });
+      return '<h1>Promotions</h1><p class="sub">Discount codes shoppers enter in the cart, your free-shipping rule, timed sales, and newsletter sign-ups.</p>' +
+
+        ui.panel('Timed sale',
+          '<p class="hint" style="margin:-6px 0 12px">Takes an extra percentage off the current selling price between the two times below, shows a green band with a countdown on those product pages and a “' + esc(sale.ribbon || 'Sale') + '” ribbon on their cards. ' +
+          'It stops on its own: at the end time the prices and the badges go back with nothing to switch off.</p>' +
+          (running.state === 'live' ? '<p class="okmsg">Running now — ends ' + esc(running.endsText) + ' (' + esc(running.leftText) + ' left).</p>'
+            : running.state === 'waiting' ? '<p class="hint"><b>Scheduled.</b> Starts ' + esc(running.startsText) + '.</p>'
+            : running.state === 'done' ? '<p class="hint"><b>Finished</b> ' + esc(running.endsText) + '. Prices are back to normal.</p>'
+            : '') +
+          ui.check('Run this sale', 'sale.enabled', sale.enabled) +
+          '<div class="grid2">' +
+          ui.field('Band text (product page)', 'sale.name', sale.name, { maxlength: 120, placeholder: 'Autumn sale — 10% off all towels' }) +
+          ui.field('Ribbon text (cards)', 'sale.ribbon', sale.ribbon, { maxlength: 30, placeholder: 'Sale' }) + '</div>' +
+          '<div class="grid2">' +
+          ui.field('Extra off (%)', 'sale.percent', sale.percent, { type: 'number', min: 0, step: '0.5', hint: 'Taken off the price the shopper sees today. 1–70.' }) +
+          ui.field('Applies to', 'sale.scope', sale.scope, { options: [['all', 'Every product'], ['categories', 'Chosen categories'], ['products', 'Chosen products']] }) + '</div>' +
+          '<div class="grid2">' +
+          ui.field('Starts', 'sale.startsAt', sale.startsAt, { inputType: 'datetime-local', hint: 'Your own time zone.' }) +
+          ui.field('Ends', 'sale.endsAt', sale.endsAt, { inputType: 'datetime-local', hint: 'The countdown runs to this moment.' }) + '</div>' +
+          (sale.scope === 'categories'
+            ? '<div class="field"><label>Categories in the sale</label><div class="checkrow">' +
+              cats.map(function (c) {
+                return '<label class="chk"><input type="checkbox" data-a="sale-cat" data-id="' + esc(c[0]) + '"' + ((sale.categoryIds || []).indexOf(c[0]) >= 0 ? ' checked' : '') + '> ' + esc(c[1]) + '</label>';
+              }).join('') + '</div></div>'
+            : sale.scope === 'products'
+            ? ui.field('Products in the sale', 'sale.productIds', sale.productIds || [],
+                { textarea: true, rows: 4, type: 'lines', hint: 'One product web address (handle) per line, e.g. <code>willow-bath-towels</code>. Copy them from Products.' })
+            : '') +
+          ui.saveBtn()) +
         ui.panel('Free shipping',
           ui.check('Offer free shipping above a threshold', 'shipping.enabled', sh.enabled) +
           '<div class="grid2">' + ui.field('Free shipping at or above ($)', 'shipping.freeThreshold', sh.freeThreshold, { type: 'number', min: 0 }) +
@@ -93,6 +124,14 @@
   }
 
   A.live.promoActive = function () { var y = window.scrollY; A.render(); window.scrollTo(0, y); };
+
+  A.actions['sale-cat'] = function (el) {
+    var ids = A.draft.sale.categoryIds || (A.draft.sale.categoryIds = []);
+    var at = ids.indexOf(el.dataset.id);
+    if (el.checked && at < 0) ids.push(el.dataset.id);
+    if (!el.checked && at >= 0) ids.splice(at, 1);
+    A.render();
+  };
 
   A.actions['promo-add'] = function () {
     var n = (A.draft.promos || []).length + 1, code = 'NEWCODE' + n;

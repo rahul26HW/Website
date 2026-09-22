@@ -183,6 +183,44 @@
   };
 
   /* ================================================================ *
+   * Sale countdown
+   * One timer for the whole page: it fills every [data-sale-ends] element and, when the sale runs out,
+   * redraws the page so prices and badges go back to normal without anyone touching anything.
+   * ================================================================ */
+  HW.saleClock = (function () {
+    var timer = null;
+    function two(n) { return (n < 10 ? '0' : '') + n; }
+    function paint() {
+      var els = u.qsa('[data-sale-ends]');
+      if (!els.length) { stop(); return; }
+      var over = false;
+      els.forEach(function (el) {
+        var left = Number(el.getAttribute('data-sale-ends')) - Date.now();
+        if (!(left > 0)) { over = true; return; }
+        var d = Math.floor(left / 86400000), h = Math.floor(left / 3600000) % 24,
+            mi = Math.floor(left / 60000) % 60, sec = Math.floor(left / 1000) % 60;
+        var slot = el.querySelector('[data-sale-clock]') || el;
+        if (slot.getAttribute('data-sale-clock') === 'parts') {
+          slot.innerHTML = (d ? '<i>' + two(d) + '<em>DAYS</em></i>' : '') +
+            '<i>' + two(h) + '<em>HRS</em></i><i>' + two(mi) + '<em>MIN</em></i><i>' + two(sec) + '<em>SEC</em></i>';
+        } else {
+          el.textContent = 'Ends in ' + (d ? d + 'd ' : '') + two(h) + 'h ' + two(mi) + 'm' + (d ? '' : ' ' + two(sec) + 's');
+        }
+      });
+      if (over) { stop(); if (HW.router) HW.router.run({ scroll: false }); }
+    }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+    return {
+      start: function () {
+        stop();
+        if (!u.qsa('[data-sale-ends]').length) return;
+        paint();
+        timer = setInterval(paint, 1000);
+      }
+    };
+  })();
+
+  /* ================================================================ *
    * Search
    * ================================================================ */
   // 24"x40", 24 x 40, 24×40 and 24 in x 40 in all become 24x40 before anything else.

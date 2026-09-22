@@ -42,6 +42,7 @@
     HW.seo.set(view.seo || {});
     if (view.after) { try { view.after(); } catch (e) { console.error(e); } }
     HW.observeReveals();
+    if (HW.saleClock) HW.saleClock.start();
     if (HW.rails) HW.rails.init();
     if (HW.measure) {
       var pid = route.name === 'product' && HW.pdp && HW.pdp.currentId ? HW.pdp.currentId() : '';

@@ -64,6 +64,9 @@
       newsletter: { couponCode: '', emailEndpoint: '' },
       shipping: { enabled: true, freeThreshold: 75, flatRate: 9.95 },
       tax: { enabled: false, rates: [] },
+      // A sale that runs between two dates: an extra percentage off, a band on the product page and a ribbon
+      // on the cards. It ends by itself — prices and badges go back with no one having to switch anything off.
+      sale: { enabled: false, name: '', ribbon: 'Sale', percent: 0, startsAt: '', endsAt: '', scope: 'all', categoryIds: [], productIds: [] },
       social: { facebook: '', instagram: '', pinterest: '' },
       payments: { stripe: false, cod: false, codFee: 0, codMax: 500, workerUrl: '', cancelMinutes: 30 },   // Stripe Checkout through the Cloudflare Worker (keys live in the worker)
       snipcart: { enabled: false, apiKey: '', currency: 'usd', version: '3.7.1', mode: 'side', feedUrl: '' },
@@ -167,6 +170,20 @@
     d.payments.cod = d.payments.cod === true;
     var cf = Number(d.payments.codFee); d.payments.codFee = cf >= 0 && cf <= 50 ? Math.round(cf * 100) / 100 : 0;
     var cx = Number(d.payments.codMax); d.payments.codMax = cx >= 1 && cx <= 5000 ? Math.round(cx) : 500;
+    // Timed sale
+    if (!isObj(d.sale)) d.sale = { enabled: false, name: '', ribbon: 'Sale', percent: 0, startsAt: '', endsAt: '', scope: 'all', categoryIds: [], productIds: [] };
+    d.sale.enabled = d.sale.enabled === true;
+    ['name', 'ribbon', 'startsAt', 'endsAt'].forEach(function (k) { d.sale[k] = str(d.sale[k]).slice(0, 120); });
+    if (!d.sale.ribbon) d.sale.ribbon = 'Sale';
+    var sp = Number(d.sale.percent);
+    d.sale.percent = sp >= 1 && sp <= 70 ? Math.round(sp * 10) / 10 : 0;
+    if (['all', 'categories', 'products'].indexOf(d.sale.scope) < 0) d.sale.scope = 'all';
+    ['categoryIds', 'productIds'].forEach(function (k) {
+      d.sale[k] = (Array.isArray(d.sale[k]) ? d.sale[k] : []).map(str).filter(Boolean).slice(0, 200);
+    });
+    // A sale with no end time, no discount or no start can't run.
+    if (!d.sale.percent || !d.sale.startsAt || !d.sale.endsAt) d.sale.enabled = false;
+
     var gid = String(d.settings.googleClientId || '').trim();
     d.settings.googleClientId = /^[\w.-]+\.apps\.googleusercontent\.com$/.test(gid) ? gid : '';
     if (!isObj(d.thumbs)) d.thumbs = {};

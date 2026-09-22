@@ -74,10 +74,14 @@
     // The variant's own photos first, then the color's shared photos (care, colour chart…) not already shown.
     var colorImgs = (color.images || []).filter(Boolean);
     var rawImgs = hasOwn ? (ov.images || []).concat(colorImgs.filter(function (x) { return ownImgs.indexOf(x) < 0; })) : (color.images || []);
+    var was = (sale != null && sale < price) ? sale : price;
+    var timed = m.salePriceOf(p, was);
     return {
-      color: color, size: size, price: price, salePrice: sale,
-      effective: (sale != null && sale < price) ? sale : price,
-      onSale: sale != null && sale < price,
+      color: color, size: size, price: price, salePrice: timed != null ? timed : sale,
+      effective: timed != null ? timed : was,
+      wasPrice: timed != null ? was : price,     // what the sale is taken off
+      timedSale: timed != null,
+      onSale: timed != null || (sale != null && sale < price),
       available: !off,
       upc: ov.upc || '',
       sku: sku, inStock: !off && m.invInStock(sku, baseStock),
@@ -99,18 +103,60 @@
     return m.optColor(p).values.filter(function (c) { return sizes.some(function (s) { return m.isOffered(p, c.id, s.id); }); });
   };
 
+  /* ---------- timed sale ----------
+     An extra percentage off while the sale window is open. It stops by itself at the end time: the price,
+     the band on the product page and the ribbons on the cards all come from this one setting. */
+  m.saleNow = function (now) {
+    var s = (DB() || {}).sale;
+    if (!s || !s.enabled || !(s.percent > 0)) return null;
+    var t = now ? +now : Date.now();
+    var from = Date.parse(s.startsAt), to = Date.parse(s.endsAt);
+    if (!isFinite(from) || !isFinite(to) || t < from || t >= to) return null;
+    return { name: s.name || 'Sale', ribbon: s.ribbon || 'Sale', percent: s.percent, endsAt: to, startsAt: from, scope: s.scope, s: s };
+  };
+  /* Is this product part of the sale that is running? */
+  m.saleFor = function (p) {
+    var sale = m.saleNow();
+    if (!sale || !p) return null;
+    if (sale.scope === 'products') {
+      var want = sale.s.productIds || [];
+      return want.indexOf(p.id) >= 0 || want.indexOf(p.slug) >= 0 ? sale : null;
+    }
+    if (sale.scope === 'categories') return (sale.s.categoryIds || []).indexOf(p.categoryId) >= 0 ? sale : null;
+    return sale;
+  };
+  /* The selling price with the sale applied (rounded to the cent, like the database). */
+  m.salePriceOf = function (p, effective) {
+    var sale = m.saleFor(p);
+    if (!sale || !(effective > 0)) return null;
+    var cut = Math.round(effective * (100 - sale.percent)) / 100;
+    return cut < effective ? cut : null;
+  };
+
   /* ---------- prices ---------- */
   m.simplePrice = function (p) {
     var price = +p.price, sale = p.salePrice != null && p.salePrice !== '' ? +p.salePrice : null;
-    return { price: price, salePrice: sale, onSale: sale != null && sale < price, effective: (sale != null && sale < price) ? sale : price };
+    var was = (sale != null && sale < price) ? sale : price;
+    var timed = m.salePriceOf(p, was);
+    return { price: price, salePrice: timed != null ? timed : sale, onSale: timed != null || (sale != null && sale < price),
+      effective: timed != null ? timed : was, wasPrice: timed != null ? was : price, timedSale: timed != null };
   };
   m.priceRange = function (p, lo, hi) {
-    if (!m.isCollection(p)) { var e = m.simplePrice(p).effective; return { min: e, max: e }; }
-    var vals = [];
-    m.eachVariant(p, function (v) { if (isFinite(v.effective) && (lo == null || v.effective >= lo) && (hi == null || v.effective <= hi)) vals.push(v.effective); });
+    if (!m.isCollection(p)) {
+      var sp = m.simplePrice(p);
+      return { min: sp.effective, max: sp.effective, wasMin: sp.wasPrice, wasMax: sp.wasPrice };
+    }
+    var vals = [], was = [];
+    m.eachVariant(p, function (v) {
+      if (!isFinite(v.effective) || (lo != null && v.effective < lo) || (hi != null && v.effective > hi)) return;
+      vals.push(v.effective);
+      was.push(v.wasPrice != null ? v.wasPrice : v.effective);
+    });
     if (!vals.length && (lo != null || hi != null)) return m.priceRange(p);
-    if (!vals.length) return { min: 0, max: 0 };
-    return { min: Math.min.apply(null, vals), max: Math.max.apply(null, vals) };
+    if (!vals.length) return { min: 0, max: 0, wasMin: 0, wasMax: 0 };
+    var at = vals.indexOf(Math.min.apply(null, vals));
+    return { min: Math.min.apply(null, vals), max: Math.max.apply(null, vals),
+      wasMin: was[at], wasMax: Math.max.apply(null, was) };
   };
 
   /* ---------- stock ---------- */

@@ -463,6 +463,8 @@ declare
   v_ov        jsonb;
   v_qty       int;
   v_took      int := 0;
+  v_timed     jsonb;
+  v_salecut   numeric := 0;
   v_sku       text;
   v_price     numeric;
   v_sale      numeric;
@@ -518,6 +520,21 @@ begin
   select s.data into v_store from public.store s where s.id = 'main';
   -- Counted stock lives in public.stock (not in the store JSON), so an order can take it off while an admin edits.
   select coalesce(jsonb_object_agg(k.sku, k.qty), '{}'::jsonb) into v_inv from public.stock k;
+
+  -- A timed sale takes an extra percentage off while its window is open. The shop shows the same figure;
+  -- this is what actually gets charged, so a sale that has ended can never be bought at the old price.
+  v_timed := v_store->'sale';
+  if coalesce(v_timed->>'enabled', 'false') = 'true'
+     and coalesce(public._num(v_timed->>'percent'), 0) between 1 and 70
+     and nullif(v_timed->>'startsAt', '') is not null and nullif(v_timed->>'endsAt', '') is not null then
+    begin
+      if now() >= (v_timed->>'startsAt')::timestamptz and now() < (v_timed->>'endsAt')::timestamptz then
+        v_salecut := public._num(v_timed->>'percent');
+      end if;
+    exception when others then
+      v_salecut := 0;   -- an unreadable date is simply no sale
+    end;
+  end if;
 
   -- Only the payment methods switched on in Admin › Storefront › Payment methods.
   if v_method = 'card' and coalesce(v_store->'payments'->>'stripe', 'false') <> 'true' then
@@ -593,6 +610,14 @@ begin
     end if;
 
     v_unit := case when v_sale is not null and v_sale > 0 and v_sale < v_price then v_sale else v_price end;
+    -- The timed sale, if this product is in it.
+    if v_salecut > 0 and (
+         coalesce(v_timed->>'scope', 'all') = 'all'
+         or (v_timed->>'scope' = 'categories' and coalesce(v_timed->'categoryIds', '[]'::jsonb) ? coalesce(v_prod->>'categoryId', ''))
+         or (v_timed->>'scope' = 'products' and (coalesce(v_timed->'productIds', '[]'::jsonb) ? coalesce(v_prod->>'id', '')
+                                                 or coalesce(v_timed->'productIds', '[]'::jsonb) ? coalesce(v_prod->>'slug', '')))) then
+      v_unit := round(v_unit * (100 - v_salecut) / 100, 2);
+    end if;
     -- A missing or $0 price is a catalog mistake, never a free item.
     if v_price is null or v_price <= 0 or v_unit is null or v_unit <= 0 then
       raise exception 'PRICE_MISSING' using errcode = '22023';

@@ -188,7 +188,8 @@
     return {
       html: '<div class="eyebrow">' + esc(cat ? cat.name : '') + (sub ? ' · ' + esc(sub.name) : '') + '</div>' +
         '<h1>' + esc(p.name) + '</h1>' +
-        '<div class="price"><span class="now ' + (sp.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(sp.effective) + '</span>' + (sp.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(sp.price) + '</span>' : '') + '</div>' +
+        saleBand(p) +
+        '<div class="price"><span class="now ' + (sp.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(sp.effective) + '</span>' + (sp.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(sp.timedSale ? sp.wasPrice : sp.price) + '</span>' : '') + '</div>' +
         descHTML(p) +
         (p.sku ? '<div class="skuline">SKU ' + esc(p.sku) + (p.upc ? ' · UPC ' + esc(p.upc) : '') + '</div>' : '') +
         '<div class="stocknote ' + (inStock ? 'in' : 'out') + '"><span aria-hidden="true">● </span>' + esc(m.stockLabel(qtyKey, inStock)) + '</div>' +
@@ -212,6 +213,15 @@
     var groups = [], by = {};
     list.forEach(function (s) { var g = s.group || 'Other'; if (!by[g]) { by[g] = []; groups.push(g); } by[g].push(s); });
     return groups.map(function (g) { return '<div class="sizegroup"><div class="sg-h">' + esc(g) + '</div><div class="sizes">' + by[g].map(btn).join('') + '</div></div>'; }).join('');
+  }
+
+  /* The sale band: the name of the sale and how long is left. One clock ticks it (js/features.js). */
+  function saleBand(p) {
+    var sale = m.saleFor(p);
+    if (!sale) return '';
+    return '<div class="saleband" role="note" data-sale-ends="' + sale.endsAt + '">' +
+      '<span class="t">' + esc(sale.name) + '</span>' +
+      '<span class="c" data-sale-clock="parts"></span></div>';
   }
 
   function collectionInfo(p, cat, sub) {
@@ -243,7 +253,8 @@
       v: v,
       html: '<div class="eyebrow">' + esc(cat ? cat.name : '') + (sub ? ' · ' + esc(sub.name) : '') + '</div>' +
         '<h1>' + esc(p.name) + '</h1>' +
-        '<div class="price" aria-live="polite"><span class="now ' + (v.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(v.effective) + '</span>' + (v.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(v.price) + '</span>' : '') + '</div>' +
+        saleBand(p) +
+        '<div class="price" aria-live="polite"><span class="now ' + (v.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(v.effective) + '</span>' + (v.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(v.timedSale ? v.wasPrice : v.price) + '</span>' : '') + '</div>' +
         descHTML(p) + swatches + sizes +
         '<div class="skuline">SKU ' + esc(v.sku) + (v.upc ? ' · UPC ' + esc(v.upc) : '') + '</div>' +
         '<div class="stocknote ' + (v.inStock ? 'in' : 'out') + '" aria-live="polite"><span aria-hidden="true">● </span>' + esc(v.inStock ? m.stockLabel(v.sku, true) : 'This option is currently sold out') + '</div>' +
