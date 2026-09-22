@@ -173,7 +173,12 @@
     // Timed sale
     if (!isObj(d.sale)) d.sale = { enabled: false, name: '', ribbon: 'Sale', percent: 0, startsAt: '', endsAt: '', scope: 'all', categoryIds: [], productIds: [] };
     d.sale.enabled = d.sale.enabled === true;
-    ['name', 'ribbon', 'startsAt', 'endsAt'].forEach(function (k) { d.sale[k] = str(d.sale[k]).slice(0, 120); });
+    ['name', 'ribbon'].forEach(function (k) { d.sale[k] = str(d.sale[k]).slice(0, 120); });
+    ['startsAt', 'endsAt'].forEach(function (k) {
+      // Kept as an exact moment. A bare "+00" offset (some tools write that) is widened so every browser reads it.
+      var ms = Date.parse(str(d.sale[k]).trim().replace(/([+-]\d\d)$/, '$1:00'));
+      d.sale[k] = isFinite(ms) ? new Date(ms).toISOString() : '';
+    });
     if (!d.sale.ribbon) d.sale.ribbon = 'Sale';
     var sp = Number(d.sale.percent);
     d.sale.percent = sp >= 1 && sp <= 70 ? Math.round(sp * 10) / 10 : 0;

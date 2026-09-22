@@ -363,6 +363,13 @@
   };
 
   /* Stock rows whose product or option no longer exists. */
+  /* An exact moment -> what a date-and-time box shows (the admin's own local time). */
+  A.toLocalInput = function (iso) {
+    var ms = Date.parse(iso || '');
+    if (!isFinite(ms)) return '';
+    return new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+
   /* Where a timed sale stands: waiting, running or finished, in words. */
   A.saleWindow = function (sale) {
     sale = sale || {};
@@ -492,6 +499,9 @@
     if (t === 'number') { if (String(v).trim() === '') return null; var n = parseFloat(v); return isNaN(n) ? null : n; }
     if (t === 'int') { var i = parseInt(v, 10); return isNaN(i) ? 0 : i; }
     if (t === 'lines') return String(v).split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    // A date-and-time box gives the admin's own local time; keep the exact moment so the shop and the
+    // database can't disagree about when a sale starts or ends.
+    if (t === 'datetime') { var ms = Date.parse(v); return isFinite(ms) ? new Date(ms).toISOString() : ''; }
     if (t === 'upper') return String(v).trim().toUpperCase();
     if (t === 'trim') return String(v).trim();
     if (t === 'slug') return u.slugify(v);

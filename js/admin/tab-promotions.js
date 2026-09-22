@@ -49,8 +49,8 @@
           ui.field('Extra off (%)', 'sale.percent', sale.percent, { type: 'number', min: 0, step: '0.5', hint: 'Taken off the price the shopper sees today. 1–70.' }) +
           ui.field('Applies to', 'sale.scope', sale.scope, { options: [['all', 'Every product'], ['categories', 'Chosen categories'], ['products', 'Chosen products']] }) + '</div>' +
           '<div class="grid2">' +
-          ui.field('Starts', 'sale.startsAt', sale.startsAt, { inputType: 'datetime-local', hint: 'Your own time zone.' }) +
-          ui.field('Ends', 'sale.endsAt', sale.endsAt, { inputType: 'datetime-local', hint: 'The countdown runs to this moment.' }) + '</div>' +
+          ui.field('Starts', 'sale.startsAt', A.toLocalInput(sale.startsAt), { inputType: 'datetime-local', type: 'datetime', hint: 'Your own time zone.' }) +
+          ui.field('Ends', 'sale.endsAt', A.toLocalInput(sale.endsAt), { inputType: 'datetime-local', type: 'datetime', hint: 'The countdown runs to this moment, wherever the shopper is.' }) + '</div>' +
           (sale.scope === 'categories'
             ? '<div class="field"><label>Categories in the sale</label><div class="checkrow">' +
               cats.map(function (c) {

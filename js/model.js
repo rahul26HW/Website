@@ -110,7 +110,8 @@
     var s = (DB() || {}).sale;
     if (!s || !s.enabled || !(s.percent > 0)) return null;
     var t = now ? +now : Date.now();
-    var from = Date.parse(s.startsAt), to = Date.parse(s.endsAt);
+    var when = function (v) { return Date.parse(String(v || '').trim().replace(/([+-]\d\d)$/, '$1:00')); };
+    var from = when(s.startsAt), to = when(s.endsAt);
     if (!isFinite(from) || !isFinite(to) || t < from || t >= to) return null;
     return { name: s.name || 'Sale', ribbon: s.ribbon || 'Sale', percent: s.percent, endsAt: to, startsAt: from, scope: s.scope, s: s };
   };
