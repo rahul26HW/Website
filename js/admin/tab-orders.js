@@ -36,6 +36,57 @@
     A.newOrders = os.list.filter(function (o) { return o.status === 'new'; }).length;
   }
 
+  /* ShipStation sends tracking in by itself, so this screen keeps itself in step: every 45 seconds while it is
+     on show, and straight away when the window comes back to the front. Typing is never overwritten. */
+  var poll = null;
+  function orderFingerprint() {
+    return (os.list || []).map(function (o) {
+      return [o.id, o.status, o.payment_status, o.tracking_number || '', o.carrier || '', o.cancel_requested_at || '', o.return_requested_at || ''].join('~');
+    }).join('|');
+  }
+  /* A webhook can go missing. Every few minutes, ask ShipStation directly about orders that are with it and
+     still have no tracking. */
+  var chasedAt = 0;
+  async function chaseTracking() {
+    if (Date.now() - chasedAt < 5 * 60000) return 0;
+    var due = (os.list || []).filter(function (o) {
+      return o.shipstation_order_id && !o.tracking_number && /^(new|accepted|packed)$/.test(o.status) &&
+        o.shipstation_synced_at && Date.now() - new Date(o.shipstation_synced_at).getTime() > 10 * 60000;
+    }).slice(0, 3);
+    if (!due.length) return 0;
+    chasedAt = Date.now();
+    for (var i = 0; i < due.length; i++) {
+      try { await A.workerCall('/shipstation/sync', { order_id: due[i].id }); } catch (e) { /* the next round tries again */ }
+    }
+    return due.length;
+  }
+
+  async function pollOrders() {
+    if (A.tab !== 'orders' || !os.list || !A.user || document.hidden) return;
+    await chaseTracking();
+    var before = orderFingerprint(), wasShipped = {};
+    os.list.forEach(function (o) { wasShipped[o.id] = (o.tracking_number || '') + '/' + o.status; });
+    await loadOrders();
+    if (orderFingerprint() === before) return;
+    var news = os.list.filter(function (o) {
+      return o.tracking_number && wasShipped[o.id] !== undefined && wasShipped[o.id] !== (o.tracking_number || '') + '/' + o.status;
+    });
+    news.forEach(function (o) { u.toast(o.order_number + ': ' + (o.status === 'shipped' ? 'shipped' : o.status) + (o.tracking_number ? ' — ' + (o.carrier ? o.carrier + ' ' : '') + o.tracking_number : '')); });
+    var open = os.open && os.list.find(function (x) { return x.id === os.open; });
+    if (open && A.edit && os.start && JSON.stringify(A.edit) !== os.start) return;   // unsaved edits: leave the form alone
+    if (open) {
+      A.edit = { status: open.status, payment_status: open.payment_status, carrier: open.carrier || '', tracking_number: open.tracking_number || '', admin_note: open.admin_note || '' };
+      os.start = JSON.stringify(A.edit);
+    }
+    A.render();
+  }
+  function watchOrders() {
+    if (poll) return;
+    poll = setInterval(pollOrders, 45000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) pollOrders(); });
+    window.addEventListener('focus', pollOrders);
+  }
+
   function orderList() {
     var asked = (os.list || []).filter(function (o) { return o.cancel_requested_at && !/^(cancelled|refunded|shipped|delivered)$/.test(o.status); });
     var returns = (os.list || []).filter(function (o) { return o.return_requested_at && !/^(cancelled|refunded)$/.test(o.status); });
@@ -163,7 +214,9 @@
     // ShipStation sends a ship date without a time (stored as midnight UTC), so show just the date then.
     var sd = o.shipped_at ? new Date(o.shipped_at) : null;
     var shippedText = sd ? (/T00:00:00(\.0+)?(Z|\+00:00)$/.test(o.shipped_at) ? sd.toLocaleDateString('en-US', { timeZone: 'UTC' }) : sd.toLocaleString('en-US')) : '';
-    return review + accept + pay + ship + err + btn + (sd ? '<p class="hint">Shipped ' + esc(shippedText) + '</p>' : '') + asked;
+    var waiting = o.shipstation_order_id && !o.tracking_number && /^(new|accepted|packed)$/.test(o.status)
+      ? '<p class="hint">Waiting for tracking. ShipStation sends it over when you ship the order, and it appears here by itself — this screen keeps itself up to date while it is open.</p>' : '';
+    return review + accept + pay + ship + err + btn + waiting + (sd ? '<p class="hint">Shipped ' + esc(shippedText) + '</p>' : '') + asked;
   }
 
   A.tabs.orders = {
@@ -173,6 +226,7 @@
       return orderList();
     },
     after: function () {
+      watchOrders();
       if (!os.list) { loadOrders().then(function () { if (A.tab === 'orders') A.render(); }); return; }
       var s = document.getElementById('oSearch');
       if (s) s.addEventListener('input', u.debounce(function () { os.q = s.value; var pos = s.selectionStart; A.render(); var n = document.getElementById('oSearch'); n.focus(); n.setSelectionRange(pos, pos); }, 250));
