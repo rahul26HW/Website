@@ -1,5 +1,13 @@
 # Changelog — Home Weavers rebuild
 
+## 2026-09-22 — Stock keeps itself, and real analytics
+
+- **Stock has its own table** (`public.stock`) instead of living inside the store record. An order takes its items off the shelf as it is placed; a cancelled or refunded order puts them back, through a database trigger, so it happens however the order is cancelled (customer, admin, Stripe or the scheduled job). The admin saves only the counts it actually changed, so a sale during an editing session is never undone. The "Deduct items from inventory" button is gone — there is nothing left to do by hand.
+- **Analytics, measured on our own server**: visits, product views, product cards seen and clicked, add to cart, checkout reached, where the visit came from (utm tags, Google Ads and Facebook click ids, or the linking site) and phone/tablet/computer. Orders remember the source, so revenue can be set against it. No Google Analytics, no advertising cookies, no third-party script: the visit number is random, lives in one browser tab and is deleted with it, and the figures are kept for six months.
+- Admin → Overview → **Analytics** shows all of it, with a range of 7, 30 or 90 days.
+- The Privacy Policy and the cookie banner explain the counting.
+- **Orders screen keeps itself up to date** (every 45 seconds while open, and when the window comes back), so ShipStation tracking appears without a manual refresh, with a quiet catch-up call if a webhook is ever missed.
+
 ## 2026-09-21 — CSV import: rename instead of duplicate
 
 - The product CSV matched colors and sizes **by name**, so an edited name read as a new color: the old one stayed and a copy was added (Glamour ended up with both "Green (new)" and "Green"). The import now recognises the color and size a **SKU** already belongs to and renames those.
