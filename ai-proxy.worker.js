@@ -899,6 +899,25 @@ async function applyShipment(env, filter, s) {
   return updated;
 }
 
+/* A label that was voided (or an order marked unshipped) in ShipStation: put the order back to "accepted"
+   here, clear the tracking number, and leave a note. Only ever touches an order we had marked shipped. */
+async function unshipOrder(env, filter, s) {
+  const before = await db(env, "orders?" + filter + "&select=id,order_number,status,tracking_number,admin_note&limit=1");
+  const was = Array.isArray(before) && before[0];
+  if (!was || was.status !== "shipped") return 0;
+  if (s && s.trackingNumber && was.tracking_number && String(s.trackingNumber) !== String(was.tracking_number)) return 0;
+  const note = "⚠ The label" + (was.tracking_number ? " (" + was.tracking_number + ")" : "") + " was voided in ShipStation on " +
+    new Date().toISOString().slice(0, 10) + ", so this order went back to Accepted.";
+  const rows = await patchOrder(env, filter + "&status=eq.shipped", {
+    status: "accepted",
+    carrier: null,
+    tracking_number: null,
+    shipped_at: null,
+    admin_note: (was.admin_note ? was.admin_note + "\n" : "") + note,
+  });
+  return Array.isArray(rows) ? rows.length : 0;
+}
+
 /* Our order for a ShipStation record: labels carry our orderKey; fulfillments only carry ShipStation's orderId. */
 function shipmentFilter(s) {
   if (UUID.test(s.orderKey || "")) return "id=eq." + s.orderKey;
@@ -925,7 +944,8 @@ async function handleShipstationWebhook(request, env) {
     pages = Math.min(Number(data && data.pages) || 1, 20);
     for (const s of [].concat((data && data.shipments) || [], (data && data.fulfillments) || [])) {
       const filter = shipmentFilter(s);
-      if (filter) updated += await applyShipment(env, filter, s);
+      if (!filter) continue;
+      updated += s && s.voided ? await unshipOrder(env, filter, s) : await applyShipment(env, filter, s);
     }
     page++;
   } while (page <= pages);
@@ -948,7 +968,11 @@ async function handleShipstationSync(request, env, cors) {
   const shipments = ((await shipstation(env, "shipments?orderNumber=" + num + "&includeShipmentItems=false")) || {}).shipments || [];
   let found = shipments.filter(mine);
   if (!found.length) found = (((await shipstation(env, "fulfillments?orderNumber=" + num)) || {}).fulfillments || []).filter(mine);
-  if (!found.length) return json({ ok: true, shipped: false }, 200, cors);
+  if (!found.length) {
+    // Nothing live in ShipStation any more: if we had it down as shipped, the label was voided or the order unshipped.
+    const back = order.status === "shipped" ? await unshipOrder(env, "id=eq." + order.id, null) : 0;
+    return json({ ok: true, shipped: false, unshipped: back > 0 }, 200, cors);
+  }
   const latest = found.sort((a, b) => String(b.shipDate || "").localeCompare(String(a.shipDate || "")))[0];
   const updated = await applyShipment(env, "id=eq." + order.id, latest);
   const fresh = await loadOrder(env, "id=eq." + order.id);

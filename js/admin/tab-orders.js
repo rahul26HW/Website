@@ -57,6 +57,11 @@
       return o.shipstation_order_id && !o.tracking_number && /^(new|accepted|packed)$/.test(o.status) &&
         o.shipstation_synced_at && Date.now() - new Date(o.shipstation_synced_at).getTime() > 10 * 60000;
     }).slice(0, 3);
+    // Recently shipped orders get a second look as well, in case the label was voided in ShipStation.
+    due = due.concat((os.list || []).filter(function (o) {
+      return o.shipstation_order_id && o.status === 'shipped' && o.shipped_at &&
+        Date.now() - new Date(o.shipped_at).getTime() < 7 * 24 * 3600 * 1000;
+    }).slice(0, 2));
     if (!due.length) return 0;
     chasedAt = Date.now();
     for (var i = 0; i < due.length; i++) {
@@ -222,6 +227,10 @@
       ? (o.shipstation_order_id ? '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">Cancel in ShipStation</button></div>' : '')
       : '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-shipstation">' + (o.shipstation_order_id ? 'Send to ShipStation again' : 'Send to ShipStation') + '</button>' +
         (o.shipstation_order_id && /^(new|accepted|packed)$/.test(o.status) ? '<button class="btn ghost sm" type="button" data-a="order-sync">Get tracking from ShipStation</button>' : '') + '</div>';
+    if (o.shipstation_order_id && o.status === 'shipped') {
+      btn = '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-sync">Check ShipStation again</button></div>' +
+        '<p class="hint">If the label was voided or the order marked unshipped in ShipStation, this puts the order back to Accepted and clears the tracking number.</p>';
+    }
     // ShipStation sends a ship date without a time (stored as midnight UTC), so show just the date then.
     var sd = o.shipped_at ? new Date(o.shipped_at) : null;
     var shippedText = sd ? (/T00:00:00(\.0+)?(Z|\+00:00)$/.test(o.shipped_at) ? sd.toLocaleDateString('en-US', { timeZone: 'UTC' }) : sd.toLocaleString('en-US')) : '';
