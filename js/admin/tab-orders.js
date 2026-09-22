@@ -273,13 +273,24 @@
       A.alert(['Add the tracking number before marking it ' + patch.status + ' (ShipStation fills it in by itself when you ship there).'], document.querySelector('#adminMain [data-bind="@tracking_number"]')); return;
     }
     if (patch.payment_status === 'paid' && /^(cancelled)$/.test(patch.status) && o.payment_status !== 'paid') { A.alert(['A cancelled order can’t be marked paid.']); return; }
+    var was = o.status;
     var r = await A.sb.from('orders').update(patch).eq('id', o.id).select('*, order_items(*)');
     if (r.error || !r.data || !r.data.length) { u.toast('Save failed: ' + (r.error ? r.error.message : 'not allowed')); return; }
     Object.assign(o, r.data[0]);
     A.actions['order-open']({ dataset: { id: o.id } });
     A.newOrders = os.list.filter(function (x) { return x.status === 'new'; }).length;
     u.toast('Order ' + o.order_number + ' saved');
+    if (o.status !== was) await tellCustomer(o, o.status);
   };
+  /* A status changed here never passes through the mail server, so ask it to write to the customer. */
+  async function tellCustomer(o, kind) {
+    if (['cancelled', 'refunded', 'shipped'].indexOf(kind) < 0) return;
+    try {
+      var r = await A.workerCall('/orders/notify', { order_id: o.id, kind: kind });
+      u.toast(r && r.sent ? 'Customer emailed about the ' + kind + ' order' : 'Order saved, but no email went out (email isn’t set up).');
+    } catch (e) { u.toast('Order saved, but the email failed: ' + e.message); }
+  }
+
   A.actions['order-cancel'] = async function (btn) {
     var o = os.list.find(function (x) { return x.id === os.open; });
     if (!o || !canCancel(o)) { u.toast('This order can’t be cancelled any more.'); return; }
@@ -300,6 +311,7 @@
     A.newOrders = os.list.filter(function (x) { return x.status === 'new'; }).length;
     A.actions['order-open']({ dataset: { id: o.id } });
     u.toast('Order ' + o.order_number + ' cancelled');
+    await tellCustomer(o, 'cancelled');
   };
 
   A.actions['order-shipstation'] = async function (btn) {

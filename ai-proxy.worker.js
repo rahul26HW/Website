@@ -16,6 +16,7 @@
      POST /order/cancel         Customer cancels inside the free window: refund + cancel  (order number + email)
      POST /order/placed         Cash-on-delivery order just placed → "we've got your order" email (order number + pay token)
      POST /orders/accept        Accept one order now and send it to ShipStation           (admins only)
+     POST /orders/notify        Email the customer that an order was cancelled/refunded/shipped (admins only)
      POST /orders/release       Accept orders whose cancellation window has passed        (scheduled job)
      POST /email/test           Send a sample order email to the signed-in admin           (admins only)
      POST /account/code         Customer sign-in / sign-up: email a 6-digit code
@@ -98,6 +99,7 @@ export default {
           return json({ ok: true, service: "home-weavers-worker", features: features(env) }, 200, cors);
         }
         case "/orders/accept": return await handleOrderAccept(request, env, cors);
+        case "/orders/notify": return await handleOrderNotify(request, env, cors);
         case "/orders/release": return await handleOrderRelease(request, env, cors);
         case "/email/test": return await handleEmailTest(request, env, cors);
         case "/account/code": return await handleAccountCode(request, env, cors);
@@ -113,7 +115,7 @@ export default {
     } catch (e) {
       // Details go to the Cloudflare log. Only signed-in admins get them back; shoppers and webhooks get a plain message.
       console.error(url.pathname, e && e.stack ? e.stack : e);
-      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/email/test", "/admin/health"].includes(url.pathname.replace(/\/+$/, ""));
+      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/orders/notify", "/email/test", "/admin/health"].includes(url.pathname.replace(/\/+$/, ""));
       return json({ error: adminRoute ? "Worker error: " + (e && e.message ? e.message : "unknown") : "Something went wrong. Please try again in a moment." }, 500, cors);
     }
   },
@@ -506,6 +508,26 @@ async function handleOrderAccept(request, env, cors) {
   if (!/^(authorized|paid|cod)$/.test(order.payment_status)) return json({ error: "This order isn’t paid, so it can’t be accepted." }, 409, cors);
   const r = await acceptOrder(env, order);
   return json(r, r.retry ? 503 : r.error ? 402 : 200, cors);
+}
+
+/* POST /orders/notify { order_id, kind } — admins only. Tells the customer what just happened to their order
+   (cancelled, refunded, shipped), because a status changed in the admin never passes through this server. */
+const NOTIFY_KINDS = ["cancelled", "refunded", "shipped", "accepted"];
+async function handleOrderNotify(request, env, cors) {
+  const denied = await requireAdmin(request, env);
+  if (denied) return json({ error: denied }, 401, cors);
+  const body = await readJson(request);
+  if (!UUID.test(body.order_id || "")) return json({ error: "Missing order" }, 400, cors);
+  const kind = String(body.kind || "");
+  if (!NOTIFY_KINDS.includes(kind)) return json({ error: "Unknown message" }, 400, cors);
+  const order = await loadOrder(env, "id=eq." + body.order_id);
+  if (!order) return json({ error: "Order not found" }, 404, cors);
+  const sent = await sendOrderEmail(env, kind, order, {
+    cod: order.payment_method === "cod",
+    refunded: kind === "refunded",
+    voided: kind === "cancelled" && order.payment_status === "voided",
+  });
+  return json({ ok: !!sent, sent: !!sent, to: order.email }, 200, cors);
 }
 
 /* POST /orders/release — the scheduled job (and admins). Accepts every paid order whose window has passed. */
