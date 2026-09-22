@@ -1,5 +1,11 @@
 # Changelog — Home Weavers rebuild
 
+## 2026-09-22 — Order emails from the admin, and un-shipping
+
+- **Cancelling, refunding or shipping an order from the admin now emails the customer.** A status changed in the admin went straight to the database, so the mail server never knew and the customer heard nothing. New admins-only `/orders/notify` route; the admin calls it and reports whether the email went.
+- **A voided label in ShipStation puts the order back here**: status returns to Accepted, carrier, tracking number and ship date are cleared, and a private note says why. The webhook handles it, "Check ShipStation again" does it on demand, and the Orders screen re-checks recently shipped orders by itself.
+- Cancelling an order has its own button, and the status list offers only the moves an order can actually make.
+
 ## 2026-09-22 — Stock keeps itself, and real analytics
 
 - **Stock has its own table** (`public.stock`) instead of living inside the store record. An order takes its items off the shelf as it is placed; a cancelled or refunded order puts them back, through a database trigger, so it happens however the order is cancelled (customer, admin, Stripe or the scheduled job). The admin saves only the counts it actually changed, so a sale during an editing session is never undone. The "Deduct items from inventory" button is gone — there is nothing left to do by hand.
