@@ -8,8 +8,8 @@
   'use strict';
 
   var cfg = window.HW_CONFIG || {};
-  var VKEY = 'hw:visit', SKEY = 'hw:visit:src', SEEN = 'hw:seen';
-  var queue = [], timer = null, started = false, seenCards = {}, viewedPath = {};
+  var VKEY = 'hw:visit', SKEY = 'hw:visit:src', SEEN = 'hw:seen', STARTED = 'hw:visit:on';
+  var queue = [], timer = null, seenCards = {}, viewedPath = {};
 
   function ok() { return !!(cfg.supabaseUrl && cfg.supabasePublishableKey); }
 
@@ -66,13 +66,19 @@
     } catch (e) { return false; }
   }
 
-  function send(beacon) {
+  function send(leaving) {
     if (!queue.length || !ok()) return;
     var batch = queue.splice(0, 30);
     var body = JSON.stringify({ p_batch: batch });
+    var url = cfg.supabaseUrl + '/rest/v1/rpc/track_events';
     try {
-      fetch(cfg.supabaseUrl + '/rest/v1/rpc/track_events', {
-        method: 'POST', keepalive: !!beacon, mode: 'cors',
+      // On the way out a beacon still gets through; the key goes in the address because a beacon carries no headers.
+      if (leaving && navigator.sendBeacon) {
+        navigator.sendBeacon(url + '?apikey=' + encodeURIComponent(cfg.supabasePublishableKey), new Blob([body], { type: 'application/json' }));
+        return;
+      }
+      fetch(url, {
+        method: 'POST', keepalive: !!leaving, mode: 'cors',
         headers: { apikey: cfg.supabasePublishableKey, 'Content-Type': 'application/json' },
         body: body
       }).catch(function () { /* measurement must never get in the way */ });
@@ -85,7 +91,7 @@
     queue.push(e);
     if (queue.length >= 20) { clearTimeout(timer); send(false); return; }
     clearTimeout(timer);
-    timer = setTimeout(function () { send(false); }, 4000);
+    timer = setTimeout(function () { send(false); }, 900);
   }
 
   var M = {
@@ -95,8 +101,9 @@
     page: function (path, productId) {
       if (!ok()) return;
       var o = origin();
-      if (!started) {
-        started = true;
+      // One visit per browser tab, even when a link loads a fresh page.
+      if (!session(STARTED, null)) {
+        try { sessionStorage.setItem(STARTED, '1'); } catch (e) { /* private window */ }
         push({ k: 'visit', p: path, s: o.s, m: o.m, d: device(), n: firstTime() ? '1' : '' });
       }
       if (viewedPath[path + '|' + (productId || '')]) return;
