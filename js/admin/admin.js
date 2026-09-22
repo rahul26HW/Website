@@ -2,7 +2,7 @@
 (function (HW) {
   'use strict';
 
-  var FILES = ['core.js', 'media.js', 'sample.js', 'tab-dashboard.js', 'tab-storefront.js', 'tab-banner.js', 'tab-pages.js',
+  var FILES = ['core.js', 'media.js', 'sample.js', 'tab-dashboard.js', 'tab-analytics.js', 'tab-storefront.js', 'tab-banner.js', 'tab-pages.js',
     'tab-categories.js', 'tab-products.js', 'tab-products-csv.js', 'tab-inventory.js', 'tab-orders.js', 'tab-promotions.js', 'tab-marketing.js'];
   // Served from this site (copied from the npm package @supabase/supabase-js 2.116.0) — no third-party script CDN.
   var SUPABASE_JS = HW.asset('js/vendor/supabase-js-2.116.0.js');
