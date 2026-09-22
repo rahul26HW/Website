@@ -90,8 +90,8 @@
     annBar.classList.toggle('sale-final', !!sale && sale.endsAt - Date.now() < 24 * 3600 * 1000);
     if (sale) {
       var last = sale.endsAt - Date.now() < 24 * 3600 * 1000;
-      annText.innerHTML = (last ? 'Last day — ' : '') + u.esc(sale.name) + ' · ends in ' +
-        '<b data-sale-ends="' + sale.endsAt + '" data-sale-style="bar"></b>';
+      annText.innerHTML = '<span class="ann-head">' + (last ? 'Last day! ' : '') + u.esc(sale.name) + '</span>' +
+        '<span class="ann-clock">Ends in <b data-sale-ends="' + sale.endsAt + '" data-sale-style="bar"></b></span>';
       annBar.hidden = false;
       if (HW.saleClock) HW.saleClock.start();
     } else {
