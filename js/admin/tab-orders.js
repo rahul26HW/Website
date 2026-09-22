@@ -6,6 +6,10 @@
   var STATUSES = [['new', 'New'], ['accepted', 'Accepted'], ['packed', 'Packed'], ['shipped', 'Shipped'], ['delivered', 'Delivered'], ['refunded', 'Refunded'], ['cancelled', 'Cancelled']];
   var PAYMENTS = [['unpaid', 'Unpaid'], ['cod', 'Cash on delivery'], ['authorized', 'Card held'], ['paid', 'Paid'], ['refunded', 'Refunded'], ['voided', 'Hold released'], ['failed', 'Charge failed']];
   var os = { filter: 'all', q: '', open: null, list: null };
+  /* Orders only move forward. Anything not listed here can't be set from the drop-down. */
+  var NEXT = { new: ['accepted', 'packed', 'shipped', 'cancelled'], accepted: ['packed', 'shipped', 'cancelled'],
+    packed: ['shipped', 'cancelled'], shipped: ['delivered', 'refunded'], delivered: ['refunded'], cancelled: [], refunded: [] };
+  function canCancel(o) { return (NEXT[o.status] || []).indexOf('cancelled') >= 0; }
   var ms = { list: null, open: null };
 
   function statusTag(s) {
@@ -153,12 +157,19 @@
       '</div>' +
       ui.panel('Payment &amp; ShipStation', paymentShipHTML(o)) +
       ui.panel('Fulfillment',
-        '<div class="grid2">' + ui.field('Status', '@status', draft.status, { options: STATUSES }) + ui.field('Payment', '@payment_status', draft.payment_status, { options: PAYMENTS }) + '</div>' +
+        '<div class="grid2">' + ui.field('Status', '@status', draft.status, { options: STATUSES.filter(function (x) { return x[0] === o.status || (NEXT[o.status] || []).indexOf(x[0]) >= 0; }) }) +
+        ui.field('Payment', '@payment_status', draft.payment_status, { options: PAYMENTS }) + '</div>' +
         '<div class="grid2">' + ui.field('Carrier', '@carrier', draft.carrier || '', { placeholder: 'USPS, UPS, FedEx…', type: 'trim' }) +
         ui.field('Tracking number', '@tracking_number', draft.tracking_number || '', { type: 'trim' }) + '</div>' +
         ui.field('Private note', '@admin_note', draft.admin_note || '', { textarea: true, rows: 2, hint: 'Only visible here.' }) +
         '<p class="hint">Customers see status, carrier and tracking number on Track your order.</p>' +
-        '<div class="btnrow"><button class="btn loom save-btn" type="button" data-a="order-save">Save order</button></div>');
+        '<div class="btnrow"><button class="btn loom save-btn" type="button" data-a="order-save">Save order</button>' +
+        (canCancel(o) ? '<button class="btn ghost sm" type="button" data-a="order-cancel">Cancel this order</button>' : '') + '</div>' +
+        (canCancel(o) ? '<p class="hint">Cancelling puts the items back in stock' + (o.shipstation_order_id ? ', tells ShipStation' : '') +
+            (o.payment_status === 'cod' ? ' and leaves nothing to refund — the cash was never collected.' : o.payment_status === 'authorized' ? ' and releases the hold on the card.' : o.payment_status === 'paid' ? '. Refund the payment in Stripe as well.' : '.') + '</p>'
+          : /^(shipped|delivered)$/.test(o.status)
+            ? '<p class="hint">This order has already ' + (o.status === 'delivered' ? 'been delivered' : 'shipped') + ', so it can no longer be cancelled. If it comes back, refund the customer and set the status to <b>Refunded</b> — the items go back into stock then.</p>'
+            : '<p class="hint">This order is ' + esc(o.status) + ' and closed.</p>'));
   }
 
   function paymentShipHTML(o) {
@@ -255,8 +266,6 @@
     var o = os.list.find(function (x) { return x.id === os.open; });
     var patch = A.clone(A.edit);
     // Orders move forward one way only; shipped/delivered need a tracking number.
-    var NEXT = { new: ['accepted', 'packed', 'shipped', 'cancelled'], accepted: ['packed', 'shipped', 'cancelled'], packed: ['shipped', 'cancelled'],
-      shipped: ['delivered', 'refunded'], delivered: ['refunded'], cancelled: [], refunded: [] };
     if (patch.status !== o.status && (NEXT[o.status] || []).indexOf(patch.status) < 0) {
       A.alert(['An order that is “' + o.status + '” can’t be changed to “' + patch.status + '”.' + (o.status === 'cancelled' || o.status === 'refunded' ? ' It’s closed.' : '')]); return;
     }
@@ -271,6 +280,28 @@
     A.newOrders = os.list.filter(function (x) { return x.status === 'new'; }).length;
     u.toast('Order ' + o.order_number + ' saved');
   };
+  A.actions['order-cancel'] = async function (btn) {
+    var o = os.list.find(function (x) { return x.id === os.open; });
+    if (!o || !canCancel(o)) { u.toast('This order can’t be cancelled any more.'); return; }
+    var note = o.payment_status === 'paid' ? ' It has been paid — refund it in Stripe as well.'
+      : o.payment_status === 'authorized' ? ' The hold on the card is released.' : '';
+    if (!confirm('Cancel order ' + o.order_number + '? The items go back into stock' + (o.shipstation_order_id ? ' and ShipStation is told to cancel it' : '') + '.' + note)) return;
+    btn.disabled = true; btn.textContent = 'Cancelling…';
+    var patch = { status: 'cancelled' };
+    if (o.payment_status === 'authorized') patch.payment_status = 'voided';
+    var r = await A.sb.from('orders').update(patch).eq('id', o.id).select('*, order_items(*)');
+    if (r.error || !r.data || !r.data.length) { btn.disabled = false; btn.textContent = 'Cancel this order'; u.toast('Couldn’t cancel: ' + (r.error ? r.error.message : 'not allowed')); return; }
+    Object.assign(o, r.data[0]);
+    if (o.shipstation_order_id) {
+      try { await A.workerCall('/shipstation/push', { order_id: o.id }); } catch (e) { u.toast('Cancelled here, but ShipStation said: ' + e.message); }
+      var r2 = await A.sb.from('orders').select('*, order_items(*)').eq('id', o.id);
+      if (!r2.error && r2.data && r2.data[0]) Object.assign(o, r2.data[0]);
+    }
+    A.newOrders = os.list.filter(function (x) { return x.status === 'new'; }).length;
+    A.actions['order-open']({ dataset: { id: o.id } });
+    u.toast('Order ' + o.order_number + ' cancelled');
+  };
+
   A.actions['order-shipstation'] = async function (btn) {
     var o = os.list.find(function (x) { return x.id === os.open; });
     if (o.status === 'cancelled') { if (!confirm('Mark this order as cancelled in ShipStation?')) return; }
