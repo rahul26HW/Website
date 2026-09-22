@@ -345,6 +345,7 @@
   document.addEventListener('focusout', function (e) { swatchName(e, true); });
 
   HW.pdp = {
+    currentId: function () { var p = current(); return p ? p.id : ''; },
     swScroll: function (d) {
       var row = document.getElementById('swatchRow');
       if (row) row.scrollBy({ left: d * swatchStep(), behavior: 'smooth' });

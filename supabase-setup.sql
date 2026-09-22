@@ -462,6 +462,7 @@ declare
   v_size      jsonb;
   v_ov        jsonb;
   v_qty       int;
+  v_took      int := 0;
   v_sku       text;
   v_price     numeric;
   v_sale      numeric;
@@ -515,7 +516,8 @@ begin
   end if;
 
   select s.data into v_store from public.store s where s.id = 'main';
-  v_inv := coalesce(v_store->'inventory', '{}'::jsonb);
+  -- Counted stock lives in public.stock (not in the store JSON), so an order can take it off while an admin edits.
+  select coalesce(jsonb_object_agg(k.sku, k.qty), '{}'::jsonb) into v_inv from public.stock k;
 
   -- Only the payment methods switched on in Admin › Storefront › Payment methods.
   if v_method = 'card' and coalesce(v_store->'payments'->>'stripe', 'false') <> 'true' then
@@ -611,18 +613,14 @@ begin
     v_prod := null; v_color := null; v_size := null;
   end loop;
 
-  -- Tracked stock: the count in the admin minus what open orders already hold (paid, card-approved, cash on
-  -- delivery, or unpaid for under 35 minutes), until the admin deducts it. One lock per SKU, taken in a fixed
+  -- Counted stock: what is on the shelf right now. Every order takes its items off as it is placed and puts
+  -- them back if it is cancelled, so nothing else has to be subtracted here. One lock per SKU, in a fixed
   -- order, so two shoppers can't both buy the last one.
   for k in select key from jsonb_each(v_need) order by key loop
     if v_inv ? k then
       perform pg_advisory_xact_lock(hashtext('stock:' || k));
-      select coalesce(sum(i.qty), 0) into v_held
-        from public.order_items i join public.orders o on o.id = i.order_id
-       where i.sku = k and o.status not in ('cancelled','refunded') and not o.stock_deducted
-         and (o.payment_status in ('authorized','paid','cod')
-              or (o.payment_status = 'unpaid' and o.created_at > now() - interval '35 minutes'));
-      if coalesce(public._num(v_inv->>k), 0) - v_held < public._num(v_need->>k) then
+      select st.qty into v_held from public.stock st where st.sku = k for update;
+      if coalesce(v_held, 0) < public._num(v_need->>k) then
         raise exception 'OUT_OF_STOCK:%', (select l->>'name' from jsonb_array_elements(v_lines) l where l->>'sku' = k limit 1) using errcode = '22023';
       end if;
     end if;
@@ -696,7 +694,7 @@ begin
 
   insert into public.orders (order_number, email, name, phone, shipping_address,
                              subtotal, discount, shipping, tax, total, promo_code, customer_note,
-                             payment_method, cod_fee, payment_status, paid_at)
+                             payment_method, cod_fee, payment_status, paid_at, visit_source, visit_medium)
   values (v_number, v_email, v_name, left(nullif(trim(p_order->>'phone'),''), 40),
           jsonb_build_object(
             'line1',   left(trim(v_addr->>'line1'), 200),
@@ -710,13 +708,26 @@ begin
           left(nullif(trim(p_order->>'note'),''), 1000),
           -- A COD order is confirmed straight away (paid_at starts the free cancellation window); cash is collected on delivery.
           v_method, round(v_fee,2), case when v_method = 'cod' then 'cod' else 'unpaid' end,
-          case when v_method = 'cod' then now() end)
+          case when v_method = 'cod' then now() end,
+          -- Where this shopper came from, for the Analytics screen. Just a label, never anything personal.
+          left(nullif(trim(coalesce(p_order->>'visitSource','')), ''), 80),
+          left(nullif(trim(coalesce(p_order->>'visitMedium','')), ''), 20))
   returning id, pay_token into v_order_id, v_token;
 
   insert into public.order_items (order_id, product_id, sku, name, variant, unit_price, qty, line_total, image)
   select v_order_id, l->>'product_id', l->>'sku', l->>'name', l->>'variant',
          (l->>'unit_price')::numeric, (l->>'qty')::int, (l->>'line_total')::numeric, l->>'image'
     from jsonb_array_elements(v_lines) l;
+
+  -- Take the items off the shelf now. A cancelled order puts them back (trigger orders_restock).
+  update public.stock st
+     set qty = greatest(0, st.qty - n.need), updated_at = now()
+    from (select t.key as sku, coalesce(public._num(t.value #>> '{}'), 0)::int as need from jsonb_each(v_need) t) n
+   where st.sku = n.sku;
+  get diagnostics v_took = row_count;
+  if v_took > 0 then
+    update public.orders set stock_deducted = true where id = v_order_id;
+  end if;
 
   if v_code is not null then
     insert into public.promo_redemptions (promo_code, email, order_id)
@@ -905,6 +916,8 @@ begin
                                               where v_code <> '' and upper(p->>'code') = v_code and coalesce(p->>'active', 'false') = 'true'), '[]'::jsonb));
   -- Small images only for the photos the light catalog still uses (the product page brings its own).
   v_data := jsonb_set(v_data, '{thumbs}', public._thumbs_for(v_data - 'thumbs', v_data->'thumbs'));
+  -- Counted stock comes from public.stock, the one place it is kept.
+  v_data := jsonb_set(v_data, '{inventory}', coalesce((select jsonb_object_agg(k.sku, k.qty) from public.stock k), '{}'::jsonb));
   return jsonb_build_object('data', v_data, 'updated_at', v_at);
 end $$;
 

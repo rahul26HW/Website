@@ -40,12 +40,12 @@
       else action = '<button class="btn block sm loom" type="button" data-act="add" data-id="' + esc(p.id) + '" aria-label="Add ' + esc(p.name) + ' to cart">Add to cart</button>';
     }
 
-    return '<article class="pcard reveal' + (out ? ' is-out' : '') + '">' +
+    return '<article class="pcard reveal' + (out ? ' is-out' : '') + '" data-pid="' + esc(p.id) + '">' +
       '<div class="imgwrap">' +
-      '<a href="' + url + '" tabindex="-1" aria-hidden="true"><img class="ph" src="' + esc(HW.asset(m.thumb(m.imageOrSwatch(p)))) + '" alt="' + esc(m.imageAlt(p)) + '"' + (opts.eager ? (opts.eager === 'high' ? ' fetchpriority="high"' : '') : ' loading="lazy"') + ' decoding="async" width="600" height="770"></a>' +
+      '<a href="' + url + '" tabindex="-1" aria-hidden="true" data-pclick="' + esc(p.id) + '"><img class="ph" src="' + esc(HW.asset(m.thumb(m.imageOrSwatch(p)))) + '" alt="' + esc(m.imageAlt(p)) + '"' + (opts.eager ? (opts.eager === 'high' ? ' fetchpriority="high"' : '') : ' loading="lazy"') + ' decoding="async" width="600" height="770"></a>' +
       badge + (HW.wishlist ? HW.wishlist.button(p) : '') + '<div class="quick">' + action + '</div></div>' +
       '<div class="meta"><div class="cat">' + esc(cat ? cat.name : '') + '</div>' +
-      '<' + h + ' class="pname"><a href="' + url + '">' + esc(p.name) + '</a></' + h + '>' +
+      '<' + h + ' class="pname"><a href="' + url + '" data-pclick="' + esc(p.id) + '">' + esc(p.name) + '</a></' + h + '>' +
       '<div class="price">' + priceHtml + '</div>' + swatches + '</div></article>';
   };
 

@@ -349,6 +349,8 @@
             email: get('email'), name: get('name'), phone: get('phone'), note: get('note'),
             address: { line1: get('line1'), line2: get('line2'), city: get('city'), state: get('state'), zip: get('zip'), country: 'US' },
             promoCode: t.promo && t.promoValid ? t.promo.code : '',
+            visitSource: HW.measure ? HW.measure.source().s : '',
+            visitMedium: HW.measure ? HW.measure.source().m : '',
             paymentMethod: pay,
             items: t.lines.map(function (l) { return { productId: l.id, colorId: l.colorId, sizeId: l.sizeId, qty: l.qty }; })
           }

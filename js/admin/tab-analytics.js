@@ -1,166 +1,126 @@
 /* Home Weavers — admin: Analytics.
-   SAMPLE DATA for now: the numbers below are made up so the layout can be agreed before anything is measured.
-   Nothing here reads from the store yet, and no visitor is tracked. */
+   Real figures, measured on our own server (public.events + orders). No Google Analytics, no advertising
+   cookies, nothing personal: a visit is a random number that lives in one browser tab. */
 (function (HW) {
   'use strict';
 
   var A = HW.A, u = HW.u, esc = u.esc;
-  var an = { days: 30 };
+  var an = { days: 30, data: null, loading: false, error: null, loadedFor: null };
   var RANGES = [[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days']];
 
   var money = function (n) { return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
   var num = function (n) { return Number(n || 0).toLocaleString('en-US'); };
-  var pct = function (n) { return (Math.round(n * 10) / 10).toFixed(1) + '%'; };
-  var scale = function (per30) { return Math.round(per30 / 30 * an.days); };
+  var rate = function (a, b) { return b > 0 ? (Math.round(a / b * 1000) / 10).toFixed(1) + '%' : '—'; };
 
-  /* A steady made-up series, so the picture doesn't jump around between renders. */
-  function series(days, base, swing, seed) {
-    var out = [], x = seed || 7;
-    for (var i = 0; i < days; i++) {
-      x = (x * 9301 + 49297) % 233280;
-      var wave = Math.sin(i / 6) * 0.18 + (i % 7 === 5 || i % 7 === 6 ? 0.22 : 0);   // weekends run higher
-      out.push(Math.max(1, Math.round(base * (1 + wave) + (x / 233280 - 0.5) * swing)));
-    }
-    return out;
+  async function load() {
+    an.loading = true; an.error = null;
+    var r = await A.sb.rpc('admin_analytics', { p_days: an.days });
+    an.loading = false;
+    an.loadedFor = an.days;
+    if (r.error) { an.error = r.error.message; an.data = null; return; }
+    an.data = r.data || null;
   }
 
-  function sparkline(a, b) {
-    var w = 720, h = 150, pad = 4, max = Math.max.apply(null, a) * 1.15;
-    var x = function (i) { return pad + i * (w - pad * 2) / (a.length - 1); };
-    var y = function (v) { return h - pad - v / max * (h - pad * 2); };
-    var path = function (arr) { return arr.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1); }).join(' '); };
-    var maxB = Math.max.apply(null, b), yb = function (v) { return h - pad - v / (maxB * 1.6) * (h - pad * 2); };
+  /* Visits and orders by day, drawn from the numbers themselves. */
+  function chart(daily) {
+    var w = 720, h = 150, pad = 4;
+    var vs = daily.map(function (d) { return Number(d.visits) || 0; });
+    var os = daily.map(function (d) { return Number(d.orders) || 0; });
+    if (vs.length < 2) return '<p class="hint">Not enough days yet.</p>';
+    var maxV = Math.max.apply(null, vs) || 1, maxO = Math.max.apply(null, os) || 1;
+    var x = function (i) { return pad + i * (w - pad * 2) / (vs.length - 1); };
+    var y = function (v, max) { return h - pad - v / (max * 1.15) * (h - pad * 2); };
+    var line = function (arr, max) { return arr.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v, max).toFixed(1); }).join(' '); };
     return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="150" preserveAspectRatio="none" role="img" aria-label="Visits and orders by day" style="display:block">' +
-      '<path d="' + path(a) + ' L' + x(a.length - 1).toFixed(1) + ' ' + (h - pad) + ' L' + pad + ' ' + (h - pad) + ' Z" fill="rgba(47,74,61,.10)"/>' +
-      '<path d="' + path(a) + '" fill="none" stroke="#2F4A3D" stroke-width="2"/>' +
-      '<path d="' + b.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + yb(v).toFixed(1); }).join(' ') + '" fill="none" stroke="#B4674A" stroke-width="2" stroke-dasharray="4 3"/>' +
-      '</svg>' +
-      '<p class="hint" style="margin:6px 0 0"><span style="color:#2F4A3D">━</span> Visits &nbsp; <span style="color:#B4674A">╌</span> Orders</p>';
+      '<path d="' + line(vs, maxV) + ' L' + x(vs.length - 1).toFixed(1) + ' ' + (h - pad) + ' L' + pad + ' ' + (h - pad) + ' Z" fill="rgba(47,74,61,.10)"/>' +
+      '<path d="' + line(vs, maxV) + '" fill="none" stroke="#2F4A3D" stroke-width="2"/>' +
+      '<path d="' + line(os, maxO * 1.6) + '" fill="none" stroke="#B4674A" stroke-width="2" stroke-dasharray="4 3"/>' +
+      '</svg><p class="hint" style="margin:6px 0 0"><span style="color:#2F4A3D">━</span> Visits (busiest day ' + num(maxV) + ')' +
+      ' &nbsp; <span style="color:#B4674A">╌</span> Orders (busiest day ' + num(maxO) + ')</p>';
   }
 
-  function table(head, rows, cls) {
-    return '<div class="tablewrap"><table class="adt ' + (cls || '') + '"><thead><tr>' +
+  function table(head, rows, empty) {
+    if (!rows.length) return '<p class="hint">' + esc(empty) + '</p>';
+    return '<div class="tablewrap"><table class="adt"><thead><tr>' +
       head.map(function (h, i) { return '<th' + (i ? ' style="text-align:right"' : '') + '>' + esc(h) + '</th>'; }).join('') +
       '</tr></thead><tbody>' + rows.map(function (r) {
         return '<tr>' + r.map(function (c, i) { return '<td' + (i ? ' style="text-align:right"' : '') + '>' + c + '</td>'; }).join('') + '</tr>';
       }).join('') + '</tbody></table></div>';
   }
 
-  /* ---- the made-up numbers ---- */
-  function data() {
-    var d = an.days;
-    var visits = scale(4820), orders = scale(63), revenue = scale(2740.5);
-    return {
-      visits: visits,
-      views: scale(11260),
-      orders: orders,
-      revenue: revenue,
-      conv: orders / visits * 100,
-      aov: revenue / orders,
-      newCust: scale(41),
-      returning: scale(22),
-      carts: scale(214),
-      daily: { visits: series(d, visits / d, visits / d * 0.5, 11), orders: series(d, orders / d, orders / d * 0.9, 29) },
-      sources: [
-        ['Google — free search', 0.34, 0.021, 'organic'],
-        ['Direct / typed the address', 0.22, 0.028, 'direct'],
-        ['Google Ads', 0.14, 0.033, 'paid'],
-        ['Instagram', 0.11, 0.009, 'social'],
-        ['Facebook', 0.08, 0.011, 'social'],
-        ['Pinterest', 0.06, 0.014, 'social'],
-        ['Email', 0.05, 0.047, 'email']
-      ],
-      queries: [
-        ['cotton bath towels set', 12840, 412, 4.2],
-        ['bath rug non slip', 9310, 268, 6.8],
-        ['shower curtain fabric 70x72', 6120, 231, 5.1],
-        ['home weavers towels', 3180, 604, 1.4],
-        ['wash cloths bulk', 2470, 88, 9.3]
-      ],
-      products: [
-        ['Willow Bath Towels - 27x54', 4210, 612, 148, 31],
-        ['Impression Micro Bath Rug', 3680, 505, 121, 24],
-        ['Elmstone Printed Shower Curtain - 70x72', 2940, 388, 96, 18],
-        ['Hazel Hand Towels - 16x24', 2110, 244, 61, 11],
-        ['Ashford 4 Piece Ceramic Set', 1580, 190, 44, 7]
-      ],
-      devices: [['Mobile', 0.63], ['Desktop', 0.31], ['Tablet', 0.06]]
-    };
+  function productName(id) {
+    var p = (A.draft.products || []).find(function (x) { return x.id === id; });
+    return p ? p.name : id;
   }
 
   A.tabs.analytics = {
     render: function () {
-      var d = data();
       var chips = RANGES.map(function (r) {
         return '<button class="chip' + (an.days === r[0] ? ' active' : '') + '" type="button" data-a="an-range" data-d="' + r[0] + '" aria-pressed="' + (an.days === r[0]) + '">' + esc(r[1]) + '</button>';
       }).join('');
+      var head = '<h1 class="h1row">Analytics <span class="btnrow">' + chips +
+        '<button class="btn ghost sm" type="button" data-a="an-refresh">↻ Refresh</button></span></h1>';
 
+      if (an.error) return head + A.ui.warn('<b>Couldn’t load the figures:</b> ' + esc(an.error));
+      if (!an.data) return head + '<p class="hint">' + (an.loading ? 'Reading the figures…' : 'Loading…') + '</p>';
+
+      var d = an.data, t = d.totals || {}, people = d.people || {};
       var stats = [
-        [num(d.visits), 'Visits'],
-        [num(d.views), 'Product views'],
-        [num(d.carts), 'Added to cart'],
-        [num(d.orders), 'Orders'],
-        [money(d.revenue), 'Revenue'],
-        [pct(d.conv), 'Visit → order']
+        [num(t.visits), 'Visits'],
+        [num(t.views), 'Product views'],
+        [num(t.carts), 'Added to cart'],
+        [num(t.orders), 'Orders'],
+        [money(t.revenue), 'Revenue'],
+        [rate(t.orders, t.visits), 'Visit → order']
       ].map(function (s) { return '<div class="stat"><div class="n">' + s[0] + '</div><div class="l">' + s[1] + '</div></div>'; }).join('');
 
-      var people = [
-        [num(d.newCust), 'New customers'],
-        [num(d.returning), 'Ordered before'],
-        [money(d.aov), 'Average order'],
-        [pct(d.newCust / (d.newCust + d.returning) * 100), 'Share new']
+      var aov = t.orders > 0 ? Number(t.revenue) / Number(t.orders) : 0;
+      var peopleRow = [
+        [num(people.new_customers), 'First-time customers'],
+        [num(people.returning_customers), 'Ordered before'],
+        [money(aov), 'Average order'],
+        [num(t.checkouts), 'Reached checkout']
       ].map(function (s) { return '<div class="stat"><div class="n">' + s[0] + '</div><div class="l">' + s[1] + '</div></div>'; }).join('');
 
-      var srcRows = d.sources.map(function (s) {
-        var v = Math.round(d.visits * s[1]), o = Math.round(v * s[2]);
-        return [esc(s[0]) + ' ' + A.ui.tag(s[3], s[3] === 'paid' ? 'clay' : ''), num(v), pct(s[1] * 100), num(o), money(o * d.aov), pct(s[2] * 100)];
+      var srcRows = (d.sources || []).map(function (s) {
+        return [esc(s.source) + ' ' + A.ui.tag(s.medium, s.medium === 'paid' ? 'clay' : ''),
+          num(s.visits), rate(s.visits, t.visits), num(s.orders), money(s.revenue), rate(s.orders, s.visits)];
       });
 
-      var qRows = d.queries.map(function (q) {
-        var imp = scale(q[1]), clicks = scale(q[2]);
-        return [esc(q[0]), num(imp), num(clicks), pct(clicks / imp * 100), q[3].toFixed(1)];
+      var prodRows = (d.products || []).slice(0, 25).map(function (p) {
+        return [esc(productName(p.product_id)), num(p.impressions), num(p.clicks), rate(p.clicks, p.impressions),
+          num(p.carts), num(p.qty), money(p.revenue)];
       });
 
-      var pRows = d.products.map(function (p) {
-        var seen = scale(p[1]), clicks = scale(p[2]), carts = scale(p[3]), ord = scale(p[4]);
-        return [esc(p[0]), num(seen), num(clicks), pct(clicks / seen * 100), num(carts), num(ord), pct(ord / clicks * 100)];
-      });
+      var devRows = (d.devices || []).map(function (x) { return [esc(x.device), num(x.visits), rate(x.visits, t.visits)]; });
 
-      var devRows = d.devices.map(function (x) { return [esc(x[0]), num(Math.round(d.visits * x[1])), pct(x[1] * 100)]; });
-
-      return '<h1 class="h1row">Analytics <span class="btnrow">' + chips + '</span></h1>' +
-        A.ui.warn('<b>Sample numbers.</b> Nothing here is measured yet — this is a layout to agree on. ' +
-          'Say the word and I will start collecting the real figures on your own server (no Google Analytics, no advertising cookies), ' +
-          'and connect Google Search Console for the search impressions and clicks.') +
-
+      return head +
+        (!t.visits ? A.ui.warn('<b>No visits recorded for this period yet.</b> Measuring starts the day it is switched on, so the figures build up from here.') : '') +
         '<div class="stat-row stat-6">' + stats + '</div>' +
-
-        A.ui.panel('Visits and orders by day', sparkline(d.daily.visits, d.daily.orders)) +
-
+        A.ui.panel('Visits and orders by day', chart(d.daily || [])) +
         A.ui.panel('Where visitors came from',
-          table(['Source', 'Visits', 'Share', 'Orders', 'Revenue', 'Visit → order'], srcRows)) +
-
-        '<div class="stat-row">' + people + '</div>' +
-
-        A.ui.panel('Google search: what people searched before clicking',
-          table(['Search term', 'Impressions', 'Clicks', 'Click rate', 'Avg position'], qRows) +
-          '<p class="hint">Impressions = how often a Home Weavers page appeared in Google results. Needs Google Search Console (free) connected to this site.</p>') +
-
+          table(['Source', 'Visits', 'Share', 'Orders', 'Revenue', 'Visit → order'], srcRows, 'No visits yet.') +
+          '<p class="hint">Taken from the address people arrive on (utm tags, Google Ads and Facebook click ids) and the site that linked to us.</p>') +
+        '<div class="stat-row">' + peopleRow + '</div>' +
         A.ui.panel('Products',
-          table(['Product', 'Card seen', 'Card clicked', 'Click rate', 'Added to cart', 'Orders', 'Click → order'], pRows) +
-          '<p class="hint">“Card seen” counts a product card actually scrolled into view on a category, search or home page.</p>') +
-
-        A.ui.panel('Devices', table(['Device', 'Visits', 'Share'], devRows)) +
-
-        A.ui.panel('What I would need for the real thing',
+          table(['Product', 'Card seen', 'Card clicked', 'Click rate', 'Added to cart', 'Sold', 'Revenue'], prodRows, 'No product activity yet.') +
+          '<p class="hint">“Card seen” counts a product card that was actually scrolled into view on a category, search or home page.</p>') +
+        A.ui.panel('Devices', table(['Device', 'Visits', 'Share'], devRows, 'No visits yet.')) +
+        A.ui.panel('Google search',
+          '<p class="hint" style="margin:0">Search terms, impressions and position come from Google Search Console, which isn’t connected yet. ' +
+          'Verify the site there once and that table can be pulled in here.</p>') +
+        A.ui.panel('What is and isn’t measured',
           '<ul class="bullets">' +
-          '<li><b>On your own server (no third parties):</b> visits, where each visit came from, product cards seen and clicked, add to cart, checkout started, orders, new vs returning. Stored without names, emails or addresses, and without advertising cookies — so the cookie banner stays as it is.</li>' +
-          '<li><b>Google Search Console</b> (free, you own it): the search terms, impressions, clicks and position table. I would need you to verify the site there once; I can prepare the verification file.</li>' +
-          '<li><b>Google Ads / Meta:</b> only if you run ads — spend and return on ad spend would need each account connected.</li>' +
-          '<li>Figures start from the day collection is switched on; nothing can be filled in for the past.</li>' +
+          '<li>Kept: the page, where the visit came from, phone/tablet/computer, which product cards were seen, clicked and added to a cart, and whether checkout was reached.</li>' +
+          '<li>Never kept: names, emails, addresses, what a named person bought, IP addresses, or anything that follows someone between visits. The visit number is random and goes when the browser tab closes.</li>' +
+          '<li>Figures are kept for six months, then deleted.</li>' +
           '</ul>');
+    },
+    after: function () {
+      if (!an.loading && (!an.data || an.loadedFor !== an.days)) load().then(function () { if (A.tab === 'analytics') A.render(); });
     }
   };
 
-  A.actions['an-range'] = function (el) { an.days = Number(el.dataset.d) || 30; A.render(); };
+  A.actions['an-range'] = function (el) { an.days = Number(el.dataset.d) || 30; an.data = null; A.render(); };
+  A.actions['an-refresh'] = async function () { an.data = null; A.render(); await load(); A.render(); };
 })(window.HW = window.HW || {});

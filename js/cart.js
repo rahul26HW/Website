@@ -70,6 +70,7 @@
       var next = Math.min(have + qty, r.max, 99);
       if (next <= have) { u.toast(capNote(r)); return; }
       if (ex) ex.qty = next; else state.lines.push({ key: key, id: id, colorId: colorId || null, sizeId: sizeId || null, qty: next });
+      if (HW.measure) HW.measure.cart(id, r.sku);
       if (next < have + qty) u.toast(capNote(r) + ' Added what we could.');
       save();
       cart.render();

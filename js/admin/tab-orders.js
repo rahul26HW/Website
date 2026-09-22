@@ -140,10 +140,10 @@
         '<div class="sumrow"><span>Shipping</span><span>' + (Number(o.shipping) ? u.money(o.shipping) : 'Free') + '</span></div>' +
         (Number(o.tax) ? '<div class="sumrow"><span>Tax</span><span>' + u.money(o.tax) + '</span></div>' : '') +
         '<div class="sumrow total"><span>Total</span><span>' + u.money(o.total) + '</span></div></div>' +
-        // A cancelled or refunded order is never packed, so deducting its items would take stock the store still has.
-        (o.stock_deducted ? '<p class="hint">✓ Items were deducted from inventory.</p>'
-          : /^(cancelled|refunded)$/.test(o.status) ? '<p class="hint">Nothing was deducted from inventory — this order is ' + esc(o.status) + '.</p>'
-          : '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="order-deduct">Deduct items from inventory</button></div><p class="hint">Do this once when you pack the order.</p>')) +
+        // Stock comes off as the order is placed and goes back if it is cancelled — nothing to do here by hand.
+        (o.stock_deducted ? '<p class="hint">✓ Counted stock came off when this order came in.</p>'
+          : /^(cancelled|refunded)$/.test(o.status) ? '<p class="hint">Counted stock was put back when this order was ' + esc(o.status) + '.</p>'
+          : '<p class="hint">Nothing to deduct: none of these items has a stock count.</p>')) +
       ui.panel('Customer',
         '<p style="margin:0 0 4px"><b>' + esc(o.name) + '</b></p><p style="margin:0 0 4px"><a href="mailto:' + esc(o.email) + '">' + esc(o.email) + '</a></p>' +
         (o.phone ? '<p style="margin:0 0 10px">' + phoneHTML(o.phone) + '</p>' : '') +

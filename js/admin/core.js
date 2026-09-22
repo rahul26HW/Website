@@ -167,6 +167,10 @@
     }
     A.store = HW.schema.normalizeStore(r1.data.data || {});
     A.storeAt = r1.data.updated_at;
+    // Counted stock has its own table, so an order can take stock off while this screen is open.
+    var rs = await A.sb.rpc('admin_stock');
+    A.store.inventory = (!rs.error && rs.data) || {};
+    A.stockBase = clone(A.store.inventory);
     A.draft = clone(A.store);
     A.priv = normalizePrivate(r2.data.data || {});
     A.privAt = r2.data.updated_at;
@@ -219,7 +223,16 @@
     if (problems.length) { A.alert(problems); return false; }
     A.alert([]);
     setSaving(true);
-    var r = await A.sb.rpc('save_store', { p_data: data, p_expected: A.storeAt });
+    // Stock goes to its own table, and only the counts that were actually changed here — so an order that
+    // took stock off while this screen was open isn't undone.
+    var stock = data.inventory || {};
+    delete data.inventory;
+    var rk = await A.sb.rpc('admin_save_stock', { p_base: A.stockBase || {}, p_next: stock });
+    if (rk.error) { setSaving(false); saveError(rk.error); return false; }
+    stock = (rk.data && rk.data.inventory) || stock;
+    A.stockBase = clone(stock);
+    data.inventory = stock;
+    var r = await A.sb.rpc('save_store', { p_data: (function () { var d = clone(data); delete d.inventory; return d; })(), p_expected: A.storeAt });
     setSaving(false);
     if (r.error) { saveError(r.error); return false; }
     A.storeAt = r.data;

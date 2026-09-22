@@ -43,6 +43,12 @@
     if (view.after) { try { view.after(); } catch (e) { console.error(e); } }
     HW.observeReveals();
     if (HW.rails) HW.rails.init();
+    if (HW.measure) {
+      var pid = route.name === 'product' && HW.pdp && HW.pdp.currentId ? HW.pdp.currentId() : '';
+      HW.measure.page(location.pathname.slice(HW.router.base.length) || '/', pid);
+      HW.measure.cards(main());
+      if (route.name === 'checkout') HW.measure.checkout();
+    }
     if (firstRender && HW.consent) HW.consent.init();
 
     if (opts && opts.scroll) window.scrollTo(0, 0);
@@ -168,6 +174,8 @@
     }, true);
 
     document.addEventListener('click', function (e) {
+      var card = e.target.closest && e.target.closest('[data-pclick]');
+      if (card && HW.measure) HW.measure.click(card.getAttribute('data-pclick'));
       var el = e.target.closest('[data-act]');
       if (!el || HW.isAdminView() && !el.closest('.store, #cartDrawer, #mnav')) return;
       var fn = actions[el.dataset.act];

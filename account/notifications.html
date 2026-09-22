@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-cXej5Xaf8t47EHKmWNLw/2sqIXRKVU//yX2wQdc6J5E=' 'sha256-jSng98kaWhXOR2Pds5/ecn3UIck9jp50aT1jRHrHRns=' 'sha256-JJhK8L3xnHrAVPDh7m0u0hoJhZeQGp6DhNfvsKoe2hk=' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; font-src 'self'; img-src 'self' data: blob: https:; media-src 'self' https:; connect-src 'self' https://soydgxrrwozmiqzutypr.supabase.co https://accounts.google.com/gsi/ data: blob:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-cXej5Xaf8t47EHKmWNLw/2sqIXRKVU//yX2wQdc6J5E=' 'sha256-jSng98kaWhXOR2Pds5/ecn3UIck9jp50aT1jRHrHRns=' 'sha256-Pspba3jl+4HdKwDec/GRIVRs+6HfjE14BI0PmbBef48=' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; font-src 'self'; img-src 'self' data: blob: https:; media-src 'self' https:; connect-src 'self' https://soydgxrrwozmiqzutypr.supabase.co https://accounts.google.com/gsi/ data: blob:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Notifications | Home Weavers</title>
@@ -65,7 +65,7 @@
      Order is kept (async=false). A background tab may never paint, so it loads at once there. */
   (function () {
     var files = ['config', 'util', 'sanitize', 'schema', 'model', 'api', 'router', 'seo', 'chrome', 'home', 'catalog',
-      'product', 'cart', 'snipcart', 'checkout', 'account', 'pages', 'features', 'app'];
+      'product', 'cart', 'snipcart', 'checkout', 'account', 'pages', 'features', 'measure', 'app'];
     var css = document.querySelector('link[rel="stylesheet"][href$="css/site.css"]');
     var base = css ? css.getAttribute('href').slice(0, -'css/site.css'.length) : ''; // "" or "../" on page files
     var done = false;
