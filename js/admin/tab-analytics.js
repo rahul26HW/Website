@@ -30,7 +30,7 @@
     var y = function (v) { return h - pad - v / max * (h - pad * 2); };
     var path = function (arr) { return arr.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1); }).join(' '); };
     var maxB = Math.max.apply(null, b), yb = function (v) { return h - pad - v / (maxB * 1.6) * (h - pad * 2); };
-    return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="150" role="img" aria-label="Sessions and orders by day" style="display:block">' +
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="150" preserveAspectRatio="none" role="img" aria-label="Visits and orders by day" style="display:block">' +
       '<path d="' + path(a) + ' L' + x(a.length - 1).toFixed(1) + ' ' + (h - pad) + ' L' + pad + ' ' + (h - pad) + ' Z" fill="rgba(47,74,61,.10)"/>' +
       '<path d="' + path(a) + '" fill="none" stroke="#2F4A3D" stroke-width="2"/>' +
       '<path d="' + b.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + yb(v).toFixed(1); }).join(' ') + '" fill="none" stroke="#B4674A" stroke-width="2" stroke-dasharray="4 3"/>' +
