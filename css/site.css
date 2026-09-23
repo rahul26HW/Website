@@ -327,7 +327,8 @@ fieldset.fld legend{font-size:13px;font-weight:600;margin:0 0 6px;padding:0}
 /* ---- product grid ---- */
 .p-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:26px 22px}
 .pcard{background:transparent;display:flex;flex-direction:column}
-.pcard .imgwrap{position:relative;border-radius:var(--r);overflow:hidden;background:var(--linen);aspect-ratio:3/3.85;box-shadow:var(--shadow)}
+/* Square photo wells: the PIM shots are square, so a square card shows the whole rug or towel. */
+.pcard .imgwrap{position:relative;border-radius:var(--r);overflow:hidden;background:var(--linen);aspect-ratio:1/1;box-shadow:var(--shadow)}
 .pcard .imgwrap .ph{position:absolute;inset:0;background-size:cover;background-position:center;transition:transform .5s}
 .pcard:hover .imgwrap .ph{transform:scale(1.04)}
 .pcard .badge{position:absolute;top:12px;left:12px;background:#fff;color:var(--ink);font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;padding:5px 10px;border-radius:999px}
@@ -879,8 +880,13 @@ body.noscroll{overflow:hidden}
 
 /* zoomable main image */
 .zoombtn{position:absolute;inset:0;padding:0;border:none;background:none;cursor:zoom-in;display:block;width:100%;height:100%}
-.zoombtn img.ph{width:100%;height:100%;object-fit:cover}
-.zoomhint{position:absolute;right:12px;bottom:12px;background:rgba(255,255,255,.92);color:var(--ink);font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;padding:5px 9px;border-radius:999px;opacity:0;transition:opacity .2s}
+.zoombtn img.ph{width:100%;height:100%;object-fit:cover;transition:transform .2s ease}
+/* Hover magnifier: the photo grows under the pointer so the weave is readable without opening
+   the lightbox. Touch screens have no hover, so they keep tap-to-open. */
+@media(hover:hover) and (pointer:fine){
+  .zoombtn.zooming img.ph{transform:scale(2.3);transition:transform .12s ease-out}
+}
+.zoomhint{position:absolute;right:12px;bottom:12px;background:rgba(255,255,255,.92);color:var(--ink);font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;padding:5px 9px;border-radius:999px;opacity:0;transition:opacity .2s;pointer-events:none}
 .vmain:hover .zoomhint,.zoombtn:focus-visible .zoomhint{opacity:1}
 
 /* lightbox */

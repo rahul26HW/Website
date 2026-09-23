@@ -57,6 +57,41 @@
       '</div></div>';
   }
 
+  /* Hover magnifier on the main photo. The image is scaled from the point under the pointer, so
+     moving the mouse pans around the rug. Click still opens the full-screen lightbox. The main
+     photo is replaced whenever the shopper changes picture, so this listens on the document. */
+  (function () {
+    var fine = window.matchMedia ? window.matchMedia('(hover: hover) and (pointer: fine)') : null;
+    var clear = function (btn) {
+      btn.classList.remove('zooming');
+      var img = btn.querySelector('img.ph');
+      if (img) img.style.transformOrigin = '';
+    };
+    document.addEventListener('mousemove', function (e) {
+      var btn = e.target && e.target.closest && e.target.closest('.zoombtn');
+      if (!btn) return;
+      if (!fine || !fine.matches) return;
+      var img = btn.querySelector('img.ph');
+      if (!img) return;
+      var r = btn.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      var x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      var y = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+      img.style.transformOrigin = (x * 100).toFixed(2) + '% ' + (y * 100).toFixed(2) + '%';
+      btn.classList.add('zooming');
+    }, { passive: true });
+    document.addEventListener('mouseout', function (e) {
+      var btn = e.target && e.target.closest && e.target.closest('.zoombtn');
+      if (!btn) return;
+      if (e.relatedTarget && btn.contains(e.relatedTarget)) return;
+      clear(btn);
+    }, { passive: true });
+    // Opening the lightbox or stepping to the next photo should not leave a zoomed image behind.
+    document.addEventListener('click', function () {
+      u.qsa('.zoombtn.zooming').forEach(clear);
+    }, true);
+  }());
+
   HW.gallery = {
     set: function (i) {
       if (!gal || !gal.items[i]) return;
