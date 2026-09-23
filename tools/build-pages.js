@@ -56,7 +56,8 @@ async function main() {
   const m = HW.m;
   const brand = data.brand.name || 'Home Weavers';
   const tagline = data.brand.tagline || 'Woven for the way you live';
-  const site = String(data.settings.siteUrl || '').replace(/\/?$/, '/');
+  // SITE_URL=… overrides the stored address, for the moment a site moves to a new domain.
+  const site = String(process.env.SITE_URL || data.settings.siteUrl || '').replace(/\/?$/, '/');
   if (!/^https:\/\//.test(site)) throw new Error('Set “Live site address” in Admin › Storefront first.');
   const abs = (p) => site + p.replace(/^\//, '');
   const asset = (src) => !src || /^data:/.test(src) ? '' : /^https?:\/\//.test(src) ? src : abs(src);

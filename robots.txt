@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
-Disallow: /Website/checkout
-Disallow: /Website/order/
+Disallow: /checkout
+Disallow: /order/
+Disallow: /account/
 
-Sitemap: https://rahul26hw.github.io/Website/sitemap.xml
+Sitemap: https://www.homeweavers.com/sitemap.xml
