@@ -863,7 +863,7 @@ async function handleShipstationPush(request, env, cors) {
 
 /* POST /shipstation/setup — admins only. Points ShipStation's webhooks at this server (once):
    SHIP_NOTIFY (a label was created) and FULFILLMENT_SHIPPED (an order was marked shipped with a tracking number). */
-const SS_EVENTS = ["SHIP_NOTIFY", "FULFILLMENT_SHIPPED"];
+const SS_EVENTS = ["SHIP_NOTIFY", "FULFILLMENT_SHIPPED", "ORDER_NOTIFY"];
 async function handleShipstationSetup(request, env, cors) {
   const denied = await requireAdmin(request, env);
   if (denied) return json({ error: denied }, 401, cors);
@@ -924,6 +924,24 @@ async function unshipOrder(env, filter, s) {
   return Array.isArray(rows) ? rows.length : 0;
 }
 
+/* An order cancelled in ShipStation: cancel it here too, so the shopper's account and the admin agree.
+   Only ever moves an order that hasn't shipped and isn't already closed; the database trigger puts the
+   stock back, and the shopper gets the cancellation email. */
+async function cancelFromShipstation(env, filter, ss) {
+  const before = await db(env, "orders?" + filter + "&select=id,order_number,status,admin_note&limit=1");
+  const was = Array.isArray(before) && before[0];
+  if (!was || !["new", "accepted", "packed"].includes(was.status)) return 0;
+  const note = "⚠ Cancelled in ShipStation on " + new Date().toISOString().slice(0, 10) +
+    (ss && ss.orderId ? " (ShipStation order " + ss.orderId + ")" : "") + ", so it was cancelled here too.";
+  const rows = await patchOrder(env, filter + "&status=in.(new,accepted,packed)", {
+    status: "cancelled",
+    admin_note: (was.admin_note ? was.admin_note + "\n" : "") + note,
+  });
+  const updated = Array.isArray(rows) ? rows.length : 0;
+  if (updated) await sendOrderEmail(env, "cancelled", rows[0]);
+  return updated;
+}
+
 /* Our order for a ShipStation record: labels carry our orderKey; fulfillments only carry ShipStation's orderId. */
 function shipmentFilter(s) {
   if (UUID.test(s.orderKey || "")) return "id=eq." + s.orderKey;
@@ -953,6 +971,14 @@ async function handleShipstationWebhook(request, env) {
       if (!filter) continue;
       updated += s && s.voided ? await unshipOrder(env, filter, s) : await applyShipment(env, filter, s);
     }
+    // ORDER_NOTIFY carries the orders themselves. The only change we act on is a cancellation —
+    // everything else about an order is ours, not ShipStation's.
+    for (const o of (data && data.orders) || []) {
+      if (String(o.orderStatus || "").toLowerCase() !== "cancelled") continue;
+      const filter = shipmentFilter(o);
+      if (!filter) continue;
+      updated += await cancelFromShipstation(env, filter, o);
+    }
     page++;
   } while (page <= pages);
   return json({ ok: true, updated });
@@ -969,6 +995,12 @@ async function handleShipstationSync(request, env, cors) {
   const order = await loadOrder(env, "id=eq." + body.order_id);
   if (!order) return json({ error: "Order not found" }, 404, cors);
   if (!order.shipstation_order_id) return json({ error: "This order isn’t in ShipStation yet." }, 409, cors);
+  // Cancelling in ShipStation sends no shipment, so check the order's own status first.
+  const ssOrder = await shipstation(env, "orders/" + encodeURIComponent(order.shipstation_order_id)).catch(() => null);
+  if (ssOrder && String(ssOrder.orderStatus || "").toLowerCase() === "cancelled") {
+    const done = await cancelFromShipstation(env, "id=eq." + order.id, ssOrder);
+    return json({ ok: true, shipped: false, cancelled: done > 0, status: done > 0 ? "cancelled" : order.status }, 200, cors);
+  }
   const num = encodeURIComponent(order.order_number);
   const mine = (s) => !s.voided && s.trackingNumber && (s.orderKey === order.id || String(s.orderId) === String(order.shipstation_order_id));
   const shipments = ((await shipstation(env, "shipments?orderNumber=" + num + "&includeShipmentItems=false")) || {}).shipments || [];
