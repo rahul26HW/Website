@@ -54,8 +54,9 @@ function write(file, opts) {
   const tags = '<meta http-equiv="Content-Security-Policy" content="' + policy(html, opts) + '">\n' +
     '<meta name="referrer" content="strict-origin-when-cross-origin">\n';
   // Must come before the first inline script.
-  html = html.replace(/(<meta charset="utf-8">\n)/, '$1' + tags);
-  if (html.indexOf('Content-Security-Policy') < 0) throw new Error(file + ': <meta charset="utf-8"> not found');
+  // \r?\n: a Windows checkout can give the file CRLF endings, and the tags still have to go in.
+  html = html.replace(/(<meta charset="utf-8">\r?\n)/, '$1' + tags);
+  if (html.indexOf('Content-Security-Policy') < 0) throw new Error(file + ': <meta charset="utf-8"> not found, so the policy could not be written');
   fs.writeFileSync(full, html);
 }
 
