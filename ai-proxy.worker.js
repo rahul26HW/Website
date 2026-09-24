@@ -929,6 +929,8 @@ async function cancelFromShipstation(env, filter, ss) {
     (ss && ss.orderId ? " (ShipStation order " + ss.orderId + ")" : "") + ", so it was cancelled here too.";
   const rows = await patchOrder(env, filter + "&status=in.(new,accepted,packed)", {
     status: "cancelled",
+    cancelled_at: new Date().toISOString(),   // the shopper's order timeline reads this
+    cancel_reason: "Cancelled in ShipStation",
     admin_note: (was.admin_note ? was.admin_note + "\n" : "") + note,
   });
   const updated = Array.isArray(rows) ? rows.length : 0;
