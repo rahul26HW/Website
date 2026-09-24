@@ -219,6 +219,7 @@
       if (!Array.isArray(p.features)) p.features = [];
       if (!Array.isArray(p.oldSlugs)) p.oldSlugs = [];
       ['seoTitle', 'seoDescription', 'imageAlt', 'description', 'material', 'care', 'origin', 'badge'].forEach(function (k) { p[k] = str(p[k]); });
+      p.cardImage = fixImageUrl(p.cardImage);   // the photo chosen for the grid; blank = the first one
       if (typeof p.hidden !== 'boolean') p.hidden = false;
       var isColl = Array.isArray(p.options) && p.options.some(function (o) { return o.type === 'color'; }) && p.options.some(function (o) { return o.type === 'size'; });
       if (isColl) {

@@ -210,6 +210,10 @@
   /* Labels a product card can carry (Admin › Products › Badge and the CSV "badge" column). */
   m.BADGES = ['New', 'Best Seller', 'Clearance Sale', 'Sale', 'Limited Edition', 'Back in Stock', 'Low Stock'];
   m.primaryImage = function (p) {
+    // A photo picked in the admin wins: half a collection's photos are care labels and dimension
+    // diagrams, so "the first one" is rarely the shot that should represent the product.
+    var chosen = String((p && p.cardImage) || '').trim();
+    if (chosen) return chosen;
     if (m.isCollection(p)) {
       var cols = m.optColor(p).values;
       for (var i = 0; i < cols.length; i++) { var u = m.colorImage(p, cols[i]); if (u) return u; }

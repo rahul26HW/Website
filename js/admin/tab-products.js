@@ -93,6 +93,64 @@
     }).join('') + '</div>';
   }
 
+  /* Every photo on the product, grouped by colour so a 19-colour collection doesn't render
+     five hundred thumbnails at once. A simple product has one unnamed group. */
+  function photoGroups(p) {
+    var groups = [], seen = {};
+    var push = function (label, urls) {
+      var list = [];
+      urls.forEach(function (u) { u = String(u || '').trim(); if (u && !seen[u]) { seen[u] = 1; list.push(u); } });
+      if (list.length) groups.push({ label: label, photos: list });
+    };
+    if (isColl(p)) {
+      (optC(p).values || []).forEach(function (c) {
+        var urls = (c.images || []).slice();
+        Object.keys(p.variants || {}).forEach(function (k) {
+          if (k.split('__')[0] === c.id) urls = urls.concat(((p.variants[k] || {}).images || []));
+        });
+        push(c.label || 'Color', urls);
+      });
+    } else {
+      push('', (p.images || []).concat([p.image]));
+    }
+    return groups;
+  }
+
+  /* Which photo represents the product in the grid, search and the homepage. Without this the code
+     takes the first photo it finds, which on these collections is often a care label or a lid cover. */
+  function cardPhotoPanel(p) {
+    var groups = photoGroups(p);
+    if (!groups.length) return '';
+    var chosen = String(p.cardImage || '').trim();
+    var known = groups.some(function (g) { return g.photos.indexOf(chosen) >= 0; });
+    var tile = function (url, sel, label) {
+      return '<button class="cardpick' + (sel ? ' on' : '') + '" type="button" data-a="p-card-img" data-url="' + esc(url) + '"' +
+        ' aria-pressed="' + !!sel + '" title="' + esc(label) + '">' +
+        (url ? '<img src="' + esc(HW.asset(HW.m.thumb(url))) + '" alt="" loading="lazy">' : '<span class="cardpick-auto">Auto</span>') +
+        '<span class="cardpick-tag">' + esc(label) + '</span></button>';
+    };
+    var body = groups.map(function (g, i) {
+      var has = g.photos.indexOf(chosen) >= 0;
+      var strip = '<div class="cardpicks">' + g.photos.map(function (u) {
+        return tile(u, chosen === u, chosen === u ? 'Grid photo' : 'Use this');
+      }).join('') + '</div>';
+      if (!g.label) return strip;
+      return '<details class="colgroup"' + (has || (!chosen && i === 0) ? ' open' : '') + '>' +
+        '<summary>' + esc(g.label) + ' <span class="muted" style="font-weight:400">· ' + g.photos.length + ' photo' + (g.photos.length === 1 ? '' : 's') + '</span>' +
+        (has ? ' ' + A.ui.tag('Grid photo', 'green') : '') + '</summary>' +
+        '<div class="gbody">' + strip + '</div></details>';
+    }).join('');
+    return '<section class="panel"><h2 class="ph3">Photo shown on the grid</h2>' +
+      '<p class="hint" style="margin:-6px 0 12px">Pick the photo shoppers see in the category grid, in search and on the homepage. ' +
+      'Leave it on Auto to use the first photo, as before. The product page still shows every photo.</p>' +
+      '<div class="cardpicks" style="margin-bottom:12px;grid-template-columns:repeat(auto-fill,minmax(88px,1fr))">' +
+      tile('', !chosen, chosen ? 'Auto' : 'Grid photo') + '</div>' +
+      body +
+      (chosen && !known
+        ? '<p class="hint bad" style="margin-top:10px">The photo chosen here is no longer on this product, so the grid falls back to the first one.</p>'
+        : '') + '</section>';
+  }
+
   function simplePanels(p) {
     var ui = A.ui;
     return ui.panel('Pricing &amp; SKU',
@@ -197,6 +255,7 @@
         ui.field('Badge (optional)', '@badge', p.badge, { options: [['', 'No badge']].concat(m.BADGES.concat(p.badge && m.BADGES.indexOf(p.badge) < 0 ? [p.badge] : []).map(function (b) { return [b, b]; })),
           hint: 'Small label on the product card.' }) +
         ui.check('Featured on homepage', '@featured', p.featured) + ui.check('Hide from shoppers (draft)', '@hidden', p.hidden)) +
+      cardPhotoPanel(p) +
       '<section class="panel"><h2 class="ph3">Product type</h2><div class="ptype">' +
       '<button class="' + (!coll ? 'active' : '') + '" type="button" data-a="p-type" data-type="simple" aria-pressed="' + !coll + '"><b>Simple product</b><span>One price, one set of photos.</span></button>' +
       '<button class="' + (coll ? 'active' : '') + '" type="button" data-a="p-type" data-type="collection" aria-pressed="' + coll + '"><b>Collection with variations</b><span>Color &amp; size options, each its own SKU.</span></button></div></section>' +
@@ -392,6 +451,7 @@
     rer();
   };
   A.actions['p-primary'] = function (el) { A.edit.primary = +el.dataset.i; rer(); };
+  A.actions['p-card-img'] = function (el) { A.edit.cardImage = el.dataset.url || ''; rer(); };
   A.actions['p-color-add'] = function () { optC(A.edit).values.push({ id: u.uid('cl'), label: 'New color', hex: SWATCH[Math.floor(Math.random() * SWATCH.length)], images: blank8(), video: '', primary: 0 }); A.openColor = optC(A.edit).values.length - 1; rer(); };
   A.actions['p-color-remove'] = function (el) {
     var o = optC(A.edit); if (o.values.length <= 1) { u.toast('Keep at least one color'); return; }
