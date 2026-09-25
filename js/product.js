@@ -277,7 +277,8 @@
     var sizes = '<fieldset class="optblock"><legend class="sr-only">' + esc(sOpt.name || 'Size') + '</legend>' +
       '<div class="lab"><span class="t" aria-hidden="true">' + esc(sOpt.name || 'Size') + '</span><span class="v"><span aria-hidden="true">' + esc(v.size.label) + '</span>' +
       (HW.sizeGuide && HW.sizeGuide.available() ? ' <button class="sglink" type="button" data-act="size-guide">Size guide</button>' : '') + '</span></div>' +
-      sizeButtons(p, sOpt.values.filter(function (s) { return m.isOffered(p, v.color.id, s.id); }), v) + '</fieldset>';
+      sizeButtons(p, sOpt.values.filter(function (s) { return m.isOffered(p, v.color.id, s.id); }), v) +
+      (v.size.note ? '<p class="sizenote" aria-live="polite">' + esc(v.size.note) + '</p>' : '') + '</fieldset>';
 
     var buy;
     if (!v.inStock) buy = '<button class="btn loom" type="button" style="flex:1;justify-content:center" disabled>Sold out</button>';

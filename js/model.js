@@ -250,6 +250,18 @@
     var c = m.isCollection(p) ? m.optColor(p).values[0] : null;
     return m.weaveSwatch(c ? c.hex : p.swatch, p.name);
   };
+  /* The photo for one size, so a search for "tank lid cover" can show the lid cover itself. */
+  m.sizeImage = function (p, size) {
+    if (!size || !m.isCollection(p)) return '';
+    var cols = m.optColor(p).values;
+    for (var i = 0; i < cols.length; i++) {
+      var v = (p.variants || {})[m.vKey(cols[i].id, size.id)] || {};
+      if (v.off) continue;
+      var u = m.firstPhoto(v.images, v.primary);
+      if (u) return u;
+    }
+    return '';
+  };
   m.imageAlt = function (p, extra) {
     var base = (p.imageAlt || '').trim() || p.name;
     return extra ? base + ' — ' + extra : base;

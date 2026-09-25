@@ -187,12 +187,14 @@
       '</section>' +
 
       '<section class="panel"><h2 class="ph3">Sizes — ' + sOpt.values.length + '</h2>' +
-      '<p class="hint" style="margin:-6px 0 12px">A per-size price overrides the base price for all colors. Blank = base price.</p>' +
-      '<div class="sizerow sizehead" aria-hidden="true"><span>Size name</span><span>Price</span><span>Sale</span><span></span></div>' +
+      '<p class="hint" style="margin:-6px 0 12px">A per-size price overrides the base price for all colors. Blank = base price. ' +
+      '“What it is” keeps the buttons short: it shows under the size row on the product page and lets shoppers find the size by name in search.</p>' +
+      '<div class="sizerow sizehead" aria-hidden="true"><span>Size name</span><span>What it is</span><span>Price</span><span>Sale</span><span></span></div>' +
       sOpt.values.map(function (s, si) {
         var base = '@options.' + p.options.indexOf(sOpt) + '.values.' + si;
         return '<div class="sizerow">' +
           '<input type="text" value="' + esc(s.label) + '" aria-label="Size ' + (si + 1) + ' name" data-bind="' + base + '.label">' +
+          '<input type="text" value="' + esc(s.note || '') + '" placeholder="e.g. Tank lid cover" aria-label="What size ' + (si + 1) + ' is" data-bind="' + base + '.note" data-type="trim">' +
           '<input type="number" step="0.01" min="0" value="' + (s.price == null ? '' : s.price) + '" aria-label="Size ' + (si + 1) + ' price" data-bind="' + base + '.price" data-type="number">' +
           '<input type="number" step="0.01" min="0" value="' + (s.salePrice == null ? '' : s.salePrice) + '" aria-label="Size ' + (si + 1) + ' sale price" data-bind="' + base + '.salePrice" data-type="number">' +
           '<button class="txtbtn danger" type="button" data-a="p-size-remove" data-i="' + si + '"' + (sOpt.values.length <= 1 ? ' disabled' : '') + ' aria-label="Remove size ' + esc(s.label) + '">✕</button></div>';

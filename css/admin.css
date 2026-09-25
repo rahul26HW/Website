@@ -74,7 +74,7 @@ table.adt tr:last-child td{border-bottom:none}
 .cardpick.on{border-color:var(--green,#2F4739);box-shadow:0 0 0 3px rgba(47,71,57,.15)}
 .cardpick.on .cardpick-tag{opacity:1;background:var(--green,#2F4739)}
 .cardpick.on .cardpick-tag:before{content:"✓ "}
-.sizerow{display:grid;grid-template-columns:1fr 130px 130px 36px;gap:10px;align-items:center;margin-bottom:9px}
+.sizerow{display:grid;grid-template-columns:1fr 1fr 130px 130px 36px;gap:10px;align-items:center;margin-bottom:9px}
 details.colgroup{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;background:#fff;overflow:hidden}
 details.colgroup>summary{padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;font-weight:600;list-style:none}
 details.colgroup>summary::-webkit-details-marker{display:none}

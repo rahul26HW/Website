@@ -242,7 +242,7 @@
       var cat = m.categoryById(p.categoryId);
       var sub = cat && (cat.subcategories || []).find(function (s) { return s.id === p.subcategoryId; });
       var colors = m.isCollection(p) ? m.optColor(p).values.map(function (c) { return c.label; }).join(' ') : '';
-      var sizes = m.isCollection(p) ? m.optSize(p).values.map(function (s) { return s.label; }).join(' ') : '';
+      var sizes = m.isCollection(p) ? m.optSize(p).values.map(function (s) { return s.label + ' ' + (s.note || ''); }).join(' ') : '';
       var skus = [];
       if (m.isCollection(p)) m.eachVariant(p, function (v) { skus.push(v.sku); }); else if (p.sku) skus.push(p.sku);
       return { p: p, name: norm(p.name), meta: norm([cat && cat.name, sub && sub.name, p.material, colors, sizes, p.badge].join(' ')), sku: skus.join(' ').toLowerCase(), body: norm(HW.htmlToText(p.description)) };
@@ -273,6 +273,20 @@
         if (m.productOut(it.p)) score -= 3;
         return { p: it.p, score: score };
       }).filter(Boolean).sort(function (a, b) { return b.score - a.score; }).map(function (r) { return r.p; });
+    },
+    /* Which size the words were really after — "tank lid cover" is a size on a rug listing, not a
+       product of its own, so the result can point straight at it. */
+    sizeFor: function (p, q) {
+      if (!m.isCollection(p)) return null;
+      var terms = norm(String(q || '').slice(0, 100)).split(' ').filter(Boolean);
+      if (!terms.length) return null;
+      var best = null;
+      m.optSize(p).values.forEach(function (s) {
+        var hay = norm(s.label + ' ' + (s.note || ''));
+        var all = terms.every(function (t) { return hay.indexOf(t) >= 0; });
+        if (all && (!best || (s.note || '').length > (best.note || '').length)) best = s;
+      });
+      return best;
     }
   };
 
@@ -307,9 +321,14 @@
       status.textContent = res.length ? u.plural(res.length, 'result') + ' for “' + q + '”' : 'No products match “' + q + '”';
       box.innerHTML = res.slice(0, 6).map(function (p) {
         var r = m.priceRange(p), out = m.productOut(p);
-        return '<li><a class="sres" href="' + HW.link('/product/' + p.slug) + '">' +
-          '<img src="' + esc(HW.asset(m.thumb(m.imageOrSwatch(p)))) + '" alt="" width="56" height="56" loading="lazy">' +
-          '<span class="snm">' + esc(HW.seo.clip(p.name, 80)) + '<span class="spr">' + (r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min)) + (out ? ' · Out of stock' : '') + '</span></span></a></li>';
+        var sz = HW.search.sizeFor(p, q);
+        var base = HW.link('/product/' + p.slug);
+        var href = base + (sz ? (base.indexOf('?') >= 0 ? '&' : '?') + 'size=' + encodeURIComponent(sz.label) : '');
+        return '<li><a class="sres" href="' + href + '">' +
+          '<img src="' + esc(HW.asset(m.thumb((sz && m.sizeImage(p, sz)) || m.imageOrSwatch(p)))) + '" alt="" width="56" height="56" loading="lazy">' +
+          '<span class="snm">' + esc(HW.seo.clip(p.name, 80)) +
+          (sz && sz.note ? '<span class="ssz">' + esc(sz.note) + ' · ' + esc(sz.label) + '</span>' : '') +
+          '<span class="spr">' + (r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min)) + (out ? ' · Out of stock' : '') + '</span></span></a></li>';
       }).join('') + (res.length > 6 ? '<li><a class="sall link-u" href="' + HW.link('/search?q=' + encodeURIComponent(q)) + '">See all ' + res.length + ' results</a></li>' : '');
     }, 120)
   };

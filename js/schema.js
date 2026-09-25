@@ -225,6 +225,12 @@
       if (isColl) {
         if (!isObj(p.variants)) p.variants = {};
         p.options.forEach(function (o) {
+          if (o.type === 'size') {
+            // What the size actually is — "Tank Lid Cover", "Runner". Shown under the size row and
+            // indexed for search, so a shopper can find it by name instead of by inches.
+            o.values.forEach(function (s) { s.note = str(s.note); });
+            return;
+          }
           if (o.type !== 'color') return;
           o.values.forEach(function (c) {
             c.images = pad8(c.images);
