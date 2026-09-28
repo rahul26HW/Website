@@ -103,7 +103,7 @@
 
         ui.panel('Social links (footer)',
           '<p class="hint" style="margin:-6px 0 12px">Blank = icon hidden. Links open in a new tab.</p><div class="grid2">' +
-          [['facebook', 'Facebook'], ['instagram', 'Instagram'], ['pinterest', 'Pinterest'], ['youtube', 'YouTube'], ['tiktok', 'TikTok'], ['houzz', 'Houzz']].map(function (x) {
+          [['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['pinterest', 'Pinterest'], ['facebook', 'Facebook'], ['x', 'X'], ['linkedin', 'LinkedIn'], ['youtube', 'YouTube'], ['houzz', 'Houzz']].map(function (x) {
             return ui.field(x[1] + ' URL', 'social.' + x[0], so[x[0]] || '', { type: 'trim', placeholder: 'https://…', live: 'urlCheck' });
           }).join('') + '</div>' + ui.saveBtn()) +
 
