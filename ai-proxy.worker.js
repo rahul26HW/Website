@@ -98,6 +98,26 @@ export default {
           if (denied) return json({ error: denied }, 401, cors);
           return json({ ok: true, service: "home-weavers-worker", features: features(env) }, 200, cors);
         }
+        /* Does the Stripe key actually work? Answers before the webhook secret is in, so the two
+           can be set up one at a time. Reads the account only — never returns the key itself. */
+        case "/stripe/check": {
+          const denied = await requireAdmin(request, env);
+          if (denied) return json({ error: denied }, 401, cors);
+          if (!env.STRIPE_SECRET_KEY) return json({ ok: false, key: "missing", hint: "Add STRIPE_SECRET_KEY to the server secrets." }, 200, cors);
+          const mode = features(env).stripeMode;
+          try {
+            const acct = await stripeGet(env, "account");
+            return json({
+              ok: true, key: "working", mode: mode,
+              account: acct && acct.id, business: (acct && (acct.business_profile || {}).name) || null,
+              charges_enabled: !!(acct && acct.charges_enabled),
+              webhookSecret: env.STRIPE_WEBHOOK_SECRET ? "set" : "missing",
+              ready: features(env).stripe,
+            }, 200, cors);
+          } catch (e) {
+            return json({ ok: false, key: "rejected", mode: mode, error: String(e.message || e).slice(0, 300) }, 200, cors);
+          }
+        }
         case "/orders/accept": return await handleOrderAccept(request, env, cors);
         case "/orders/notify": return await handleOrderNotify(request, env, cors);
         case "/orders/release": return await handleOrderRelease(request, env, cors);
@@ -115,7 +135,7 @@ export default {
     } catch (e) {
       // Details go to the Cloudflare log. Only signed-in admins get them back; shoppers and webhooks get a plain message.
       console.error(url.pathname, e && e.stack ? e.stack : e);
-      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/orders/notify", "/email/test", "/admin/health"].includes(url.pathname.replace(/\/+$/, ""));
+      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/orders/notify", "/email/test", "/admin/health", "/stripe/check"].includes(url.pathname.replace(/\/+$/, ""));
       return json({ error: adminRoute ? "Worker error: " + (e && e.message ? e.message : "unknown") : "Something went wrong. Please try again in a moment." }, 500, cors);
     }
   },
