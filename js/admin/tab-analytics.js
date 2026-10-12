@@ -53,6 +53,75 @@
     return p ? p.name : id;
   }
 
+/* ----------------------------------------------------------------
+   * Sales tax watch — how much this website has sold into each state.
+   * A state can require you to collect its sales tax once you pass a
+   * threshold there, and nobody warns you: not Snipcart, not the state.
+   * Marketplace sales (Amazon, Walmart, Macy's) are collected by the
+   * marketplace itself and are not in this table, which is correct.
+   * ---------------------------------------------------------------- */
+  var TAX_LIMIT_SALES = 100000, TAX_LIMIT_ORDERS = 200;   // the common state thresholds
+  var TAX_WARN = 0.75;                                     // shout at three quarters of the way
+  var HOME_STATE = 'NJ';
+  var st = { rows: null, loading: false, error: '' };
+
+  async function loadStates() {
+    st.loading = true; st.error = '';
+    try {
+      var since = new Date(Date.now() - 365 * 86400000).toISOString();
+      var all = [], from = 0;
+      for (var page = 0; page < 20; page++) {
+        var r = await A.sb.from('orders')
+          .select('total,status,created_at,shipping_address')
+          .gte('created_at', since).range(from, from + 999);
+        if (r.error) throw new Error(r.error.message);
+        all = all.concat(r.data || []);
+        if ((r.data || []).length < 1000) break;
+        from += 1000;
+      }
+      var by = {};
+      all.forEach(function (o) {
+        if (/^(cancelled|refunded)$/.test(o.status || '')) return;   // money that was given back is not a sale
+        var s = String(((o.shipping_address || {}).state) || '').trim().toUpperCase();
+        if (!s) return;
+        by[s] = by[s] || { state: s, orders: 0, sales: 0 };
+        by[s].orders++; by[s].sales += Number(o.total) || 0;
+      });
+      st.rows = Object.keys(by).map(function (k) { return by[k]; })
+        .sort(function (a, b) { return b.sales - a.sales; });
+    } catch (e) { st.error = e.message || String(e); st.rows = []; }
+    st.loading = false; A.render();
+  }
+
+  function stateLevel(r) {
+    if (r.state === HOME_STATE) return { cls: 'green', label: 'Registered — collecting' };
+    var share = Math.max(r.sales / TAX_LIMIT_SALES, r.orders / TAX_LIMIT_ORDERS);
+    if (share >= 1) return { cls: 'clay', label: 'Over the usual threshold — ask your accountant now' };
+    if (share >= TAX_WARN) return { cls: 'clay', label: 'Getting close — worth asking your accountant' };
+    return { cls: '', label: 'Well under' };
+  }
+
+  function taxPanel() {
+    if (st.rows === null) { if (!st.loading) loadStates(); return A.ui.panel('Sales tax watch', '<p class="hint">Adding up sales by state…</p>'); }
+    if (st.error) return A.ui.panel('Sales tax watch', A.ui.warn('<b>Couldn’t read the orders:</b> ' + esc(st.error)));
+    var near = st.rows.filter(function (r) { return r.state !== HOME_STATE && Math.max(r.sales / TAX_LIMIT_SALES, r.orders / TAX_LIMIT_ORDERS) >= TAX_WARN; });
+    var rows = st.rows.map(function (r) {
+      var lv = stateLevel(r);
+      return [esc(r.state), num(r.orders), u.money(r.sales), (lv.cls ? A.ui.tag(lv.label, lv.cls) : '<span class="hint">' + lv.label + '</span>')];
+    });
+    return A.ui.panel('Sales tax watch',
+      (near.length
+        ? A.ui.warn('<b>' + near.map(function (r) { return esc(r.state); }).join(', ') +
+            '</b> ' + (near.length === 1 ? 'is' : 'are') + ' near the usual threshold for collecting sales tax ' +
+            '(about ' + u.money(TAX_LIMIT_SALES) + ' or ' + TAX_LIMIT_ORDERS + ' orders in a year). Ask your accountant whether to register there.')
+        : '<p class="hint" style="margin:-6px 0 12px">Website orders in the last 12 months, by delivery state. ' +
+          'Amazon, Walmart and the other marketplaces collect their own sales tax, so they are not counted here.</p>') +
+      table(['State', 'Orders', 'Sales', 'Sales tax'], rows, 'No website orders yet.') +
+      '<p class="hint" style="margin-top:12px">Most states ask you to collect once you pass about ' +
+      u.money(TAX_LIMIT_SALES) + ' or ' + TAX_LIMIT_ORDERS + ' orders into that state in a year; a few differ ' +
+      '(California and Texas are higher). This is a prompt to ask your accountant, not tax advice.</p>');
+  }
+
   A.tabs.analytics = {
     render: function () {
       var chips = RANGES.map(function (r) {
@@ -106,6 +175,7 @@
           table(['Product', 'Card seen', 'Card clicked', 'Click rate', 'Added to cart', 'Sold', 'Revenue'], prodRows, 'No product activity yet.') +
           '<p class="hint">“Card seen” counts a product card that was actually scrolled into view on a category, search or home page.</p>') +
         A.ui.panel('Devices', table(['Device', 'Visits', 'Share'], devRows, 'No visits yet.')) +
+        taxPanel() +
         A.ui.panel('Google search',
           '<p class="hint" style="margin:0">Search terms, impressions and position come from Google Search Console, which isn’t connected yet. ' +
           'Verify the site there once and that table can be pulled in here.</p>') +
