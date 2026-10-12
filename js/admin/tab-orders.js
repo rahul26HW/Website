@@ -282,6 +282,16 @@
       A.alert(['Add the tracking number before marking it ' + patch.status + ' (ShipStation fills it in by itself when you ship there).'], document.querySelector('#adminMain [data-bind="@tracking_number"]')); return;
     }
     if (patch.payment_status === 'paid' && /^(cancelled)$/.test(patch.status) && o.payment_status !== 'paid') { A.alert(['A cancelled order can’t be marked paid.']); return; }
+    /* “Refunded” emails the customer that their money is coming back, but nothing in this
+       admin moves money — the refund has to be issued in Stripe. Make the person say they did. */
+    if (patch.status === 'refunded' && o.status !== 'refunded' && /^(paid|authorized)$/.test(o.payment_status || '')) {
+      var held = o.payment_status === 'authorized';
+      var ask = 'Order ' + o.order_number + ' is ' + (held ? 'held on the card' : 'paid') + ' for ' + u.money(o.total) + '.\n\n' +
+        'Nothing here moves money. Have you already ' + (held ? 'released the hold' : 'refunded it') + ' in Stripe?\n\n' +
+        'The customer is emailed that their refund is on the way as soon as you click OK.';
+      if (!confirm(ask)) return;
+      patch.payment_status = held ? 'voided' : 'refunded';
+    }
     var was = o.status;
     var r = await A.sb.from('orders').update(patch).eq('id', o.id).select('*, order_items(*)');
     if (r.error || !r.data || !r.data.length) { u.toast('Save failed: ' + (r.error ? r.error.message : 'not allowed')); return; }
