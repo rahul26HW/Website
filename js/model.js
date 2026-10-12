@@ -84,6 +84,7 @@
       onSale: timed != null || (sale != null && sale < price),
       available: !off,
       upc: ov.upc || '',
+      weight: ov.weight || null, dims: ov.dims || null,   // grams / cm, for the carrier quote
       sku: sku, inStock: !off && m.invInStock(sku, baseStock),
       rawImages: rawImgs, primary: hasOwn ? (ov.primary || 0) : (color.primary || 0),
       video: hasOwn ? (ov.video || '') : (color.video || '')

@@ -44,11 +44,11 @@
     },
     simpleItem: function (p) {
       return { id: m.simpleSku(p), name: p.name, price: m.simplePrice(p).effective, image: HW.asset(m.primaryImage(p)),
-        description: HW.htmlToText(p.description).slice(0, 180), weight: p.weight, categories: snip.categories(p) };
+        description: HW.htmlToText(p.description).slice(0, 180), weight: p.weight, dims: p.dims, categories: snip.categories(p) };
     },
     variantItem: function (p, v) {
       return { id: v.sku, name: p.name, price: v.effective, image: HW.asset(m.firstPhoto(v.rawImages, v.primary) || m.colorImage(p, v.color)),
-        description: HW.htmlToText(p.description).slice(0, 180), weight: p.weight, categories: snip.categories(p),
+        description: HW.htmlToText(p.description).slice(0, 180), weight: v.weight || p.weight, dims: v.dims || p.dims, categories: snip.categories(p),
         custom: [{ name: 'Color', value: v.color.label }, { name: 'Size', value: v.size.label }] };
     },
     attrs: function (o) {
@@ -58,7 +58,12 @@
       (o.custom || []).forEach(function (c, i) {
         a += ' data-item-custom' + (i + 1) + '-name="' + esc(c.name) + '" data-item-custom' + (i + 1) + '-value="' + esc(c.value) + '" data-item-custom' + (i + 1) + '-type="readonly"';
       });
+      // Snipcart wants grams and centimetres, both whole numbers; without them it cannot quote a carrier.
       if (o.weight) a += ' data-item-weight="' + Math.round(+o.weight) + '"';
+      if (o.dims && o.dims.l && o.dims.w && o.dims.h) {
+        a += ' data-item-length="' + Math.round(+o.dims.l) + '" data-item-width="' + Math.round(+o.dims.w) +
+             '" data-item-height="' + Math.round(+o.dims.h) + '"';
+      }
       if (o.categories && o.categories.length) a += ' data-item-categories="' + esc(o.categories.join('|')) + '"';
       return a;
     },

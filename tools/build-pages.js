@@ -151,10 +151,30 @@ async function main() {
     [''].concat(pages.filter(function (p) { return !p.alias; }).map(function (p) { return p.route; })).map(function (r) { return '  <url><loc>' + attr(abs(r)) + '</loc><lastmod>' + today + '</lastmod></url>'; }).join('\n') + '\n</urlset>\n';
   fs.writeFileSync(path.join(ROOT, 'sitemap.xml'), xml);
 
+  // Snipcart re-checks every price before it accepts an order. It fetches this file (JSON crawler,
+  // because the pages are rendered in the browser and a crawler sees no buy button) and compares.
+  // It therefore has to be rebuilt whenever prices change — including when a timed sale starts or ends.
+  const feed = [];
+  (data.products || []).forEach(function (p) {
+    if (p.hidden) return;
+    const url = abs('product/' + p.slug);
+    if (HW.m.isCollection(p)) {
+      // eachVariant already yields the resolved variant, and only the ones for sale.
+      HW.m.eachVariant(p, function (v) {
+        if (!v.sku) return;
+        feed.push({ id: v.sku, price: +(+v.effective).toFixed(2), url: url, name: p.name });
+      });
+    } else {
+      const sku = HW.m.simpleSku(p);
+      if (sku) feed.push({ id: sku, price: +(+HW.m.simplePrice(p).effective).toFixed(2), url: url, name: p.name });
+    }
+  });
+  fs.writeFileSync(path.join(ROOT, 'products.json'), JSON.stringify(feed));
+
   const count = (k) => pages.filter(function (p) { return !p.alias && p.route.indexOf(k + '/') === 0; }).length;
   const aliases = pages.filter(function (p) { return p.alias; }).length;
   console.log('Wrote ' + pages.length + ' pages (' + count('category') + ' categories, ' + count('product') + ' products, ' +
-    count('page') + ' info pages' + (aliases ? ', ' + aliases + ' old product addresses' : '') + ') and sitemap.xml.');
+    count('page') + ' info pages' + (aliases ? ', ' + aliases + ' old product addresses' : '') + ') and sitemap.xml, plus products.json with ' + feed.length + ' prices.');
 }
 
 main().catch(function (e) { console.error(e.message); process.exit(1); });
