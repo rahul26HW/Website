@@ -102,6 +102,31 @@ export default {
            can be set up one at a time. Reads the account only — never returns the key itself. */
         /* Which carriers ShipStation can quote for us — decides what the checkout can offer. */
         case "/snipcart/shipping": return await handleSnipcartShipping(request, env, cors);
+        /* Every rate for a test destination — so an odd shipping price can be explained. */
+        case "/shipstation/quote": {
+          const denied = await requireAdmin(request, env);
+          if (denied) return json({ error: denied }, 401, cors);
+          if (!features(env).shipstation) return json({ error: "ShipStation isn't set up on the server." }, 501, cors);
+          const q = await readJson(request);
+          const store = await storeData(env);
+          const parcel = packCart(q.items || [], shipIndex(store));
+          const list = (await shipstation(env, "carriers")) || [];
+          const all = [];
+          await Promise.all(list.map(async (cr) => {
+            try {
+              const res = await shipstation(env, "shipments/getrates", { method: "POST", body: JSON.stringify({
+                carrierCode: cr.code, fromPostalCode: String(env.SHIP_FROM_ZIP || "08854"),
+                toState: q.toState || "", toCountry: q.toCountry || "US", toPostalCode: String(q.toPostalCode || ""),
+                residential: true, weight: { value: parcel.pounds, units: "pounds" },
+                ...(parcel.dims ? { dimensions: parcel.dims } : {}) }) });
+              (res || []).forEach((r) => all.push({ carrier: cr.code, service: r.serviceName,
+                cost: Math.round(((+r.shipmentCost || 0) + (+r.otherCost || 0)) * 100) / 100,
+                days: r.deliveryDays == null ? null : +r.deliveryDays,
+                allowed: !SERVICE_NOT_ALLOWED.test(r.serviceName || "") }));
+            } catch (e) { all.push({ carrier: cr.code, error: String(e.message || e).slice(0, 120) }); }
+          }));
+          return json({ ok: true, parcel, carriers: list.map((c) => c.code), rates: all.sort((a, b) => (a.cost || 0) - (b.cost || 0)) }, 200, cors);
+        }
         case "/shipstation/carriers": {
           const denied = await requireAdmin(request, env);
           if (denied) return json({ error: denied }, 401, cors);
@@ -144,7 +169,7 @@ export default {
     } catch (e) {
       // Details go to the Cloudflare log. Only signed-in admins get them back; shoppers and webhooks get a plain message.
       console.error(url.pathname, e && e.stack ? e.stack : e);
-      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/orders/notify", "/email/test", "/admin/health", "/stripe/check", "/shipstation/carriers"].includes(url.pathname.replace(/\/+$/, ""));
+      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/orders/notify", "/email/test", "/admin/health", "/stripe/check", "/shipstation/carriers", "/shipstation/quote"].includes(url.pathname.replace(/\/+$/, ""));
       return json({ error: adminRoute ? "Worker error: " + (e && e.message ? e.message : "unknown") : "Something went wrong. Please try again in a moment." }, 500, cors);
     }
   },
@@ -809,6 +834,11 @@ async function handleStripeWebhook(request, env) {
  * Dimensions are not in Snipcart's payload, so they are looked up per SKU from our own catalog.
  * ---------------------------------------------------------------- */
 const LB_PER_G = 1 / 453.59237, IN_PER_CM = 1 / 2.54;
+/* Media and Library Mail are only lawful for books and printed matter — never for rugs or towels.
+   USPS returns or surcharges parcels sent this way, so they must never be offered. */
+const SERVICE_NOT_ALLOWED = /media\s*mail|library\s*mail/i;
+/* Services that are genuinely quicker, for when a carrier gives no delivery estimate. */
+const SERVICE_FAST = /priority|express|overnight|next\s*day|2nd\s*day|second\s*day|air|expedited/i;
 
 /* Every sellable SKU's weight and box, straight from the catalog. */
 function shipIndex(store) {
@@ -881,16 +911,22 @@ async function handleSnipcartShipping(request, env, cors) {
         }),
       });
       (res || []).forEach((r) => {
+        const name = r.serviceName || code;
+        if (SERVICE_NOT_ALLOWED.test(name)) return;
         const cost = Math.round(((+r.shipmentCost || 0) + (+r.otherCost || 0)) * 100) / 100;
-        if (cost > 0) quotes.push({ cost, name: r.serviceName || code, days: r.deliveryDays == null ? null : +r.deliveryDays });
+        if (cost > 0) quotes.push({ cost, name, days: r.deliveryDays == null ? null : +r.deliveryDays, fast: SERVICE_FAST.test(name) });
       });
     } catch (e) { /* one carrier failing must not lose the others */ }
   }));
   if (!quotes.length) return json({ errors: [{ key: "shipping", message: "No delivery options for that address. Please check the postal code." }] }, 200, cors);
 
   const cheapest = quotes.slice().sort((a, b) => a.cost - b.cost)[0];
+  // Prefer a real delivery estimate; when no carrier gives one, fall back to the service names
+  // that are actually quicker, and take the cheapest of those.
   const timed = quotes.filter((q) => q.days != null);
-  const fastest = timed.length ? timed.slice().sort((a, b) => a.days - b.days || a.cost - b.cost)[0] : null;
+  const fastest = timed.length
+    ? timed.slice().sort((a, b) => a.days - b.days || a.cost - b.cost)[0]
+    : quotes.filter((q) => q.fast && q.cost > cheapest.cost).sort((a, b) => a.cost - b.cost)[0] || null;
 
   const rates = [{
     cost: freeEarned ? 0 : cheapest.cost,
@@ -899,10 +935,13 @@ async function handleSnipcartShipping(request, env, cors) {
     userDefinedId: "standard",
   }];
   // Express only when it genuinely arrives sooner, and it is always paid for.
-  if (fastest && fastest.name !== cheapest.name && (cheapest.days == null || fastest.days < cheapest.days)) {
+  const sooner = fastest && fastest.name !== cheapest.name &&
+    (fastest.days != null && cheapest.days != null ? fastest.days < cheapest.days : fastest.cost > cheapest.cost);
+  if (sooner) {
     rates.push({
       cost: fastest.cost, description: "Express shipping (" + fastest.name + ")",
-      guaranteedDaysToDelivery: fastest.days, userDefinedId: "express",
+      ...(fastest.days != null ? { guaranteedDaysToDelivery: fastest.days } : {}),
+      userDefinedId: "express",
     });
   }
   return json({ rates }, 200, cors);
