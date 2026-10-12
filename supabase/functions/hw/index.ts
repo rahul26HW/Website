@@ -107,6 +107,7 @@ const handler = {
         /* Does the Stripe key actually work? Answers before the webhook secret is in, so the two
            can be set up one at a time. Reads the account only — never returns the key itself. */
         /* Which carriers ShipStation can quote for us — decides what the checkout can offer. */
+        case "/snipcart/shipping": return await handleSnipcartShipping(request, env, cors);
         case "/shipstation/carriers": {
           const denied = await requireAdmin(request, env);
           if (denied) return json({ error: denied }, 401, cors);
@@ -803,6 +804,114 @@ async function handleStripeWebhook(request, env) {
     return json({ ok: true });
   }
   return json({ ok: true, ignored: event.type });
+}
+
+/* ---------------------------------------------------------------- *
+ * POST /snipcart/shipping — Snipcart's shippingrates.fetch webhook.
+ * Snipcart sends the destination and the cart; we ask ShipStation what the
+ * carriers actually charge to that ZIP and answer with two choices:
+ *   Standard — the cheapest rate, free when the order clears the free-shipping threshold
+ *   Express  — the fastest rate, always paid, and only when it really is faster
+ * Dimensions are not in Snipcart's payload, so they are looked up per SKU from our own catalog.
+ * ---------------------------------------------------------------- */
+const LB_PER_G = 1 / 453.59237, IN_PER_CM = 1 / 2.54;
+
+/* Every sellable SKU's weight and box, straight from the catalog. */
+function shipIndex(store) {
+  const out = {};
+  (store.products || []).forEach((p) => {
+    const opts = p.options || [];
+    const col = opts.find((o) => o.type === "color"), siz = opts.find((o) => o.type === "size");
+    if (col && siz) {
+      col.values.forEach((c) => siz.values.forEach((s) => {
+        const v = (p.variants || {})[c.id + "__" + s.id];
+        if (v && !v.off && v.sku) out[String(v.sku).toUpperCase()] = { g: v.weight || 0, d: v.dims || null };
+      }));
+    } else if (p.sku) {
+      out[String(p.sku).toUpperCase()] = { g: p.weight || 0, d: p.dims || null };
+    }
+  });
+  return out;
+}
+
+/* One parcel for the whole cart: weights added, the widest footprint, heights stacked. */
+function packCart(items, index) {
+  let grams = 0, len = 0, wid = 0, hei = 0;
+  (items || []).forEach((it) => {
+    const qty = Math.max(1, parseInt(it.quantity, 10) || 1);
+    const e = index[String(it.id || "").toUpperCase()] || {};
+    grams += (e.g || Number(it.weight) || 0) * qty;
+    if (e.d) { len = Math.max(len, e.d.l || 0); wid = Math.max(wid, e.d.w || 0); hei += (e.d.h || 0) * qty; }
+  });
+  return {
+    pounds: Math.max(0.1, Math.round(grams * LB_PER_G * 100) / 100),
+    dims: len && wid && hei
+      ? { units: "inches", length: Math.max(1, Math.round(len * IN_PER_CM)), width: Math.max(1, Math.round(wid * IN_PER_CM)), height: Math.max(1, Math.round(hei * IN_PER_CM)) }
+      : null,
+  };
+}
+
+async function handleSnipcartShipping(request, env, cors) {
+  if (!features(env).shipstation) return json({ errors: [{ key: "shipping", message: "Shipping isn't set up yet." }] }, 200, cors);
+  const body = await readJson(request);
+  if (body.eventName && body.eventName !== "shippingrates.fetch") return json({ rates: [] }, 200, cors);
+  const c = body.content || {};
+  const toPostalCode = String(c.shippingAddressPostalCode || "").trim();
+  const toCountry = String(c.shippingAddressCountry || "US").trim().toUpperCase().slice(0, 2);
+  const toState = String(c.shippingAddressProvince || "").trim();
+  if (!toPostalCode) return json({ errors: [{ key: "shipping", message: "Please enter a postal code." }] }, 200, cors);
+
+  const store = await storeData(env);
+  const parcel = packCart(c.items, shipIndex(store));
+  const sh = store.shipping || {};
+  const threshold = Number(sh.freeThreshold);
+  const subtotal = Number(c.subtotal || 0);
+  const freeEarned = sh.enabled !== false && threshold > 0 && subtotal >= threshold;
+
+  // Quote every carrier ShipStation has connected, and keep whatever answers.
+  let carriers = [];
+  try { carriers = (await shipstation(env, "carriers")) || []; } catch (e) { carriers = []; }
+  const codes = carriers.map((x) => x.code).filter(Boolean);
+  if (!codes.length) return json({ errors: [{ key: "shipping", message: "We couldn't reach the carriers just now. Please try again." }] }, 200, cors);
+
+  const quotes = [];
+  await Promise.all(codes.map(async (code) => {
+    try {
+      const res = await shipstation(env, "shipments/getrates", {
+        method: "POST",
+        body: JSON.stringify({
+          carrierCode: code, fromPostalCode: String(env.SHIP_FROM_ZIP || "08854"),
+          toState, toCountry, toPostalCode, residential: true,
+          weight: { value: parcel.pounds, units: "pounds" },
+          ...(parcel.dims ? { dimensions: parcel.dims } : {}),
+        }),
+      });
+      (res || []).forEach((r) => {
+        const cost = Math.round(((+r.shipmentCost || 0) + (+r.otherCost || 0)) * 100) / 100;
+        if (cost > 0) quotes.push({ cost, name: r.serviceName || code, days: r.deliveryDays == null ? null : +r.deliveryDays });
+      });
+    } catch (e) { /* one carrier failing must not lose the others */ }
+  }));
+  if (!quotes.length) return json({ errors: [{ key: "shipping", message: "No delivery options for that address. Please check the postal code." }] }, 200, cors);
+
+  const cheapest = quotes.slice().sort((a, b) => a.cost - b.cost)[0];
+  const timed = quotes.filter((q) => q.days != null);
+  const fastest = timed.length ? timed.slice().sort((a, b) => a.days - b.days || a.cost - b.cost)[0] : null;
+
+  const rates = [{
+    cost: freeEarned ? 0 : cheapest.cost,
+    description: freeEarned ? "Free standard shipping" : "Standard shipping (" + cheapest.name + ")",
+    ...(cheapest.days != null ? { guaranteedDaysToDelivery: cheapest.days } : {}),
+    userDefinedId: "standard",
+  }];
+  // Express only when it genuinely arrives sooner, and it is always paid for.
+  if (fastest && fastest.name !== cheapest.name && (cheapest.days == null || fastest.days < cheapest.days)) {
+    rates.push({
+      cost: fastest.cost, description: "Express shipping (" + fastest.name + ")",
+      guaranteedDaysToDelivery: fastest.days, userDefinedId: "express",
+    });
+  }
+  return json({ rates }, 200, cors);
 }
 
 /* ---------------------------------------------------------------- *
