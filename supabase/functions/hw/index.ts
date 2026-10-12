@@ -890,6 +890,11 @@ function packCart(items, index) {
    Replace it with measured times once real orders have shipped. */
 const TRANSIT_BY_ZIP1 = { 0: [1, 2], 1: [1, 2], 2: [2, 3], 3: [3, 4], 4: [3, 4], 5: [3, 5], 6: [4, 5], 7: [4, 5], 8: [5, 6], 9: [5, 7] };
 function transitDays(zip) { return TRANSIT_BY_ZIP1[String(zip || "").trim()[0]] || [4, 6]; }
+/* Express has no carrier estimate either, so roughly halve the standard window, never under 1-2 days. */
+function expressDays(zip) {
+  const [a, b] = transitDays(zip);
+  return [Math.max(1, Math.round(a / 2)), Math.max(2, Math.round(b / 2))];
+}
 
 /* Working days only, so a Friday order does not promise a Sunday delivery. */
 function addBusinessDays(from, n) {
@@ -940,23 +945,25 @@ async function handleShippingEstimate(request, env, cors) {
   if (hit && Date.now() - hit.at < 3600000) return json(hit.body, 200, cors);
 
   const quotes = await quoteParcel(env, parcel, zip, String(body.state || "").trim(), "US");
-  if (!quotes.length) return json({ error: "No delivery options for that ZIP code." }, 200, cors);
-
-  const cheapest = quotes.slice().sort((a, b) => a.cost - b.cost)[0];
-  const faster = quotes.filter((q) => q.fast && q.cost > cheapest.cost).sort((a, b) => a.cost - b.cost)[0] || null;
+  const cheapest = quotes.length ? quotes.slice().sort((a, b) => a.cost - b.cost)[0] : null;
+  const faster = cheapest ? quotes.filter((q) => q.fast && q.cost > cheapest.cost).sort((a, b) => a.cost - b.cost)[0] || null : null;
   const sh = store.shipping || {};
   const threshold = Number(sh.freeThreshold) || 0;
-  const [tMin, tMax] = transitDays(zip);
+  const flat = Number(sh.flatRate);
+  const standardCost = isFinite(flat) && flat >= 0 ? flat : 9.99;
+  const t = transitDays(zip), x = expressDays(zip);
   // Dispatch first, then transit — a Friday order must not promise a Sunday arrival.
   const dispatch = Math.max(0, parseInt(String((store.settings || {}).shippingDays || "2").match(/\d+/) || [2], 10));
   const now = new Date();
   const out = {
     ok: true, zip: zip,
-    standard: { cost: cheapest.cost, service: cheapest.name },
-    express: faster ? { cost: faster.cost, service: faster.name } : null,
+    standard: { cost: standardCost, service: "Standard shipping" },
+    express: faster && faster.cost > standardCost ? { cost: faster.cost, service: faster.name } : null,
     freeOver: threshold || null,
-    arrives: { from: addBusinessDays(now, dispatch + tMin).toISOString().slice(0, 10),
-               to: addBusinessDays(now, dispatch + tMax).toISOString().slice(0, 10) },
+    arrives: { from: addBusinessDays(now, dispatch + t[0]).toISOString().slice(0, 10),
+               to: addBusinessDays(now, dispatch + t[1]).toISOString().slice(0, 10) },
+    arrivesExpress: { from: addBusinessDays(now, dispatch + x[0]).toISOString().slice(0, 10),
+                      to: addBusinessDays(now, dispatch + x[1]).toISOString().slice(0, 10) },
   };
   estCache.set(key, { at: Date.now(), body: out });
   return json(out, 200, cors);
@@ -979,55 +986,31 @@ async function handleSnipcartShipping(request, env, cors) {
   const subtotal = Number(c.subtotal || 0);
   const freeEarned = sh.enabled !== false && threshold > 0 && subtotal >= threshold;
 
-  // Quote every carrier ShipStation has connected, and keep whatever answers.
-  let carriers = [];
-  try { carriers = (await shipstation(env, "carriers")) || []; } catch (e) { carriers = []; }
-  const codes = carriers.map((x) => x.code).filter(Boolean);
-  if (!codes.length) return json({ errors: [{ key: "shipping", message: "We couldn't reach the carriers just now. Please try again." }] }, 200, cors);
+  // Standard is a flat price we set, so it never varies by state and never depends on ShipStation
+  // being reachable. Only Express is quoted live, and it is always paid for in full.
+  const flat = Number(sh.flatRate);
+  const standardCost = freeEarned ? 0 : (isFinite(flat) && flat >= 0 ? flat : 9.99);
+  const [sMin, sMax] = transitDays(toPostalCode);
+  const rates = [{
+    cost: standardCost,
+    description: freeEarned ? "Free standard shipping (about " + sMin + "-" + sMax + " days)"
+                            : "Standard shipping (about " + sMin + "-" + sMax + " days)",
+    guaranteedDaysToDelivery: sMax,
+    userDefinedId: "standard",
+  }];
 
-  const quotes = [];
-  await Promise.all(codes.map(async (code) => {
-    try {
-      const res = await shipstation(env, "shipments/getrates", {
-        method: "POST",
-        body: JSON.stringify({
-          carrierCode: code, fromPostalCode: String(env.SHIP_FROM_ZIP || "08854"),
-          toState, toCountry, toPostalCode, residential: true,
-          weight: { value: parcel.pounds, units: "pounds" },
-          ...(parcel.dims ? { dimensions: parcel.dims } : {}),
-        }),
-      });
-      (res || []).forEach((r) => {
-        const name = r.serviceName || code;
-        if (SERVICE_NOT_ALLOWED.test(name)) return;
-        const cost = Math.round(((+r.shipmentCost || 0) + (+r.otherCost || 0)) * 100) / 100;
-        if (cost > 0) quotes.push({ cost, name, days: r.deliveryDays == null ? null : +r.deliveryDays, fast: SERVICE_FAST.test(name) });
-      });
-    } catch (e) { /* one carrier failing must not lose the others */ }
-  }));
-  if (!quotes.length) return json({ errors: [{ key: "shipping", message: "No delivery options for that address. Please check the postal code." }] }, 200, cors);
-
-  const cheapest = quotes.slice().sort((a, b) => a.cost - b.cost)[0];
-  // Prefer a real delivery estimate; when no carrier gives one, fall back to the service names
-  // that are actually quicker, and take the cheapest of those.
+  const quotes = await quoteParcel(env, parcel, toPostalCode, toState, toCountry);
+  const cheapest = quotes.length ? quotes.slice().sort((a, b) => a.cost - b.cost)[0] : null;
   const timed = quotes.filter((q) => q.days != null);
   const fastest = timed.length
     ? timed.slice().sort((a, b) => a.days - b.days || a.cost - b.cost)[0]
-    : quotes.filter((q) => q.fast && q.cost > cheapest.cost).sort((a, b) => a.cost - b.cost)[0] || null;
-
-  const rates = [{
-    cost: freeEarned ? 0 : cheapest.cost,
-    description: freeEarned ? "Free standard shipping" : "Standard shipping (" + cheapest.name + ")",
-    ...(cheapest.days != null ? { guaranteedDaysToDelivery: cheapest.days } : {}),
-    userDefinedId: "standard",
-  }];
-  // Express only when it genuinely arrives sooner, and it is always paid for.
-  const sooner = fastest && fastest.name !== cheapest.name &&
-    (fastest.days != null && cheapest.days != null ? fastest.days < cheapest.days : fastest.cost > cheapest.cost);
-  if (sooner) {
+    : (cheapest ? quotes.filter((q) => q.fast && q.cost > cheapest.cost).sort((a, b) => a.cost - b.cost)[0] : null) || null;
+  if (fastest && fastest.cost > standardCost) {
+    const [xMin, xMax] = fastest.days != null ? [fastest.days, fastest.days] : expressDays(toPostalCode);
     rates.push({
-      cost: fastest.cost, description: "Express shipping (" + fastest.name + ")",
-      ...(fastest.days != null ? { guaranteedDaysToDelivery: fastest.days } : {}),
+      cost: fastest.cost,
+      description: "Express shipping (about " + (xMin === xMax ? xMin : xMin + "-" + xMax) + " days)",
+      guaranteedDaysToDelivery: xMax,
       userDefinedId: "express",
     });
   }

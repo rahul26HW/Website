@@ -427,9 +427,11 @@
           var d = new Date(iso + 'T12:00:00Z');
           return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
         };
-        var price = r.standard.cost <= 0 ? 'Free' : u.money(r.standard.cost);
-        var txt = price + ' standard · estimated ' + fmt(r.arrives.from) + '–' + fmt(r.arrives.to);
-        if (r.express) txt += ' · express ' + u.money(r.express.cost);
+        var span = function (a) { return fmt(a.from) === fmt(a.to) ? fmt(a.from) : fmt(a.from) + '–' + fmt(a.to); };
+        var txt = 'Standard ' + (r.standard.cost <= 0 ? 'free' : u.money(r.standard.cost)) +
+          ', arrives about ' + span(r.arrives);
+        if (r.express && r.arrivesExpress) txt += ' · Express ' + u.money(r.express.cost) + ', about ' + span(r.arrivesExpress);
+        else if (r.express) txt += ' · Express ' + u.money(r.express.cost);
         if (r.freeOver) txt += ' · free over ' + u.money(r.freeOver);
         box.className = 'shipest-out ok';
         box.textContent = txt;
