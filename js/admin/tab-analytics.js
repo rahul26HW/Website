@@ -61,6 +61,7 @@
    * marketplace itself and are not in this table, which is correct.
    * ---------------------------------------------------------------- */
   var TAX_LIMIT_SALES = 100000, TAX_LIMIT_ORDERS = 200;   // the common state thresholds
+  var TAX_LIMIT_TEXT = '$100,000';                        // written out, so it reads as a round number
   var TAX_WARN = 0.75;                                     // shout at three quarters of the way
   var HOME_STATE = 'NJ';
   var st = { rows: null, loading: false, error: '' };
@@ -113,12 +114,12 @@
       (near.length
         ? A.ui.warn('<b>' + near.map(function (r) { return esc(r.state); }).join(', ') +
             '</b> ' + (near.length === 1 ? 'is' : 'are') + ' near the usual threshold for collecting sales tax ' +
-            '(about ' + u.money(TAX_LIMIT_SALES) + ' or ' + TAX_LIMIT_ORDERS + ' orders in a year). Ask your accountant whether to register there.')
+            '(about ' + TAX_LIMIT_TEXT + ' or ' + TAX_LIMIT_ORDERS + ' orders in a year). Ask your accountant whether to register there.')
         : '<p class="hint" style="margin:-6px 0 12px">Website orders in the last 12 months, by delivery state. ' +
           'Amazon, Walmart and the other marketplaces collect their own sales tax, so they are not counted here.</p>') +
-      table(['State', 'Orders', 'Sales', 'Sales tax'], rows, 'No website orders yet.') +
+      table(['State', 'Orders', 'Sales', 'Where you stand'], rows, 'No website orders yet.') +
       '<p class="hint" style="margin-top:12px">Most states ask you to collect once you pass about ' +
-      u.money(TAX_LIMIT_SALES) + ' or ' + TAX_LIMIT_ORDERS + ' orders into that state in a year; a few differ ' +
+      TAX_LIMIT_TEXT + ' or ' + TAX_LIMIT_ORDERS + ' orders into that state in a year; a few differ ' +
       '(California and Texas are higher). This is a prompt to ask your accountant, not tax advice.</p>');
   }
 
