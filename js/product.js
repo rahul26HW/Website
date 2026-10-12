@@ -226,7 +226,7 @@
         saleBand(p) +
         '<div class="price"><span class="now ' + (sp.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(sp.effective) + '</span>' + (sp.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(sp.timedSale ? sp.wasPrice : sp.price) + '</span>' : '') + '</div>' +
         descHTML(p) +
-        (p.sku ? '<div class="skuline">SKU ' + esc(p.sku) + (p.upc ? ' · UPC ' + esc(p.upc) : '') + '</div>' : '') +
+        (p.sku ? '<div class="skuline">SKU ' + esc(p.sku) + (p.upc ? ' · UPC ' + esc(p.upc) : '') + '</div>' : '') + shipBox() +
         '<div class="stocknote ' + (inStock ? 'in' : 'out') + '"><span aria-hidden="true">● </span>' + esc(m.stockLabel(qtyKey, inStock)) + '</div>' +
         '<div class="qtyrow">' + (inStock ? stepper(m.invTracked(qtyKey) ? m.invQty(qtyKey) : UNTRACKED_MAX) : '') + buy + '</div>' +
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
@@ -257,6 +257,19 @@
     return '<div class="saleband" role="note" data-sale-ends="' + sale.endsAt + '">' +
       '<span class="t">' + esc(sale.name) + '</span>' +
       '<span class="c" data-sale-clock="parts"></span></div>';
+  }
+
+/* "Deliver to 08854" — the real carrier price for this item plus an estimated arrival window.
+     The window is distance-based, not a carrier promise, and is worded that way. */
+  function shipBox() {
+    var saved = '';
+    try { saved = localStorage.getItem('hw:zip') || ''; } catch (e) {}
+    return '<div class="shipest" id="shipEst">' +
+      '<label class="t" for="shipZip">Delivery to</label>' +
+      '<div class="shipest-row">' +
+      '<input id="shipZip" type="text" inputmode="numeric" maxlength="10" placeholder="ZIP code" value="' + esc(saved) + '" autocomplete="postal-code">' +
+      '<button class="btn ghost sm" type="button" data-act="ship-est">Check</button></div>' +
+      '<p class="shipest-out" id="shipEstOut" aria-live="polite"></p></div>';
   }
 
   function collectionInfo(p, cat, sub) {
@@ -292,7 +305,7 @@
         saleBand(p) +
         '<div class="price" aria-live="polite"><span class="now ' + (v.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(v.effective) + '</span>' + (v.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(v.timedSale ? v.wasPrice : v.price) + '</span>' : '') + '</div>' +
         descHTML(p) + swatches + sizes +
-        '<div class="skuline">SKU ' + esc(v.sku) + (v.upc ? ' · UPC ' + esc(v.upc) : '') + '</div>' +
+        '<div class="skuline">SKU ' + esc(v.sku) + (v.upc ? ' · UPC ' + esc(v.upc) : '') + '</div>' + shipBox() +
         '<div class="stocknote ' + (v.inStock ? 'in' : 'out') + '" aria-live="polite"><span aria-hidden="true">● </span>' + esc(v.inStock ? m.stockLabel(v.sku, true) : 'This option is currently sold out') + '</div>' +
         '<div class="qtyrow">' + (v.inStock ? stepper(m.invTracked(v.sku) ? m.invQty(v.sku) : UNTRACKED_MAX) : '') + buy + '</div>' +
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
@@ -398,6 +411,33 @@
       if (row) row.scrollBy({ left: d * swatchStep(), behavior: 'smooth' });
     },
     zoom: function () { if (gal) HW.lightbox.open(gal.items, gal.idx, gal.alt); },
+    shipEstimate: async function () {
+      var box = document.getElementById('shipEstOut'), input = document.getElementById('shipZip');
+      if (!box || !input) return;
+      var zip = String(input.value || '').trim();
+      if (!/^\d{5}(-\d{4})?$/.test(zip)) { box.className = 'shipest-out bad'; box.textContent = 'Enter a 5-digit ZIP code.'; return; }
+      try { localStorage.setItem('hw:zip', zip); } catch (e) {}
+      var p = current(); if (!p) return;
+      var sku = m.isCollection(p) ? m.resolveVariant(p, sel.colorId, sel.sizeId).sku : m.simpleSku(p);
+      box.className = 'shipest-out'; box.textContent = 'Checking…';
+      try {
+        var r = await HW.api.server('/shipping/estimate', { zip: zip, items: [{ id: sku, quantity: sel.qty || 1 }] });
+        if (!r || r.error) throw new Error((r && r.error) || 'No delivery options');
+        var fmt = function (iso) {
+          var d = new Date(iso + 'T12:00:00Z');
+          return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+        };
+        var price = r.standard.cost <= 0 ? 'Free' : u.money(r.standard.cost);
+        var txt = price + ' standard · estimated ' + fmt(r.arrives.from) + '–' + fmt(r.arrives.to);
+        if (r.express) txt += ' · express ' + u.money(r.express.cost);
+        if (r.freeOver) txt += ' · free over ' + u.money(r.freeOver);
+        box.className = 'shipest-out ok';
+        box.textContent = txt;
+      } catch (e) {
+        box.className = 'shipest-out bad';
+        box.textContent = e.message || 'We couldn’t check that ZIP code just now.';
+      }
+    },
     color: function (id) {
       var p = current(); sel.colorId = id; sel.qty = 1;
       if (p && m.isCollection(p) && !m.resolveVariant(p, id, sel.sizeId).inStock) {

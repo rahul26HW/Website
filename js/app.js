@@ -99,6 +99,7 @@
     'sw-scroll': function (el) { HW.pdp.swScroll(+el.dataset.dir); },
     size: function (el) { HW.pdp.size(el.dataset.id); },
     qty: function (el) { HW.pdp.qty(+el.dataset.d); },
+    'ship-est': function () { HW.pdp.shipEstimate(); },
     tab: function (el) { HW.pdp.tab(el.dataset.tab); },
     'desc-more': function (el) { HW.pdp.moreDesc(el); },
     gal: function (el) { HW.gallery.set(+el.dataset.i); },

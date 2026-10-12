@@ -108,6 +108,7 @@ const handler = {
            can be set up one at a time. Reads the account only — never returns the key itself. */
         /* Which carriers ShipStation can quote for us — decides what the checkout can offer. */
         case "/snipcart/shipping": return await handleSnipcartShipping(request, env, cors);
+        case "/shipping/estimate": return await handleShippingEstimate(request, env, cors);
         /* Every rate for a test destination — so an odd shipping price can be explained. */
         case "/shipstation/quote": {
           const denied = await requireAdmin(request, env);
@@ -879,6 +880,83 @@ function packCart(items, index) {
       ? { units: "inches", length: Math.max(1, Math.round(len * IN_PER_CM)), width: Math.max(1, Math.round(wid * IN_PER_CM)), height: Math.max(1, Math.round(hei * IN_PER_CM)) }
       : null,
   };
+}
+
+/* Transit time from Piscataway NJ, by the first digit of the destination ZIP. Carriers give us no
+   delivery estimate on these services, so this is distance-based and shown to shoppers as a range.
+   Replace it with measured times once real orders have shipped. */
+const TRANSIT_BY_ZIP1 = { 0: [1, 2], 1: [1, 2], 2: [2, 3], 3: [3, 4], 4: [3, 4], 5: [3, 5], 6: [4, 5], 7: [4, 5], 8: [5, 6], 9: [5, 7] };
+function transitDays(zip) { return TRANSIT_BY_ZIP1[String(zip || "").trim()[0]] || [4, 6]; }
+
+/* Working days only, so a Friday order does not promise a Sunday delivery. */
+function addBusinessDays(from, n) {
+  const d = new Date(from.getTime());
+  let left = n;
+  while (left > 0) { d.setUTCDate(d.getUTCDate() + 1); const w = d.getUTCDay(); if (w !== 0 && w !== 6) left--; }
+  return d;
+}
+
+/* Every usable rate for one parcel to one destination. */
+async function quoteParcel(env, parcel, toPostalCode, toState, toCountry) {
+  let carriers = [];
+  try { carriers = (await shipstation(env, "carriers")) || []; } catch (e) { carriers = []; }
+  const quotes = [];
+  await Promise.all(carriers.map(async (cr) => {
+    if (!cr.code) return;
+    try {
+      const res = await shipstation(env, "shipments/getrates", { method: "POST", body: JSON.stringify({
+        carrierCode: cr.code, fromPostalCode: String(env.SHIP_FROM_ZIP || "08854"),
+        toState: toState || "", toCountry: toCountry || "US", toPostalCode: toPostalCode, residential: true,
+        weight: { value: parcel.pounds, units: "pounds" }, ...(parcel.dims ? { dimensions: parcel.dims } : {}) }) });
+      (res || []).forEach((r) => {
+        const nm = r.serviceName || cr.code;
+        if (SERVICE_NOT_ALLOWED.test(nm)) return;
+        const cost = Math.round(((+r.shipmentCost || 0) + (+r.otherCost || 0)) * 100) / 100;
+        if (cost > 0) quotes.push({ cost, name: nm, days: r.deliveryDays == null ? null : +r.deliveryDays, fast: SERVICE_FAST.test(nm) });
+      });
+    } catch (e) { /* one carrier failing must not lose the others */ }
+  }));
+  return quotes;
+}
+
+/* One hour of answers per ZIP and parcel, so a product page cannot hammer ShipStation. */
+const estCache = new Map();
+
+/* POST /shipping/estimate { items:[{id,quantity}], zip, state } — for the product page. */
+async function handleShippingEstimate(request, env, cors) {
+  if (!features(env).shipstation) return json({ error: "Shipping isn't set up yet." }, 501, cors);
+  const body = await readJson(request);
+  const zip = String(body.zip || "").trim().replace(/[^0-9-]/g, "").slice(0, 10);
+  if (!/^\d{5}(-\d{4})?$/.test(zip)) return json({ error: "Enter a 5-digit ZIP code." }, 400, cors);
+  if (await rateLimited(env, request, "ship-est", 60, 3600)) return json({ error: "Too many checks. Please wait a moment." }, 429, cors);
+
+  const store = await storeData(env);
+  const parcel = packCart(body.items, shipIndex(store));
+  const key = zip + "|" + parcel.pounds + "|" + JSON.stringify(parcel.dims || 0);
+  const hit = estCache.get(key);
+  if (hit && Date.now() - hit.at < 3600000) return json(hit.body, 200, cors);
+
+  const quotes = await quoteParcel(env, parcel, zip, String(body.state || "").trim(), "US");
+  if (!quotes.length) return json({ error: "No delivery options for that ZIP code." }, 200, cors);
+
+  const cheapest = quotes.slice().sort((a, b) => a.cost - b.cost)[0];
+  const faster = quotes.filter((q) => q.fast && q.cost > cheapest.cost).sort((a, b) => a.cost - b.cost)[0] || null;
+  const sh = store.shipping || {};
+  const threshold = Number(sh.freeThreshold) || 0;
+  const [tMin, tMax] = transitDays(zip);
+  // Dispatch first, then transit — a Friday order must not promise a Sunday arrival.
+  const dispatch = Math.max(0, parseInt(String((store.settings || {}).shippingDays || "2").match(/\d+/) || [2], 10));
+  const now = new Date();
+  const out = {
+    ok: true, zip: zip,
+    standard: { cost: cheapest.cost, service: cheapest.name },
+    express: faster ? { cost: faster.cost, service: faster.name } : null,
+    freeOver: threshold || null,
+    arrives: { from: addBusinessDays(now, dispatch + tMin).toISOString().slice(0, 10),
+               to: addBusinessDays(now, dispatch + tMax).toISOString().slice(0, 10) },
+  };
+  estCache.set(key, { at: Date.now(), body: out });
+  return json(out, 200, cors);
 }
 
 async function handleSnipcartShipping(request, env, cors) {

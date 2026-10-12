@@ -980,6 +980,14 @@ main#view.booting ~ footer.site{visibility:hidden}
 .skuline{font-size:12px;letter-spacing:.04em;color:var(--ink-soft);margin:-4px 0 14px}
 /* Says what the chosen size actually is, so the buttons can stay short. */
 .sizenote{margin:9px 0 0;font-size:13.5px;color:var(--ink-soft)}
+/* "Deliver to …" — the real carrier price and an estimated arrival window. */
+.shipest{margin:14px 0 18px;padding:13px 14px;border:1px solid var(--line);border-radius:var(--r);background:#fff}
+.shipest .t{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin:0 0 8px}
+.shipest-row{display:flex;gap:9px}
+.shipest-row input{flex:0 1 150px;min-width:0;border:1px solid var(--line);border-radius:var(--r);padding:9px 11px;font:inherit;font-size:14.5px;background:#fff}
+.shipest-out{margin:9px 0 0;font-size:13.5px;color:var(--ink-soft);min-height:1.2em}
+.shipest-out.ok{color:var(--ink)}
+.shipest-out.bad{color:var(--clay)}
 
 /* Narrow cards need a third line for the longest names; every card keeps the same box, so rows still line up. */
 @media(max-width:720px){
