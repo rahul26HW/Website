@@ -843,7 +843,10 @@ async function handleStripeWebhook(request, env) {
 const LB_PER_G = 1 / 453.59237, IN_PER_CM = 1 / 2.54;
 /* Media and Library Mail are only lawful for books and printed matter — never for rugs or towels.
    USPS returns or surcharges parcels sent this way, so they must never be offered. */
-const SERVICE_NOT_ALLOWED = /media\s*mail|library\s*mail/i;
+/* Media and Library Mail are only lawful for books and printed matter. Envelope and flat-rate
+   services are quoted by ShipStation whether or not the goods fit — a bath rug does not go in a
+   Priority envelope, and buying that label gets the parcel surcharged or refused. */
+const SERVICE_NOT_ALLOWED = /media\s*mail|library\s*mail|envelope|letter|flat\s*rate/i;
 /* Services that are genuinely quicker, for when a carrier gives no delivery estimate. */
 const SERVICE_FAST = /priority|express|overnight|next\s*day|2nd\s*day|second\s*day|air|expedited/i;
 
