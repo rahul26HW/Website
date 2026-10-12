@@ -106,6 +106,14 @@ const handler = {
         }
         /* Does the Stripe key actually work? Answers before the webhook secret is in, so the two
            can be set up one at a time. Reads the account only — never returns the key itself. */
+        /* Which carriers ShipStation can quote for us — decides what the checkout can offer. */
+        case "/shipstation/carriers": {
+          const denied = await requireAdmin(request, env);
+          if (denied) return json({ error: denied }, 401, cors);
+          if (!features(env).shipstation) return json({ error: "ShipStation isn't set up on the server." }, 501, cors);
+          const list = await shipstation(env, "carriers");
+          return json({ ok: true, carriers: (list || []).map((c) => ({ code: c.code, name: c.name, primary: !!c.primary, balance: c.balance })) }, 200, cors);
+        }
         case "/stripe/check": {
           const denied = await requireAdmin(request, env);
           if (denied) return json({ error: denied }, 401, cors);
@@ -141,7 +149,7 @@ const handler = {
     } catch (e) {
       // Details go to the Cloudflare log. Only signed-in admins get them back; shoppers and webhooks get a plain message.
       console.error(url.pathname, e && e.stack ? e.stack : e);
-      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/orders/notify", "/email/test", "/admin/health", "/stripe/check"].includes(url.pathname.replace(/\/+$/, ""));
+      const adminRoute = ["/ai", "/image", "/shipstation/push", "/shipstation/setup", "/shipstation/sync", "/orders/accept", "/orders/notify", "/email/test", "/admin/health", "/stripe/check", "/shipstation/carriers"].includes(url.pathname.replace(/\/+$/, ""));
       return json({ error: adminRoute ? "Worker error: " + (e && e.message ? e.message : "unknown") : "Something went wrong. Please try again in a moment." }, 500, cors);
     }
   },
