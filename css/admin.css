@@ -215,6 +215,8 @@ details.colgroup .gbody{padding:4px 14px 14px}
 .msghead:hover{background:var(--paper)}
 .msg.unread .msghead b{color:var(--ink)}
 .msgbody{padding:0 20px 18px}
+/* A reply already sent, shown above the box so nobody answers twice. */
+.msgsent{border-left:3px solid var(--moss,#2C463F);background:#F7F4EF;padding:10px 14px;margin:14px 0 0;border-radius:0 4px 4px 0;font-size:14px}
 .dot{display:inline-block;width:9px;height:9px;border-radius:999px;background:var(--clay);margin-right:8px;vertical-align:middle}
 
 /* marketing */

@@ -156,6 +156,7 @@ export default {
         case "/orders/accept": return await handleOrderAccept(request, env, cors);
         case "/orders/notify": return await handleOrderNotify(request, env, cors);
         case "/orders/release": return await handleOrderRelease(request, env, cors);
+        case "/messages/reply": return await handleMessageReply(request, env, cors);
         case "/email/test": return await handleEmailTest(request, env, cors);
         case "/account/code": return await handleAccountCode(request, env, cors);
         case "/account/verify": return await handleAccountVerify(request, env, cors);
@@ -1400,6 +1401,67 @@ async function sendOrderEmail(env, kind, order, extra) {
   }
 }
 
+/* ---------------------------------------------------------------- *
+ * POST /messages/reply { id, body } — admins only. Answers a contact-form
+ * message from inside the admin. The reply goes out from the store’s own
+ * address and is kept on the message, instead of living in one person’s
+ * sent folder where nobody else can see what was said.
+ * ---------------------------------------------------------------- */
+async function handleMessageReply(request, env, cors) {
+  const denied = await requireAdmin(request, env);
+  if (denied) return json({ error: denied }, 401, cors);
+  if (!env.RESEND_API_KEY) return json({ error: "Email isn’t set up on the server yet (RESEND_API_KEY)." }, 501, cors);
+
+  const body = await readJson(request);
+  const id = str(body.id, 64);
+  /* Keep the line breaks the person typed — str() would flatten them into spaces. */
+  const reply = String(body.body == null ? "" : body.body).replace(/\r/g, "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, 5000);
+  if (!id || !reply) return json({ error: "Write a reply first." }, 400, cors);
+
+  const rows = await db(env, "contact_messages?id=eq." + encodeURIComponent(id) + "&select=*&limit=1");
+  const msg = Array.isArray(rows) && rows[0];
+  if (!msg) return json({ error: "That message no longer exists." }, 404, cors);
+  if (!EMAIL_RE.test(msg.email || "")) return json({ error: "That message has no address to reply to." }, 409, cors);
+
+  const data = await storeData(env);
+  const brand = (data.brand && data.brand.name) || "Home Weavers";
+  const site = (data.settings && data.settings.siteUrl) || "https://www.homeweavers.com";
+  const subject = "Re: " + (msg.subject || "your message to " + brand);
+  const asked = new Date(msg.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+  const para = (t) => t.split(/\n{2,}/).map((b) => `<p style="font-size:15px;line-height:1.55;margin:0 0 12px">${esc(b).replace(/\n/g, "<br>")}</p>`).join("");
+  const html = emailLayout(brand, site, "Re: " + (msg.subject || "your message"), para(reply) +
+    `<div style="border-top:1px solid #E6E0D6;margin:18px 0 0;padding-top:12px;font-size:13px;color:#6C6359">` +
+    `<p style="margin:0 0 8px">On ${esc(asked)} you wrote:</p>` +
+    `<p style="margin:0;white-space:pre-wrap">${esc(String(msg.message || "").slice(0, 2000))}</p></div>`,
+    "You’re getting this email because you sent us a message through our website.");
+  const text = reply + "\n\n---\nOn " + asked + " you wrote:\n" + String(msg.message || "").slice(0, 2000);
+
+  const replyTo = env.EMAIL_REPLY_TO || (data.contact && data.contact.email) || undefined;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT, to: [msg.email], reply_to: replyTo, subject, html, text }),
+  });
+  if (!res.ok) {
+    const why = (await res.text()).slice(0, 200);
+    console.error("message reply failed", res.status, why);
+    return json({ error: "The email didn’t go out: " + why }, 502, cors);
+  }
+
+  /* Only stamp the message once the email is actually away. */
+  try {
+    await db(env, "contact_messages?id=eq." + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ replied_at: new Date().toISOString(), reply_body: reply, is_read: true }),
+    });
+  } catch (e) {
+    console.error("reply sent but not recorded", e && e.message);
+    return json({ ok: true, sent: true, recorded: false, to: msg.email }, 200, cors);
+  }
+  return json({ ok: true, sent: true, recorded: true, to: msg.email }, 200, cors);
+}
 /* POST /email/test { kind } — admins only. Sends a sample order email to the signed-in admin's own address. */
 async function handleEmailTest(request, env, cors) {
   const denied = await requireAdmin(request, env);

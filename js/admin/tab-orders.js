@@ -422,7 +422,15 @@
             '<span class="hint">' + esc(x.subject || '(no subject)') + ' · ' + esc(new Date(x.created_at).toLocaleString('en-US')) + '</span></button>' +
             (open ? '<div class="msgbody"><p style="white-space:pre-wrap;margin:12px 0">' + esc(x.message) + '</p>' +
               (x.phone ? '<p class="hint">Phone: ' + phoneHTML(x.phone) + '</p>' : '') +
-              '<div class="btnrow"><a class="btn loom sm" href="' + reply + '" data-native>Reply by email</a>' +
+              (x.replied_at
+                ? '<div class="msgsent"><p class="hint" style="margin:0 0 6px">Replied ' + esc(new Date(x.replied_at).toLocaleString('en-US')) + '</p>' +
+                  '<p style="white-space:pre-wrap;margin:0">' + esc(x.reply_body || '') + '</p></div>'
+                : '') +
+              '<label class="fld" style="margin-top:14px"><span>' + (x.replied_at ? 'Reply again' : 'Reply') + '</span>' +
+              '<textarea id="reply-' + x.id + '" rows="5" placeholder="Write your reply to ' + esc((x.name || '').split(' ')[0] || 'them') + '…"></textarea></label>' +
+              '<p class="hint" style="margin:4px 0 10px">Sent from your store address, with their original message quoted underneath.</p>' +
+              '<div class="btnrow"><button class="btn loom sm" type="button" data-a="msg-reply" data-id="' + x.id + '">Send reply</button>' +
+              '<a class="btn ghost sm" href="' + reply + '" data-native>Open in mail app</a>' +
               '<button class="btn ghost sm" type="button" data-a="msg-unread" data-id="' + x.id + '">Mark unread</button>' +
               '<button class="btn ghost sm dangerbtn" type="button" data-a="msg-delete" data-id="' + x.id + '">Delete</button></div></div>' : '') +
             '</section>';
@@ -445,6 +453,26 @@
     var x = ms.list.find(function (m) { return m.id === id; });
     if (ms.open && x && !x.is_read) await setRead(id, true);
     A.render();
+  };
+  /* Sends the reply through the server, which owns the mail key — the browser never sees it. */
+  A.actions['msg-reply'] = async function (btn) {
+    var id = btn.dataset.id;
+    var box = document.getElementById('reply-' + id);
+    var text = box ? box.value.trim() : '';
+    if (!text) { u.toast('Write a reply first.'); if (box) box.focus(); return; }
+    var x = ms.list.find(function (m) { return m.id === id; });
+    if (!confirm('Send this reply to ' + (x ? x.email : 'the customer') + '?')) return;
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      var r = await A.workerCall('/messages/reply', { id: id, body: text });
+      if (x) { x.replied_at = new Date().toISOString(); x.reply_body = text; x.is_read = true; }
+      A.unread = ms.list.filter(function (m) { return !m.is_read; }).length;
+      A.render();
+      u.toast(r && r.recorded === false ? 'Reply sent, but it couldn’t be saved against the message.' : 'Reply sent to ' + (x ? x.email : 'the customer'));
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Send reply';
+      u.toast('Couldn’t send: ' + e.message);
+    }
   };
   A.actions['msg-unread'] = async function (el) { if (await setRead(el.dataset.id, false)) { ms.open = null; A.render(); } };
   A.actions['msg-delete'] = async function (el) {
