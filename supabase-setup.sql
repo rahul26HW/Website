@@ -295,6 +295,11 @@ create table if not exists public.contact_messages (
 );
 alter table public.contact_messages enable row level security;
 
+-- Replies sent from the admin are kept on the message, so the next person to
+-- open it can see what was already said.
+alter table public.contact_messages add column if not exists replied_at timestamptz;
+alter table public.contact_messages add column if not exists reply_body text;
+
 -- Light spam guard: max 3 messages per email per 10 minutes.
 create or replace function public._contact_before_insert()
 returns trigger language plpgsql security definer set search_path = '' as $$
