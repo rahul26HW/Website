@@ -215,6 +215,24 @@ async function requireAdmin(request, env) {
   return null;
 }
 
+/* The same database call, but made as whoever is signed in rather than with the service key.
+   The table’s own rules then decide what they may see, which is what we want for anything
+   holding a customer’s words: only an admin can read a contact message, and the server never
+   has to hold a key that could read them all. */
+async function dbAsCaller(request, env, path, init = {}) {
+  const headers = {
+    apikey: env.SUPABASE_PUBLISHABLE_KEY,
+    Authorization: request.headers.get("Authorization") || "",
+    "Content-Type": "application/json",
+    ...(init.headers || {}),
+  };
+  const res = await fetch(env.SUPABASE_URL + "/rest/v1/" + path, { ...init, headers });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!res.ok) throw new Error("Database error " + res.status + ": " + String((data && data.message) || text).slice(0, 200));
+  return data;
+}
 function serviceHeaders(env) {
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   const h = { apikey: key, "Content-Type": "application/json" };
@@ -1418,7 +1436,7 @@ async function handleMessageReply(request, env, cors) {
   const reply = String(body.body == null ? "" : body.body).replace(/\r/g, "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, 5000);
   if (!id || !reply) return json({ error: "Write a reply first." }, 400, cors);
 
-  const rows = await db(env, "contact_messages?id=eq." + encodeURIComponent(id) + "&select=*&limit=1");
+  const rows = await dbAsCaller(request, env, "contact_messages?id=eq." + encodeURIComponent(id) + "&select=*&limit=1");
   const msg = Array.isArray(rows) && rows[0];
   if (!msg) return json({ error: "That message no longer exists." }, 404, cors);
   if (!EMAIL_RE.test(msg.email || "")) return json({ error: "That message has no address to reply to." }, 409, cors);
@@ -1451,7 +1469,7 @@ async function handleMessageReply(request, env, cors) {
 
   /* Only stamp the message once the email is actually away. */
   try {
-    await db(env, "contact_messages?id=eq." + encodeURIComponent(id), {
+    await dbAsCaller(request, env, "contact_messages?id=eq." + encodeURIComponent(id), {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify({ replied_at: new Date().toISOString(), reply_body: reply, is_read: true }),
