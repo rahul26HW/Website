@@ -44,19 +44,25 @@
     },
     simpleItem: function (p) {
       return { id: m.simpleSku(p), name: p.name, price: m.simplePrice(p).effective, image: HW.asset(m.primaryImage(p)),
-        description: HW.htmlToText(p.description).slice(0, 180), weight: p.weight, dims: p.dims, categories: snip.categories(p) };
+        description: HW.htmlToText(p.description).slice(0, 180), weight: p.weight, dims: p.dims, categories: snip.categories(p), tic: p.tic || '' };
     },
     variantItem: function (p, v) {
       return { id: v.sku, name: p.name, price: v.effective, image: HW.asset(m.firstPhoto(v.rawImages, v.primary) || m.colorImage(p, v.color)),
         description: HW.htmlToText(p.description).slice(0, 180), weight: v.weight || p.weight, dims: v.dims || p.dims, categories: snip.categories(p),
-        custom: [{ name: 'Color', value: v.color.label }, { name: 'Size', value: v.size.label }] };
+        tic: p.tic || '', custom: [{ name: 'Color', value: v.color.label }, { name: 'Size', value: v.size.label }] };
     },
     attrs: function (o) {
       var a = 'data-item-id="' + esc(o.id) + '" data-item-name="' + esc(o.name) + '" data-item-price="' + (+o.price || 0).toFixed(2) + '" data-item-url="' + esc(snip.feedUrl()) + '"';
       if (o.image) a += ' data-item-image="' + esc(o.image) + '"';
       if (o.description) a += ' data-item-description="' + esc(o.description) + '"';
-      (o.custom || []).forEach(function (c, i) {
-        a += ' data-item-custom' + (i + 1) + '-name="' + esc(c.name) + '" data-item-custom' + (i + 1) + '-value="' + esc(c.value) + '" data-item-custom' + (i + 1) + '-type="readonly"';
+      var fields = (o.custom || []).slice();
+      /* TaxCloud reads this hidden field to decide how a line is taxed. 00000 is ordinary
+         goods, which is what bath textiles are; a product can override it. Without a code
+         TaxCloud falls back to its own default, which may not match what the state expects. */
+      var tic = String(((HW.DB && HW.DB.snipcart) || {}).tic || '').trim();
+      if (tic) fields.push({ name: 'TIC', value: o.tic || tic, hidden: true });
+      fields.forEach(function (c, i) {
+        a += ' data-item-custom' + (i + 1) + '-name="' + esc(c.name) + '" data-item-custom' + (i + 1) + '-value="' + esc(c.value) + '" data-item-custom' + (i + 1) + '-type="' + (c.hidden ? 'hidden' : 'readonly') + '"';
       });
       // Snipcart wants grams and centimetres, both whole numbers; without them it cannot quote a carrier.
       if (o.weight) a += ' data-item-weight="' + Math.round(+o.weight) + '"';

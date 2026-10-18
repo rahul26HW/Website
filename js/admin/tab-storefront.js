@@ -150,6 +150,8 @@
           '<div class="grid3">' + ui.field('Currency', 'snipcart.currency', sn.currency, { type: 'trim' }) +
           ui.field('Cart style', 'snipcart.mode', sn.mode, { options: [['side', 'Side drawer'], ['full', 'Full page']] }) +
           ui.field('Version', 'snipcart.version', sn.version, { type: 'trim' }) + '</div>' +
+          ui.field('TaxCloud product code (TIC)', 'snipcart.tic', sn.tic, { type: 'trim', placeholder: '00000',
+            hint: 'Sent with every item so TaxCloud knows how to tax it. <b>00000</b> is ordinary goods, which is what bath textiles are. Leave blank if you are not using TaxCloud.' }) +
           ui.field('Product feed URL', 'snipcart.feedUrl', sn.feedUrl, { type: 'trim', live: 'feedUrl', placeholder: 'Leave blank for automatic',
             hint: 'Automatic address: <b id="feedAuto">' + esc(A.feedUrl()) + '</b> (includes your GitHub Pages folder).' }) +
           '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="feed-export">Export product feed (products.json)</button>' +

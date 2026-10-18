@@ -69,7 +69,7 @@
       sale: { enabled: false, name: '', ribbon: 'Sale', percent: 0, startsAt: '', endsAt: '', scope: 'all', categoryIds: [], productIds: [] },
       social: { instagram: '', tiktok: '', pinterest: '', facebook: '', x: '', linkedin: '' },
       payments: { stripe: false, cod: false, codFee: 0, codMax: 500, workerUrl: '', cancelMinutes: 30 },   // Stripe Checkout through the Cloudflare Worker (keys live in the worker)
-      snipcart: { enabled: false, apiKey: '', currency: 'usd', version: '3.7.1', mode: 'side', feedUrl: '' },
+      snipcart: { enabled: false, apiKey: '', currency: 'usd', version: '3.7.1', mode: 'side', feedUrl: '', tic: '00000' },
       videoBanner: { enabled: false, eyebrow: '', heading: '', body: '', ctaText: '', ctaLink: '', videoUrl: '', bg: '#2A2622' },
       features: [],
       socialGallery: { enabled: false, heading: 'Find us on social', tiles: [] },
