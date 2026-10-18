@@ -299,6 +299,35 @@ alter table public.contact_messages enable row level security;
 -- open it can see what was already said.
 alter table public.contact_messages add column if not exists replied_at timestamptz;
 alter table public.contact_messages add column if not exists reply_body text;
+-- ---------------------------------------------------------------------
+-- 7b. message_replies  (the conversation after the first contact message)
+-- Replies we send and replies that come back, oldest first. Inbound mail
+-- arrives through the Edge Function, which may insert but never read.
+-- ---------------------------------------------------------------------
+create table if not exists public.message_replies (
+  id          uuid primary key default gen_random_uuid(),
+  message_id  uuid not null references public.contact_messages(id) on delete cascade,
+  direction   text not null check (direction in ('in', 'out')),
+  body        text not null check (length(trim(body)) between 1 and 20000),
+  from_email  text check (length(from_email) <= 254),
+  provider_id text unique,
+  created_at  timestamptz not null default now()
+);
+create index if not exists message_replies_thread on public.message_replies (message_id, created_at);
+alter table public.message_replies enable row level security;
+
+drop policy if exists "admins read replies"   on public.message_replies;
+drop policy if exists "admins add replies"    on public.message_replies;
+drop policy if exists "admins delete replies" on public.message_replies;
+create policy "admins read replies"   on public.message_replies for select to authenticated using ((select public.is_admin()));
+create policy "admins add replies"    on public.message_replies for insert to authenticated with check ((select public.is_admin()));
+create policy "admins delete replies" on public.message_replies for delete to authenticated using ((select public.is_admin()));
+
+grant select, insert, delete on public.message_replies to authenticated;
+grant insert (message_id, direction, body, from_email, provider_id) on public.message_replies to service_role;
+-- An answer that arrives puts the message back in the unread list.
+grant update (is_read) on public.contact_messages to service_role;
+
 
 -- Light spam guard: max 3 messages per email per 10 minutes.
 create or replace function public._contact_before_insert()

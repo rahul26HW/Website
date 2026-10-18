@@ -83,6 +83,7 @@ export default {
         case "/snipcart": return await handleSnipcart(request, env);
         case "/checkout/session": return await handleCheckoutSession(request, env, cors);
         case "/stripe": return await handleStripeWebhook(request, env);
+        case "/resend/inbound": return await handleInboundEmail(request, env);
         case "/shipstation/push": return await handleShipstationPush(request, env, cors);
         case "/shipstation/setup": return await handleShipstationSetup(request, env, cors);
         case "/shipstation/webhook": return await handleShipstationWebhook(request, env);
@@ -1420,6 +1421,112 @@ async function sendOrderEmail(env, kind, order, extra) {
 }
 
 /* ---------------------------------------------------------------- *
+ * Inbound replies.
+ *
+ * Every reply we send carries a return address of its own, so when the
+ * customer answers we know which conversation it belongs to without having
+ * to guess from the subject line. The address is signed, so nobody can post
+ * into a thread by writing to an address they made up.
+ * ---------------------------------------------------------------- */
+async function replyAddress(env, messageId) {
+  if (!env.INBOUND_DOMAIN) return null;
+  const tag = hexOf(await hmacBytes(await accountKey(env), "reply:" + messageId)).slice(0, 10);
+  return "msg-" + messageId + "-" + tag + "@" + env.INBOUND_DOMAIN;
+}
+
+/* Pulls the message id back out of an address we issued, and only if the signature matches. */
+async function messageIdFromAddress(env, address) {
+  const local = String(address || "").split("@")[0].toLowerCase();
+  const m = /^msg-([0-9a-f-]{36})-([0-9a-f]{10})$/.exec(local);
+  if (!m) return null;
+  const want = hexOf(await hmacBytes(await accountKey(env), "reply:" + m[1])).slice(0, 10);
+  return safeEqual(m[2], want) ? m[1] : null;
+}
+
+/* Svix signature, as Resend sends it: v1,<base64> over "<id>.<timestamp>.<body>". */
+async function svixVerified(request, env, raw) {
+  const secret = env.RESEND_WEBHOOK_SECRET || "";
+  const id = request.headers.get("svix-id") || "";
+  const ts = request.headers.get("svix-timestamp") || "";
+  const sigs = (request.headers.get("svix-signature") || "").split(" ");
+  if (!secret || !id || !ts || !sigs.length) return false;
+  /* An old signature is a replayed one. */
+  if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+  const keyBytes = Uint8Array.from(atob(secret.replace(/^whsec_/, "")), (c) => c.charCodeAt(0));
+  const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(id + "." + ts + "." + raw));
+  const mine = btoa(String.fromCharCode(...new Uint8Array(mac)));
+  return sigs.some((s) => safeEqual(s.split(",")[1] || "", mine));
+}
+
+/* Email bodies arrive as HTML more often than not; the admin shows plain text. */
+function htmlToText(html) {
+  return String(html || "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/* Drops the quoted copy of our own message that most mail clients append. */
+function withoutQuotedTail(text) {
+  const cut = String(text || "").search(/\n\s*(-{2,}\s*\n|On .{5,80} wrote:|_{10,}|From: )/);
+  const body = cut > 0 ? text.slice(0, cut) : text;
+  return body.split("\n").filter((l) => !/^\s*>/.test(l)).join("\n").trim();
+}
+
+/* POST /resend/inbound — Resend calls this when mail arrives for the inbound domain. */
+async function handleInboundEmail(request, env) {
+  const raw = await request.text();
+  if (!(await svixVerified(request, env, raw))) return json({ error: "Bad signature" }, 401, {});
+  let event = null;
+  try { event = JSON.parse(raw); } catch { return json({ error: "Bad payload" }, 400, {}); }
+  if (event.type !== "email.received") return json({ ok: true, ignored: event.type }, 200, {});
+
+  const d = event.data || {};
+  const candidates = [].concat(d.to || [], d.received_for || []);
+  let messageId = null;
+  for (const addr of candidates) {
+    messageId = await messageIdFromAddress(env, addr);
+    if (messageId) break;
+  }
+  /* Mail to an address we never issued is not ours to file. */
+  if (!messageId) return json({ ok: true, ignored: "no thread" }, 200, {});
+
+  let text = "";
+  let from = String(d.from || "").slice(0, 254);
+  if (env.RESEND_API_KEY && d.email_id) {
+    const res = await fetch("https://api.resend.com/emails/receiving/" + encodeURIComponent(d.email_id), {
+      headers: { Authorization: "Bearer " + env.RESEND_API_KEY },
+    });
+    if (res.ok) {
+      const full = await res.json();
+      text = full.text || htmlToText(full.html);
+      from = String(full.from || from).slice(0, 254);
+    } else {
+      console.error("inbound fetch failed", res.status, (await res.text()).slice(0, 200));
+    }
+  }
+  text = withoutQuotedTail(text).slice(0, 20000) || "(an empty message)";
+
+  await db(env, "message_replies", {
+    method: "POST",
+    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
+    body: JSON.stringify({ message_id: messageId, direction: "in", body: text, from_email: from, provider_id: d.email_id || null }),
+  });
+  /* Back to unread, so it shows up the way a new message does. */
+  try {
+    await db(env, "contact_messages?id=eq." + encodeURIComponent(messageId), {
+      method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ is_read: false }),
+    });
+  } catch (e) { console.error("inbound unread flag failed", e && e.message); }
+
+  return json({ ok: true, filed: messageId }, 200, {});
+}
+/* ---------------------------------------------------------------- *
  * POST /messages/reply { id, body } — admins only. Answers a contact-form
  * message from inside the admin. The reply goes out from the store’s own
  * address and is kept on the message, instead of living in one person’s
@@ -1455,7 +1562,9 @@ async function handleMessageReply(request, env, cors) {
     "You’re getting this email because you sent us a message through our website.");
   const text = reply + "\n\n---\nOn " + asked + " you wrote:\n" + String(msg.message || "").slice(0, 2000);
 
-  const replyTo = env.EMAIL_REPLY_TO || (data.contact && data.contact.email) || undefined;
+  /* Answers come back to this conversation’s own address when inbound mail is set up,
+     and to the shop mailbox when it is not. */
+  const replyTo = (await replyAddress(env, id)) || env.EMAIL_REPLY_TO || (data.contact && data.contact.email) || undefined;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
@@ -1473,6 +1582,11 @@ async function handleMessageReply(request, env, cors) {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify({ replied_at: new Date().toISOString(), reply_body: reply, is_read: true }),
+    });
+    await dbAsCaller(request, env, "message_replies", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ message_id: id, direction: "out", body: reply, from_email: env.EMAIL_FROM || EMAIL_FROM_DEFAULT }),
     });
   } catch (e) {
     console.error("reply sent but not recorded", e && e.message);

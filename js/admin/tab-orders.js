@@ -402,6 +402,10 @@
     var r = await A.sb.from('contact_messages').select('*').order('created_at', { ascending: false }).limit(1000);
     ms.error = r.error ? r.error.message : null;
     ms.list = r.error ? [] : r.data;
+    /* The back-and-forth since. Missing table just means inbound mail isn't set up yet. */
+    var t = await A.sb.from('message_replies').select('*').order('created_at', { ascending: true }).limit(5000);
+    ms.thread = {};
+    if (!t.error) (t.data || []).forEach(function (x) { (ms.thread[x.message_id] = ms.thread[x.message_id] || []).push(x); });
     A.unread = ms.list.filter(function (x) { return !x.is_read; }).length;
   }
 
@@ -422,10 +426,7 @@
             '<span class="hint">' + esc(x.subject || '(no subject)') + ' · ' + esc(new Date(x.created_at).toLocaleString('en-US')) + '</span></button>' +
             (open ? '<div class="msgbody"><p style="white-space:pre-wrap;margin:12px 0">' + esc(x.message) + '</p>' +
               (x.phone ? '<p class="hint">Phone: ' + phoneHTML(x.phone) + '</p>' : '') +
-              (x.replied_at
-                ? '<div class="msgsent"><p class="hint" style="margin:0 0 6px">Replied ' + esc(new Date(x.replied_at).toLocaleString('en-US')) + '</p>' +
-                  '<p style="white-space:pre-wrap;margin:0">' + esc(x.reply_body || '') + '</p></div>'
-                : '') +
+              thread(x) +
               '<label class="fld" style="margin-top:14px"><span>' + (x.replied_at ? 'Reply again' : 'Reply') + '</span>' +
               '<textarea id="reply-' + x.id + '" rows="5" placeholder="Write your reply to ' + esc((x.name || '').split(' ')[0] || 'them') + '…"></textarea></label>' +
               '<p class="hint" style="margin:4px 0 10px">Sent from your store address, with their original message quoted underneath.</p>' +
@@ -438,6 +439,20 @@
     },
     after: function () { if (!ms.list) loadMessages().then(function () { if (A.tab === 'messages') A.render(); }); }
   };
+
+  /* Everything said since the first message, oldest first. Replies sent before the
+     conversation view existed are still on the message itself, so show those too. */
+  function thread(x) {
+    var rows = (ms.thread && ms.thread[x.id]) || [];
+    if (!rows.length && x.replied_at) rows = [{ direction: 'out', body: x.reply_body || '', created_at: x.replied_at }];
+    if (!rows.length) return '';
+    return '<div class="msgthread">' + rows.map(function (r) {
+      var mine = r.direction === 'out';
+      return '<div class="msgturn ' + (mine ? 'mine' : 'theirs') + '">' +
+        '<p class="hint" style="margin:0 0 6px">' + esc(mine ? 'You' : (x.name || 'They')) + ' · ' + esc(new Date(r.created_at).toLocaleString('en-US')) + '</p>' +
+        '<p style="white-space:pre-wrap;margin:0">' + esc(r.body || '') + '</p></div>';
+    }).join('') + '</div>';
+  }
 
   async function setRead(id, read) {
     var r = await A.sb.from('contact_messages').update({ is_read: read }).eq('id', id).select('id');
@@ -466,6 +481,8 @@
     try {
       var r = await A.workerCall('/messages/reply', { id: id, body: text });
       if (x) { x.replied_at = new Date().toISOString(); x.reply_body = text; x.is_read = true; }
+      ms.thread = ms.thread || {};
+      (ms.thread[id] = ms.thread[id] || []).push({ direction: 'out', body: text, created_at: new Date().toISOString() });
       A.unread = ms.list.filter(function (m) { return !m.is_read; }).length;
       A.render();
       u.toast(r && r.recorded === false ? 'Reply sent, but it couldn’t be saved against the message.' : 'Reply sent to ' + (x ? x.email : 'the customer'));

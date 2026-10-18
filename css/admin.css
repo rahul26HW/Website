@@ -216,6 +216,11 @@ details.colgroup .gbody{padding:4px 14px 14px}
 .msg.unread .msghead b{color:var(--ink)}
 .msgbody{padding:0 20px 18px}
 /* A reply already sent, shown above the box so nobody answers twice. */
+/* The conversation: ours on one side, theirs on the other, so a glance tells you who spoke last. */
+.msgthread{margin:14px 0 0;display:flex;flex-direction:column;gap:10px}
+.msgturn{padding:10px 14px;border-radius:6px;font-size:14px;max-width:88%}
+.msgturn.mine{background:#F7F4EF;border-left:3px solid var(--moss,#2C463F);border-radius:0 6px 6px 0;align-self:flex-start}
+.msgturn.theirs{background:#fff;border:1px solid var(--line,#E6E0D6);align-self:flex-end}
 .msgsent{border-left:3px solid var(--moss,#2C463F);background:#F7F4EF;padding:10px 14px;margin:14px 0 0;border-radius:0 4px 4px 0;font-size:14px}
 .dot{display:inline-block;width:9px;height:9px;border-radius:999px;background:var(--clay);margin-right:8px;vertical-align:middle}
 
