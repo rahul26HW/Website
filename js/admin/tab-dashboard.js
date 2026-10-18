@@ -130,7 +130,10 @@
 
   async function loadStats() {
     var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
-    var o = await A.sb.from('orders').select('total,status,payment_status');
+    var from = String(((A.store || {}).settings || {}).liveFrom || '').trim();
+    var q = A.sb.from('orders').select('total,status,payment_status,created_at');
+    if (from) q = q.gte('created_at', from);
+    var o = await q;
     if (!o.error) {
       var rows = o.data || [];
       // Real orders only: abandoned or cancelled checkouts don't count, and revenue is money actually taken (or approved).

@@ -97,6 +97,8 @@
           '<div class="grid2">' +
           ui.field('Low-stock alert at', 'settings.lowStockThreshold', st.lowStockThreshold, { type: 'int', min: 0, hint: 'SKUs at or below this number are flagged in Inventory and show “Only N left”.' }) +
           ui.field('Live site address', 'settings.siteUrl', st.siteUrl, { type: 'trim', live: 'feedUrl', placeholder: 'https://rahul26hw.github.io/Website/', hint: 'Used for share links, the sitemap and the Snipcart feed.' }) + '</div>' +
+          ui.field('Counting orders from', 'settings.liveFrom', st.liveFrom, { type: 'date',
+            hint: 'The day the shop opened for real customers. Orders before it stay in the list but are left out of the dashboard and analytics totals, so test orders don’t flatter the figures. Leave blank to count everything.' }) +
           ui.check('Show empty categories to shoppers', 'settings.showEmptyCategories', st.showEmptyCategories) +
           ui.field('Size guide', 'settings.sizeGuide', st.sizeGuide, { textarea: true, rows: 10, hint: 'Opens from “Size guide” on product pages with sizes. Tables: one row per line, columns separated by | (first row = headings). Leave blank to hide the link.' }) +
           ui.saveBtn()) +

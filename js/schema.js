@@ -45,6 +45,7 @@
       contact: { email: '', phone: '', address: '', hours: 'Monday–Friday, 9am–5pm ET' },
       settings: {
         shippingDays: '2–4 business days',
+        liveFrom: '',                 // counts on the dashboard and analytics start from this date
         outOfStock: 'show',           // 'show' = badge + sorted last, 'hide' = remove from listings
         showEmptyCategories: false,
         lowStockThreshold: 5,

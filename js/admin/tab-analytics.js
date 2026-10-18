@@ -70,6 +70,9 @@
     st.loading = true; st.error = '';
     try {
       var since = new Date(Date.now() - 365 * 86400000).toISOString();
+      /* Never count further back than the day the shop opened to real customers. */
+      var from = String(((A.store || {}).settings || {}).liveFrom || '').trim();
+      if (from && new Date(from).toISOString() > since) since = new Date(from).toISOString();
       var all = [], from = 0;
       for (var page = 0; page < 20; page++) {
         var r = await A.sb.from('orders')
