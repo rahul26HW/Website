@@ -1518,17 +1518,14 @@ async function handleInboundEmail(request, env) {
   }
   text = withoutQuotedTail(text).slice(0, 20000) || "(an empty message)";
 
-  await db(env, "message_replies", {
+  /* Filed through a function that runs with the table owner’s rights. The server can add a
+     reply and put the message back in the unread list without holding a key that could read
+     everyone else’s. It also marks the message unread, in the same statement. */
+  await db(env, "rpc/file_inbound_reply", {
     method: "POST",
-    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
-    body: JSON.stringify({ message_id: messageId, direction: "in", body: text, from_email: from, provider_id: d.email_id || null }),
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ p_message_id: messageId, p_body: text, p_from: from, p_provider_id: d.email_id || null }),
   });
-  /* Back to unread, so it shows up the way a new message does. */
-  try {
-    await db(env, "contact_messages?id=eq." + encodeURIComponent(messageId), {
-      method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ is_read: false }),
-    });
-  } catch (e) { console.error("inbound unread flag failed", e && e.message); }
 
   return json({ ok: true, filed: messageId }, 200, {});
 }

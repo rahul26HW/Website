@@ -328,6 +328,34 @@ grant insert (message_id, direction, body, from_email, provider_id) on public.me
 -- An answer that arrives puts the message back in the unread list.
 grant update (is_read) on public.contact_messages to service_role;
 
+-- Filing an inbound reply runs as the table owner, so the server never needs a key
+-- that could read other people's messages. It adds the reply and puts the message
+-- back in the unread list in one statement.
+create or replace function public.file_inbound_reply(
+  p_message_id uuid,
+  p_body       text,
+  p_from       text,
+  p_provider_id text
+) returns void
+language plpgsql
+security definer
+set search_path = ''
+as $
+begin
+  if p_message_id is null or coalesce(trim(p_body), '') = '' then
+    return;
+  end if;
+  insert into public.message_replies (message_id, direction, body, from_email, provider_id)
+  values (p_message_id, 'in', left(p_body, 20000), left(p_from, 254), p_provider_id)
+  on conflict (provider_id) do nothing;
+  update public.contact_messages set is_read = false where id = p_message_id;
+end;
+$;
+
+revoke all on function public.file_inbound_reply(uuid, text, text, text) from public, anon, authenticated;
+grant execute on function public.file_inbound_reply(uuid, text, text, text) to service_role;
+
+
 
 -- Light spam guard: max 3 messages per email per 10 minutes.
 create or replace function public._contact_before_insert()
