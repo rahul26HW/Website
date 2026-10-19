@@ -87,6 +87,8 @@ export default {
         case "/shipstation/push": return await handleShipstationPush(request, env, cors);
         case "/shipstation/setup": return await handleShipstationSetup(request, env, cors);
         case "/shipstation/webhook": return await handleShipstationWebhook(request, env);
+        case "/shipstation/track": return await handleTrackEvent(request, env);
+        case "/shipstation/track-setup": return await handleTrackSetup(request, env, cors);
         case "/shipstation/sync": return await handleShipstationSync(request, env, cors);
         case "/order/cancel": return await handleOrderCancel(request, env, cors);
         case "/order/placed": return await handleOrderPlaced(request, env, cors);
@@ -587,7 +589,7 @@ async function handleOrderAccept(request, env, cors) {
 
 /* POST /orders/notify { order_id, kind } — admins only. Tells the customer what just happened to their order
    (cancelled, refunded, shipped), because a status changed in the admin never passes through this server. */
-const NOTIFY_KINDS = ["cancelled", "refunded", "shipped", "accepted"];
+const NOTIFY_KINDS = ["cancelled", "refunded", "shipped", "accepted", "delivered"];
 async function handleOrderNotify(request, env, cors) {
   const denied = await requireAdmin(request, env);
   if (denied) return json({ error: denied }, 401, cors);
@@ -1211,6 +1213,104 @@ function shipmentFilter(s) {
 }
 
 /* POST /shipstation/webhook?token=… — ShipStation SHIP_NOTIFY / FULFILLMENT_SHIPPED: { resource_url, resource_type } */
+/* ---------------------------------------------------------------- *
+ * Carrier tracking (ShipStation API v2).
+ *
+ * v1 tells us a parcel went out and then goes quiet, so an order sat on
+ * “Shipped” until somebody remembered to look. v2 sends every carrier scan,
+ * which is what actually closes the loop: the customer sees the parcel move,
+ * and “Delivered” arrives on its own.
+ * ---------------------------------------------------------------- */
+const V2_BASE = "https://api.shipstation.com/v2/";
+
+async function shipstationV2(env, path, init = {}) {
+  const res = await fetch(/^https:\/\//.test(path) ? path : V2_BASE + path, {
+    ...init,
+    headers: { "API-Key": env.SHIPSTATION_V2_API_KEY, "Content-Type": "application/json", ...(init.headers || {}) },
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!res.ok) throw new Error("ShipStation v2 " + res.status + ": " + String((data && (data.message || (data.errors && data.errors[0] && data.errors[0].message))) || text || res.statusText).slice(0, 200));
+  return data;
+}
+
+/* The carrier’s own words, in ours. */
+const TRACK_WORDS = {
+  AC: "Accepted by the carrier",
+  IT: "On its way",
+  DE: "Delivered",
+  EX: "There is a problem with this delivery",
+  AT: "Delivery attempted",
+  NY: "Label made, not collected yet",
+  UN: "Status unknown",
+};
+
+/* POST /shipstation/track?token=… — one carrier scan. */
+async function handleTrackEvent(request, env) {
+  if (!features(env).database) return json({ error: "Not set up" }, 501);
+  const token = new URL(request.url).searchParams.get("token") || "";
+  if (!safeEqual(token, env.SHIPSTATION_WEBHOOK_TOKEN || "")) return json({ error: "Forbidden" }, 403);
+
+  const body = await readJson(request);
+  if (body.resource_type !== "TRACK_EVENT_V2") return json({ ok: true, ignored: body.resource_type || "unknown" });
+  const d = body.data || {};
+  const number = str(d.tracking_number, 60);
+  if (!number) return json({ ok: true, ignored: "no tracking number" });
+
+  const rows = await db(env, "orders?tracking_number=eq." + encodeURIComponent(number) + "&select=*&limit=1");
+  const order = Array.isArray(rows) && rows[0];
+  /* A number we never shipped is not ours to record. */
+  if (!order) return json({ ok: true, ignored: "no order" });
+
+  const code = String(d.status_code || "").toUpperCase();
+  const delivered = code === "DE";
+  const patch = {
+    tracking_status: TRACK_WORDS[code] || str(d.status_description, 120) || null,
+    tracking_events: Array.isArray(d.events) ? d.events.slice(-40) : order.tracking_events || null,
+  };
+  const eta = d.estimated_delivery_date || null;
+  if (eta) patch.tracking_eta = eta;
+
+  /* Delivered is the one scan that changes the order itself. A refunded or cancelled
+     order is left alone: whatever the carrier did, that order is closed. */
+  const open = /^(new|accepted|packed|shipped)$/.test(order.status || "");
+  if (delivered && open && !order.delivered_at) {
+    patch.delivered_at = d.actual_delivery_date || new Date().toISOString();
+    patch.status = "delivered";
+  }
+  await patchOrder(env, "id=eq." + order.id, patch);
+
+  if (patch.status === "delivered") {
+    await sendOrderEmail(env, "delivered", { ...order, ...patch }).catch((e) => console.error("delivered email", e && e.message));
+  }
+  return json({ ok: true, order: order.order_number, status: patch.tracking_status, delivered: !!patch.delivered_at });
+}
+
+/* POST /shipstation/track-setup — admins only. v2 webhooks can only be made through the API. */
+async function handleTrackSetup(request, env, cors) {
+  const denied = await requireAdmin(request, env);
+  if (denied) return json({ error: denied }, 401, cors);
+  if (!env.SHIPSTATION_V2_API_KEY) return json({ error: "Add the secret SHIPSTATION_V2_API_KEY first." }, 501, cors);
+  if (!env.SHIPSTATION_WEBHOOK_TOKEN) return json({ error: "Add the secret SHIPSTATION_WEBHOOK_TOKEN first." }, 501, cors);
+
+  const target = new URL(request.url).origin + "/functions/v1/hw/shipstation/track?token=" + encodeURIComponent(env.SHIPSTATION_WEBHOOK_TOKEN);
+  const existing = (await shipstationV2(env, "environment/webhooks").catch(() => [])) || [];
+  const list = Array.isArray(existing) ? existing : existing.webhooks || [];
+  for (const w of list) {
+    /* Clear out anything pointing at us with a stale token, so scans cannot arrive twice. */
+    if (String(w.url || "").split("?")[0] === target.split("?")[0] && w.url !== target) {
+      await shipstationV2(env, "environment/webhooks/" + encodeURIComponent(w.webhook_id || w.id), { method: "DELETE" }).catch(() => {});
+    } else if (w.url === target) {
+      return json({ ok: true, already: true, url: target }, 200, cors);
+    }
+  }
+  const made = await shipstationV2(env, "environment/webhooks", {
+    method: "POST",
+    body: JSON.stringify({ url: target, event: "track" }),
+  });
+  return json({ ok: true, created: (made && (made.webhook_id || made.id)) || null, url: target }, 200, cors);
+}
 async function handleShipstationWebhook(request, env) {
   if (!features(env).shipstationWebhook) return json({ error: "Not set up" }, 501);
   const token = new URL(request.url).searchParams.get("token") || "";
@@ -1365,6 +1465,13 @@ function buildOrderEmail(kind, order, data, extra = {}) {
     body = hi + p(`Good news — order <b>${num}</b> is confirmed and we’re getting it ready to ship. We’ll email you the tracking number as soon as it’s on its way.`) +
       button(trackUrl, "Track your order");
     text = `Order ${order.order_number} is confirmed and being prepared. Track it: ${trackUrl}`;
+  } else if (kind === "delivered") {
+    subject = `Your order ${order.order_number} has been delivered`;
+    title = "Your order has arrived";
+    body = hi + p(`The carrier says order <b>${num}</b> was delivered. If it isn’t where you expected, check with anyone else at the address and around the door first — and if it still hasn’t turned up, reply to this email and we’ll chase it.`) +
+      p(`We’d love to know how it looks. Anything not right, tell us and we’ll put it right.`) +
+      button(trackUrl, "View your order");
+    text = `Order ${order.order_number} has been delivered. If it isn't where you expected, reply to this email and we'll chase it. ${trackUrl}`;
   } else if (kind === "shipped") {
     const link = trackingLink(order.carrier, order.tracking_number);
     subject = `Your order ${order.order_number} has shipped`;
@@ -2088,6 +2195,12 @@ async function handlePublic(path, request, env, cors) {
       /* Once it has shipped, say when it should arrive. The window is the same one the
          product page quotes, measured from the day it actually went out. The address stays
          on the server: only the dates come back. */
+      if (order && (order.status === "shipped" || order.status === "delivered")) {
+        try {
+          const extra = await db(env, "orders?order_number=eq." + encodeURIComponent(order.order_number) + "&select=tracking_status,tracking_eta,delivered_at&limit=1");
+          if (Array.isArray(extra) && extra[0]) Object.assign(order, extra[0]);
+        } catch (e) { console.error("track extras failed", e && e.message); }
+      }
       if (order && order.shipped_at && order.status === "shipped") {
         try {
           const rows = await db(env, "orders?order_number=eq." + encodeURIComponent(order.order_number) + "&select=shipping_address&limit=1");

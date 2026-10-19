@@ -434,7 +434,13 @@ alter table public.orders add column if not exists accepted_at           timesta
 alter table public.orders add column if not exists cancelled_at          timestamptz;
 alter table public.orders add column if not exists cancel_requested_at   timestamptz; -- customer asked to cancel after the window
 alter table public.orders add column if not exists cancel_reason         text;
-alter table public.orders add column if not exists return_requested_at   timestamptz; -- customer asked to return (from their account)
+alter table public.orders add column if not exists return_requested_at   timestamptz;
+
+-- Carrier scans (ShipStation API v2), so an order closes itself when it arrives.
+alter table public.orders add column if not exists delivered_at    timestamptz;
+alter table public.orders add column if not exists tracking_status text;
+alter table public.orders add column if not exists tracking_eta    timestamptz;
+alter table public.orders add column if not exists tracking_events jsonb; -- customer asked to return (from their account)
 alter table public.orders add column if not exists return_reason         text;
 alter table public.orders add column if not exists payment_method        text not null default 'card'; -- card (Stripe) | cod
 alter table public.orders add column if not exists review_reason         text;          -- set when an order needs a person (e.g. Stripe amount mismatch); never auto-released
