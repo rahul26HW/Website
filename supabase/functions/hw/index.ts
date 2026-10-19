@@ -1307,22 +1307,25 @@ async function handleTrackSetup(request, env, cors) {
   if (!/^https:\/\//.test(target)) return json({ error: "SUPABASE_URL must be https." }, 500, cors);
   const existing = (await shipstationV2(env, "environment/webhooks").catch(() => [])) || [];
   const list = Array.isArray(existing) ? existing : existing.webhooks || [];
+  /* Every webhook pointing at this route is examined before anything is decided. Returning as
+     soon as the right one turned up left a wrong one behind whenever it happened to be listed
+     second — an http address holding the token in the clear, delivering every scan twice. */
+  let found = false;
+  const removed = [];
   for (const w of list) {
-    /* Clear out anything pointing at us with a stale token, so scans cannot arrive twice. */
-    /* Anything pointing at this route goes, whatever its scheme or token — an http one from an
-       earlier attempt would carry the token in the clear and deliver the same scans twice. */
     const mine = String(w.url || "").indexOf("/functions/v1/hw/shipstation/track") >= 0;
-    if (mine && w.url !== target) {
-      await shipstationV2(env, "environment/webhooks/" + encodeURIComponent(w.webhook_id || w.id), { method: "DELETE" }).catch(() => {});
-    } else if (w.url === target) {
-      return json({ ok: true, already: true, url: target }, 200, cors);
-    }
+    if (!mine) continue;
+    if (w.url === target && !found) { found = true; continue; }
+    const id = w.webhook_id || w.id;
+    await shipstationV2(env, "environment/webhooks/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {});
+    removed.push(String(id));
   }
+  if (found) return json({ ok: true, already: true, removed, url: target }, 200, cors);
   const made = await shipstationV2(env, "environment/webhooks", {
     method: "POST",
     body: JSON.stringify({ url: target, event: "track" }),
   });
-  return json({ ok: true, created: (made && (made.webhook_id || made.id)) || null, url: target }, 200, cors);
+  return json({ ok: true, created: (made && (made.webhook_id || made.id)) || null, removed, url: target }, 200, cors);
 }
 async function handleShipstationWebhook(request, env) {
   if (!features(env).shipstationWebhook) return json({ error: "Not set up" }, 501);
