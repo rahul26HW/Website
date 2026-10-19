@@ -1309,7 +1309,10 @@ async function handleTrackSetup(request, env, cors) {
   const list = Array.isArray(existing) ? existing : existing.webhooks || [];
   for (const w of list) {
     /* Clear out anything pointing at us with a stale token, so scans cannot arrive twice. */
-    if (String(w.url || "").split("?")[0] === target.split("?")[0] && w.url !== target) {
+    /* Anything pointing at this route goes, whatever its scheme or token — an http one from an
+       earlier attempt would carry the token in the clear and deliver the same scans twice. */
+    const mine = String(w.url || "").indexOf("/functions/v1/hw/shipstation/track") >= 0;
+    if (mine && w.url !== target) {
       await shipstationV2(env, "environment/webhooks/" + encodeURIComponent(w.webhook_id || w.id), { method: "DELETE" }).catch(() => {});
     } else if (w.url === target) {
       return json({ ok: true, already: true, url: target }, 200, cors);
