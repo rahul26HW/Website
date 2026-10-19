@@ -45,6 +45,13 @@
     try { return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: tz || STORE_TZ }); }
     catch (e) { return ''; }
   };
+  /* 'Expected Oct 21 – Oct 23', or a single day when both ends land together. */
+  u.expectedRange = function (fromIso, toIso) {
+    if (!toIso) return '';
+    var a = fromIso ? u.fmtDate(fromIso) : '', b = u.fmtDate(toIso);
+    return !a || a === b ? b : a + ' – ' + b;
+  };
+
   u.fmtDateTime = function (iso, tz) {
     try { return new Date(iso).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz || STORE_TZ, timeZoneName: 'short' }); }
     catch (e) { return ''; }

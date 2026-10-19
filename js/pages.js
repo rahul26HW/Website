@@ -257,6 +257,9 @@
             : HW.orderSteps(o)) +
           (o.tracking_number ? '<p style="margin:12px 0 6px"><b>Tracking:</b> ' + esc(o.carrier ? o.carrier + ' ' : '') +
             (link ? '<a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="' + esc(link) + '" target="_blank" rel="noopener noreferrer">' + esc(o.tracking_number) + '</a>' : esc(o.tracking_number)) + '</p>' : '') +
+          (o.expected_by && o.status === 'shipped'
+            ? '<p class="muted" style="font-size:13.5px;margin:0 0 6px">Expected ' + esc(u.expectedRange(o.expected_from, o.expected_by)) + '. Carriers can run late in bad weather or over a holiday.</p>'
+            : '') +
           (o.payment_status === 'unpaid' && o.status === 'new' ? '<p class="muted" style="font-size:13.5px">' + 'Payment hasn’t been received for this order yet.' + '</p>' : '') +
           // Cash on delivery only works if someone is there with the money.
           (o.payment_method === 'cod' && !ended && o.status !== 'delivered'

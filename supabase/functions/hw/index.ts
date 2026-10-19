@@ -2091,6 +2091,19 @@ async function handlePublic(path, request, env, cors) {
   try {
     if (path === "/public/track") {
       const order = await rpc("track_order", { p_number: str(body.number, 20), p_email: str(body.email, 254) });
+      /* Once it has shipped, say when it should arrive. The window is the same one the
+         product page quotes, measured from the day it actually went out. The address stays
+         on the server: only the dates come back. */
+      if (order && order.shipped_at && order.status === "shipped") {
+        try {
+          const rows = await db(env, "orders?order_number=eq." + encodeURIComponent(order.order_number) + "&select=shipping_address&limit=1");
+          const zip = (Array.isArray(rows) && rows[0] && rows[0].shipping_address && rows[0].shipping_address.zip) || "";
+          const [lo, hi] = transitDays(zip);
+          const from = new Date(order.shipped_at);
+          order.expected_by = addBusinessDays(from, hi).toISOString();
+          order.expected_from = addBusinessDays(from, lo).toISOString();
+        } catch (e) { console.error("expected delivery failed", e && e.message); }
+      }
       return json({ ok: true, order: order || null }, 200, cors);
     }
     if (path === "/public/cancel-request") {
