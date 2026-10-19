@@ -37,8 +37,16 @@
   u.qs = function (sel, root) { return (root || document).querySelector(sel); };
   u.qsa = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
 
-  u.fmtDate = function (iso) {
-    try { return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
+  /* Order dates are the shop's dates. Left to the reader's own clock, the same order reads
+     18 October in New Jersey and 19 October in India, and the confirmation email disagrees
+     with the tracking page. Eastern is the business's time, and what the contact page quotes. */
+  var STORE_TZ = 'America/New_York';
+  u.fmtDate = function (iso, tz) {
+    try { return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: tz || STORE_TZ }); }
+    catch (e) { return ''; }
+  };
+  u.fmtDateTime = function (iso, tz) {
+    try { return new Date(iso).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz || STORE_TZ, timeZoneName: 'short' }); }
     catch (e) { return ''; }
   };
 
