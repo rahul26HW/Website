@@ -1294,7 +1294,11 @@ async function handleTrackSetup(request, env, cors) {
   if (!env.SHIPSTATION_V2_API_KEY) return json({ error: "Add the secret SHIPSTATION_V2_API_KEY first." }, 501, cors);
   if (!env.SHIPSTATION_WEBHOOK_TOKEN) return json({ error: "Add the secret SHIPSTATION_WEBHOOK_TOKEN first." }, 501, cors);
 
-  const target = new URL(request.url).origin + "/functions/v1/hw/shipstation/track?token=" + encodeURIComponent(env.SHIPSTATION_WEBHOOK_TOKEN);
+  /* Built from SUPABASE_URL, not the incoming request: behind the edge proxy request.url is http,
+     and the token must never travel in the clear. */
+  const base = String(env.SUPABASE_URL || "").replace(/\/+$/, "");
+  const target = base + "/functions/v1/hw/shipstation/track?token=" + encodeURIComponent(env.SHIPSTATION_WEBHOOK_TOKEN);
+  if (!/^https:\/\//.test(target)) return json({ error: "SUPABASE_URL must be https." }, 500, cors);
   const existing = (await shipstationV2(env, "environment/webhooks").catch(() => [])) || [];
   const list = Array.isArray(existing) ? existing : existing.webhooks || [];
   for (const w of list) {
