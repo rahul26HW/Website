@@ -40,7 +40,7 @@
   function defaults() {
     return {
       schemaVersion: SCHEMA_VERSION,
-      brand: { name: 'Home Weavers', tagline: 'Woven for the way you live', logoImage: '', hideName: false },
+      brand: { name: 'Home Weavers', tagline: 'Woven for the way you live', logoImage: '', logoLight: '', hideName: false },
       announcement: DEFAULT_ANNOUNCEMENT,
       contact: { email: '', phone: '', address: '', hours: 'Monday–Friday, 9am–5pm ET' },
       settings: {

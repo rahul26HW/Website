@@ -446,7 +446,8 @@
     var bd = A.draft.brand || {};
     document.getElementById('admin').innerHTML =
       '<div class="adbar">' +
-      '<div class="brand">' + HW.SVG.logo + ' ' + esc(bd.name || 'Home Weavers') + ' <span class="muted" style="font-size:12px;font-family:var(--ui);margin-left:6px;color:#cfd8d4">Admin</span></div>' +
+      /* The storefront logo is near-black, which would vanish on this bar — a light copy sits here instead. */
+      '<div class="brand">' + (bd.logoLight ? '<img class="adlogo" src="' + esc(HW.asset(bd.logoLight)) + '" alt="">' : HW.SVG.logo) + ' ' + esc(bd.name || 'Home Weavers') + ' <span class="muted" style="font-size:12px;font-family:var(--ui);margin-left:6px;color:#cfd8d4">Admin</span></div>' +
       '<div style="display:flex;gap:10px;align-items:center">' +
       '<span class="adwho">' + esc(A.user && A.user.email || '') + '</span>' +
       '<a class="btn ghost sm" style="border-color:rgba(255,255,255,.4);color:#fff" href="' + HW.link('/') + '" target="_blank" rel="noopener">View store ↗</a>' +

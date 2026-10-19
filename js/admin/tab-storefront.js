@@ -76,6 +76,8 @@
             hint: 'Transparent PNG, WebP or SVG, about 400 × 160 px. Blank = woven icon + store name.',
             after: '<div class="btnrow" style="margin-top:8px"><button class="btn ghost sm" type="button" data-a="logo-upload">Upload logo</button>' +
               (bd.logoImage ? '<button class="txtbtn danger" type="button" data-a="logo-clear">Remove logo</button>' : '') + '</div>' }) +
+          ui.field('Logo for dark backgrounds', 'brand.logoLight', bd.logoLight, { type: 'trim', placeholder: 'Optional — a pale version of the same logo',
+            hint: 'Used on the dark admin bar, where a near-black logo would disappear. Leave blank for the woven icon.' }) +
           ui.check('My logo image already includes the name — don’t show the text', 'brand.hideName', bd.hideName, { live: 'logo' }) +
           '<div class="field"><span class="flabel">Logo preview</span><div id="logoPrevWrap">' + logoPreview() + '</div></div>' +
           ui.saveBtn()) +

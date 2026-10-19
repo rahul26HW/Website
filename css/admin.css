@@ -281,3 +281,6 @@ details.colgroup .gbody{padding:4px 14px 14px}
 .adalert ul{margin:6px 0 6px 18px;padding:0}
 .adalert:focus{outline:2px solid #B5503A;outline-offset:2px}
 [aria-invalid="true"]{border-color:#B5503A!important;box-shadow:0 0 0 1px #B5503A}
+
+/* The light logo in the top bar, level with the name beside it. */
+.adlogo{height:30px;width:auto;vertical-align:middle;margin-right:4px}
