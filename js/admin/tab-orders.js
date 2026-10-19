@@ -34,7 +34,11 @@
    * Orders
    * ================================================================ */
   async function loadOrders() {
-    var r = await A.sb.from('orders').select('*, order_items(*)').order('created_at', { ascending: false }).limit(1000);
+    /* Orders from before the shop opened are kept, just not in the way. */
+    var from = String(((A.store || {}).settings || {}).liveFrom || '').trim();
+    var q = A.sb.from('orders').select('*, order_items(*)').order('created_at', { ascending: false }).limit(1000);
+    if (from && !os.showOld) q = q.gte('created_at', from);
+    var r = await q;
     if (r.error) { os.error = r.error.message; os.list = []; return; }
     os.error = null; os.list = r.data || [];
     A.newOrders = os.list.filter(function (o) { return o.status === 'new'; }).length;
@@ -109,7 +113,7 @@
     var counts = { all: os.list.length };
     STATUSES.forEach(function (s) { counts[s[0]] = os.list.filter(function (o) { return o.status === s[0]; }).length; });
     return '<h1 class="h1row">Orders <span class="btnrow"><button class="btn ghost sm" type="button" data-a="orders-refresh">↻ Refresh</button><button class="btn ghost sm" type="button" data-a="orders-csv">⬇ Export CSV</button></span></h1>' +
-      '<p class="sub">Orders from checkout' + (A.draft.snipcart.enabled ? ' and Snipcart' : '') + '. Newest first.' + ((A.draft.payments || {}).stripe ? ' “Unpaid” orders haven’t finished Stripe payment — don’t ship them.' : '') + '</p>' +
+      '<p class="sub">Orders from checkout' + (A.draft.snipcart.enabled ? ' and Snipcart' : '') + '. Newest first.' + ((A.draft.payments || {}).stripe ? ' “Unpaid” orders haven’t finished Stripe payment — don’t ship them.' : '') + (String(((A.store || {}).settings || {}).liveFrom || '').trim() ? ' <button class="txtbtn" type="button" data-a="orders-old">' + (os.showOld ? 'Hide earlier orders' : 'Show orders from before launch') + '</button>' : '') + '</p>' +
       (os.error ? '<p class="badmsg">Couldn’t load orders: ' + esc(os.error) + '</p>' : '') +
       (asked.length ? '<div class="adwarn"><b>' + asked.length + ' cancellation request' + (asked.length > 1 ? 's' : '') + ':</b> ' +
         asked.map(function (o) { return esc(o.order_number); }).join(', ') + ' — open the order to see why.</div>' : '') +
@@ -257,6 +261,7 @@
 
   A.actions['orders-refresh'] = async function () { await loadOrders(); A.render(); u.toast('Orders refreshed'); };
   A.actions['orders-filter'] = function (el) { os.filter = el.dataset.f; A.render(); };
+  A.actions['orders-old'] = async function () { os.showOld = !os.showOld; os.list = null; A.render(); await loadOrders(); A.render(); };
   A.actions['order-open'] = function (el) {
     var o = os.list.find(function (x) { return x.id === el.dataset.id; });
     os.open = o.id;

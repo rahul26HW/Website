@@ -1090,9 +1090,13 @@ function shipstationOrder(order) {
     shippingAmount: Number(order.shipping || 0),
     customerNotes: order.customer_note || undefined,
     internalNotes: [codNote, order.admin_note].filter(Boolean).join("\n") || undefined,
-    advancedOptions: { source: "Home Weavers website" },
+    /* A marker in a column the pick list can show, so a website order is obvious at a glance
+       next to the marketplace ones. */
+    advancedOptions: { source: "Home Weavers website", customField3: WEBSITE_ORDER_TAG },
   };
 }
+
+const WEBSITE_ORDER_TAG = "HW123";
 
 async function pushToShipstation(env, order) {
   try {
