@@ -105,6 +105,53 @@
     return { cls: '', label: 'Well under' };
   }
 
+  /* ----------------------------------------------------------------
+   * What people searched for before they arrived, from Google Search Console.
+   * Google runs about two days behind, so today is never in here.
+   * ---------------------------------------------------------------- */
+  var gsc = { rows: null, loading: false, error: '', hint: '', setup: false, days: 28 };
+
+  async function loadSearch() {
+    gsc.loading = true; gsc.error = ''; gsc.hint = '';
+    try {
+      var r = await A.workerCall('/search-console', { days: gsc.days, dimension: 'query' });
+      gsc.rows = r.rows || [];
+    } catch (e) {
+      gsc.rows = [];
+      gsc.error = e.message || String(e);
+      gsc.setup = /GOOGLE_SERVICE_ACCOUNT/.test(gsc.error);
+    }
+    gsc.loading = false; A.render();
+  }
+
+  function gscPanel() {
+    if (gsc.rows === null) {
+      if (!gsc.loading) loadSearch();
+      return A.ui.panel('Google search', '<p class="hint">Asking Google…</p>');
+    }
+    if (gsc.setup) {
+      return A.ui.panel('Google search',
+        '<p class="hint" style="margin:0">Not connected yet. It needs a Google service account with read access to the ' +
+        'property in Search Console, and its key saved on the server as <b>GOOGLE_SERVICE_ACCOUNT</b>. ' +
+        'Until then the same numbers are on <a class="link-u" href="https://search.google.com/search-console" target="_blank" rel="noopener">Search Console</a>.</p>');
+    }
+    if (gsc.error) {
+      return A.ui.panel('Google search', A.ui.warn('<b>Couldn’t read Search Console:</b> ' + esc(gsc.error)) +
+        '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="gsc-reload">Try again</button></div>');
+    }
+    var rows = gsc.rows.slice(0, 25).map(function (r) {
+      return [esc(r.key), num(r.clicks), num(r.impressions), (r.ctr * 100).toFixed(1) + '%', r.position.toFixed(1)];
+    });
+    var clicks = gsc.rows.reduce(function (a, r) { return a + (r.clicks || 0); }, 0);
+    var imps = gsc.rows.reduce(function (a, r) { return a + (r.impressions || 0); }, 0);
+    return A.ui.panel('Google search',
+      '<p class="hint" style="margin:-6px 0 12px">What people typed into Google before they arrived, over the last ' + gsc.days + ' days: ' +
+      '<b>' + num(clicks) + '</b> click' + (clicks === 1 ? '' : 's') + ' from <b>' + num(imps) + '</b> time' + (imps === 1 ? '' : 's') + ' the site appeared. ' +
+      'Google reports two days behind, so today is never included.</p>' +
+      table(['Search term', 'Clicks', 'Shown', 'Click rate', 'Average position'], rows, 'Google has no search data for this site yet. A new site can take a few weeks.') +
+      '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-a="gsc-reload">Refresh</button></div>');
+  }
+
   function taxPanel() {
     if (st.rows === null) { if (!st.loading) loadStates(); return A.ui.panel('Sales tax watch', '<p class="hint">Adding up sales by state…</p>'); }
     if (st.error) return A.ui.panel('Sales tax watch', A.ui.warn('<b>Couldn’t read the orders:</b> ' + esc(st.error)));
@@ -180,9 +227,7 @@
           '<p class="hint">“Card seen” counts a product card that was actually scrolled into view on a category, search or home page.</p>') +
         A.ui.panel('Devices', table(['Device', 'Visits', 'Share'], devRows, 'No visits yet.')) +
         taxPanel() +
-        A.ui.panel('Google search',
-          '<p class="hint" style="margin:0">Search terms, impressions and position come from Google Search Console, which isn’t connected yet. ' +
-          'Verify the site there once and that table can be pulled in here.</p>') +
+        gscPanel() +
         A.ui.panel('What is and isn’t measured',
           '<ul class="bullets">' +
           '<li>Kept: the page, where the visit came from, phone/tablet/computer, which product cards were seen, clicked and added to a cart, and whether checkout was reached.</li>' +
@@ -195,6 +240,7 @@
     }
   };
 
+  A.actions['gsc-reload'] = function () { gsc.rows = null; gsc.error = ''; gsc.setup = false; A.render(); };
   A.actions['an-range'] = function (el) { an.days = Number(el.dataset.d) || 30; an.data = null; A.render(); };
   A.actions['an-refresh'] = async function () { an.data = null; A.render(); await load(); A.render(); };
 })(window.HW = window.HW || {});

@@ -160,6 +160,7 @@ export default {
         case "/orders/notify": return await handleOrderNotify(request, env, cors);
         case "/orders/release": return await handleOrderRelease(request, env, cors);
         case "/messages/reply": return await handleMessageReply(request, env, cors);
+        case "/search-console": return await handleSearchConsole(request, env, cors);
         case "/email/test": return await handleEmailTest(request, env, cors);
         case "/account/code": return await handleAccountCode(request, env, cors);
         case "/account/verify": return await handleAccountVerify(request, env, cors);
@@ -1712,6 +1713,87 @@ async function handleMessageReply(request, env, cors) {
     return json({ ok: true, sent: true, recorded: false, to: msg.email }, 200, cors);
   }
   return json({ ok: true, sent: true, recorded: true, to: msg.email }, 200, cors);
+}
+/* ---------------------------------------------------------------- *
+ * Google Search Console — the words people typed to find the shop.
+ *
+ * Google has no plain API key for this, so the server signs a short-lived
+ * token with a service account key and trades it for an access token. The key
+ * never leaves the server and the scope is read-only.
+ * ---------------------------------------------------------------- */
+const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
+let gscToken = null; /* { value, expires } — reused while it lasts, about an hour. */
+
+function pemBody(pem) {
+  const b64 = String(pem || "").replace(/-----[A-Z ]+-----/g, "").replace(/\s+/g, "");
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+async function googleAccessToken(env) {
+  if (gscToken && gscToken.expires > Date.now() + 60000) return gscToken.value;
+  let sa;
+  try { sa = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT || "{}"); }
+  catch { throw new Error("GOOGLE_SERVICE_ACCOUNT is not valid JSON."); }
+  if (!sa.client_email || !sa.private_key) throw new Error("GOOGLE_SERVICE_ACCOUNT is missing client_email or private_key.");
+
+  const now = Math.floor(Date.now() / 1000);
+  const enc = new TextEncoder();
+  const head = b64url(enc.encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
+  const body = b64url(enc.encode(JSON.stringify({
+    iss: sa.client_email, scope: GSC_SCOPE, aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600,
+  })));
+  const key = await crypto.subtle.importKey("pkcs8", pemBody(sa.private_key.replace(/\\n/g, "\n")), { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, enc.encode(head + "." + body));
+  const jwt = head + "." + body + "." + b64url(sig);
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=" + encodeURIComponent(jwt),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.access_token) throw new Error("Google refused the key: " + String(data.error_description || data.error || res.status).slice(0, 200));
+  gscToken = { value: data.access_token, expires: Date.now() + (Number(data.expires_in || 3600) * 1000) };
+  return gscToken.value;
+}
+
+/* POST /search-console { days, dimension } — admins only. */
+async function handleSearchConsole(request, env, cors) {
+  const denied = await requireAdmin(request, env);
+  if (denied) return json({ error: denied }, 401, cors);
+  if (!env.GOOGLE_SERVICE_ACCOUNT) return json({ error: "Add the secret GOOGLE_SERVICE_ACCOUNT first.", setup: true }, 501, cors);
+
+  const body = await readJson(request);
+  const days = Math.min(Math.max(Number(body.days) || 28, 1), 180);
+  const dimension = /^(query|page|country|device|date)$/.test(String(body.dimension || "")) ? body.dimension : "query";
+  const data = await storeData(env);
+  const site = String(env.SEARCH_CONSOLE_SITE || (data.settings && data.settings.siteUrl) || "https://www.homeweavers.com/");
+
+  /* Search Console data runs two days behind; asking for today returns an empty table. */
+  const day = (back) => new Date(Date.now() - back * 86400000).toISOString().slice(0, 10);
+  const token = await googleAccessToken(env);
+  const res = await fetch("https://www.googleapis.com/webmasters/v3/sites/" + encodeURIComponent(site) + "/searchAnalytics/query", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ startDate: day(days + 2), endDate: day(2), dimensions: [dimension], rowLimit: 100 }),
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const why = String((out.error && out.error.message) || res.status);
+    /* The commonest cause by far: the service account was never added to the property. */
+    const hint = res.status === 403
+      ? "Add this service account as a user on the property in Search Console: " + (JSON.parse(env.GOOGLE_SERVICE_ACCOUNT).client_email || "")
+      : null;
+    return json({ error: "Search Console: " + why.slice(0, 200), hint, site }, 502, cors);
+  }
+  const rows = (out.rows || []).map((r) => ({
+    key: (r.keys && r.keys[0]) || "",
+    clicks: r.clicks || 0,
+    impressions: r.impressions || 0,
+    ctr: r.ctr || 0,
+    position: r.position || 0,
+  }));
+  return json({ ok: true, site, days, dimension, rows }, 200, cors);
 }
 /* POST /email/test { kind } — admins only. Sends a sample order email to the signed-in admin's own address. */
 async function handleEmailTest(request, env, cors) {
