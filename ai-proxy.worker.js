@@ -1097,7 +1097,8 @@ async function pushToShipstation(env, order) {
     const res = await shipstation(env, "orders/createorder", { method: "POST", body: JSON.stringify(shipstationOrder(order)) });
     const patch = { shipstation_order_id: String(res.orderId), shipstation_synced_at: new Date().toISOString(), shipstation_error: null };
     await patchOrder(env, "id=eq." + order.id, patch);
-    return { ok: true, ...patch };
+    /* What ShipStation actually stored, so a dropped field shows up here and not weeks later. */
+    return { ok: true, ...patch, tagged: (res.advancedOptions && res.advancedOptions.customField3) || null };
   } catch (e) {
     await patchOrder(env, "id=eq." + order.id, { shipstation_error: String(e.message).slice(0, 500) }).catch(() => {});
     throw e;
