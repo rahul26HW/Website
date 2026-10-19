@@ -1773,11 +1773,34 @@ async function handleSearchConsole(request, env, cors) {
   const days = Math.min(Math.max(Number(body.days) || 28, 1), 180);
   const dimension = /^(query|page|country|device|date)$/.test(String(body.dimension || "")) ? body.dimension : "query";
   const data = await storeData(env);
-  const site = String(env.SEARCH_CONSOLE_SITE || (data.settings && data.settings.siteUrl) || "https://www.homeweavers.com/");
 
   /* Search Console data runs two days behind; asking for today returns an empty table. */
   const day = (back) => new Date(Date.now() - back * 86400000).toISOString().slice(0, 10);
   const token = await googleAccessToken(env);
+
+  /* A property is either a domain one ("sc-domain:homeweavers.com") or an address one
+     ("https://www.homeweavers.com/"), and guessing wrong is a 403 that reads like a
+     permissions problem. Ask Google which ones this account can see and take the match. */
+  let site = String(env.SEARCH_CONSOLE_SITE || "").trim();
+  if (!site) {
+    const host = String((data.settings && data.settings.siteUrl) || "https://www.homeweavers.com/")
+      .replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "");
+    const owned = await fetch("https://www.googleapis.com/webmasters/v3/sites", { headers: { Authorization: "Bearer " + token } })
+      .then((r) => r.json()).catch(() => ({}));
+    const entries = (owned && owned.siteEntry) || [];
+    const mine = entries.filter((e) => String(e.siteUrl || "").indexOf(host) >= 0);
+    /* A domain property covers every subdomain, so prefer it when both exist. */
+    const pick = mine.find((e) => /^sc-domain:/.test(e.siteUrl)) || mine[0];
+    if (!pick) {
+      const sa = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT || "{}");
+      return json({
+        error: "This service account cannot see a property for " + host + " yet.",
+        hint: "Add " + (sa.client_email || "the service account") + " as a user on the property in Search Console.",
+        saw: entries.map((e) => e.siteUrl),
+      }, 403, cors);
+    }
+    site = pick.siteUrl;
+  }
   const res = await fetch("https://www.googleapis.com/webmasters/v3/sites/" + encodeURIComponent(site) + "/searchAnalytics/query", {
     method: "POST",
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
