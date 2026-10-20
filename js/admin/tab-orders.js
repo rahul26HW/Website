@@ -113,7 +113,7 @@
     var counts = { all: os.list.length };
     STATUSES.forEach(function (s) { counts[s[0]] = os.list.filter(function (o) { return o.status === s[0]; }).length; });
     return '<h1 class="h1row">Orders <span class="btnrow"><button class="btn ghost sm" type="button" data-a="orders-refresh">↻ Refresh</button><button class="btn ghost sm" type="button" data-a="orders-csv">⬇ Export CSV</button></span></h1>' +
-      '<p class="sub">Orders from checkout' + (A.draft.snipcart.enabled ? ' and Snipcart' : '') + '. Newest first.' + ((A.draft.payments || {}).stripe ? ' “Unpaid” orders haven’t finished Stripe payment — don’t ship them.' : '') + (String(((A.store || {}).settings || {}).liveFrom || '').trim() ? ' <button class="txtbtn" type="button" data-a="orders-old">' + (os.showOld ? 'Hide earlier orders' : 'Show orders from before launch') + '</button>' : '') + '</p>' +
+      '<p class="sub">Orders from checkout' + (A.draft.snipcart.enabled ? ' and Snipcart' : '') + '. Newest first.' + ((A.draft.payments || {}).stripe && os.list.some(function (o) { return /^(unpaid|failed)$/.test(o.payment_status); }) ? ' “Unpaid” orders haven’t finished Stripe payment — don’t ship them.' : '') + (String(((A.store || {}).settings || {}).liveFrom || '').trim() ? ' <button class="txtbtn" type="button" data-a="orders-old">' + (os.showOld ? 'Hide earlier orders' : 'Show orders from before launch') + '</button>' : '') + '</p>' +
       (os.error ? '<p class="badmsg">Couldn’t load orders: ' + esc(os.error) + '</p>' : '') +
       (asked.length ? '<div class="adwarn"><b>' + asked.length + ' cancellation request' + (asked.length > 1 ? 's' : '') + ':</b> ' +
         asked.map(function (o) { return esc(o.order_number); }).join(', ') + ' — open the order to see why.</div>' : '') +
@@ -123,11 +123,11 @@
       [['all', 'All']].concat(STATUSES).map(function (s) {
         return '<button type="button" class="chip' + (os.filter === s[0] ? ' active' : '') + '" data-a="orders-filter" data-f="' + s[0] + '" aria-pressed="' + (os.filter === s[0]) + '">' + s[1] + ' (' + counts[s[0]] + ')</button>';
       }).join('') + '</div><span class="spacer"></span><label class="sr-only" for="oSearch">Search orders</label><input id="oSearch" type="search" placeholder="Order #, email, name" value="' + esc(os.q) + '"></div>' +
-      '<div class="tablewrap"><table class="adt"><thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th></tr></thead><tbody>' +
+      '<div class="tablewrap"><table class="adt ordt"><thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th></tr></thead><tbody>' +
       (shown.length ? shown.map(function (o) {
         var n = (o.order_items || []).reduce(function (s, i) { return s + i.qty; }, 0);
         return '<tr class="clickrow"><td><button class="txtbtn" type="button" data-a="order-open" data-id="' + o.id + '"><b>' + esc(o.order_number) + '</b></button></td>' +
-          '<td class="hint">' + esc(new Date(o.created_at).toLocaleString('en-US')) + '</td><td>' + esc(o.name) + '<div class="hint">' + esc(o.email) + '</div></td>' +
+          '<td class="hint">' + esc(u.fmtDate(o.created_at)) + '</td><td><div>' + esc(o.name) + '<div class="hint">' + esc(o.email) + '</div></div></td>' +
           '<td>' + n + '</td><td>' + u.money(o.total) + '</td><td>' + payTag(o.payment_status) + '</td><td>' + statusTag(o.status) + '</td></tr>';
       }).join('') : '<tr><td colspan="7" class="muted" style="padding:16px">' + (os.list.length ? 'No orders match.' : 'No orders yet.') + '</td></tr>') +
       '</tbody></table></div></section>';
@@ -141,11 +141,11 @@
         (o.tracking_number ? 'It has shipped' + (o.carrier ? ' with ' + o.carrier : '') + '. Tracking number: ' + o.tracking_number + '\n\n' : '') + 'Best,\n' + (A.draft.brand.name || 'Home Weavers'));
     return '<p><button class="txtbtn" type="button" data-a="order-back">← All orders</button></p>' +
       '<h1 class="h1row">Order ' + esc(o.order_number) + ' <span>' + payTag(o.payment_status) + ' ' + statusTag(o.status) + '</span></h1>' +
-      '<p class="sub">Placed ' + esc(new Date(o.created_at).toLocaleString('en-US')) + ' · ' + esc(o.source === 'snipcart' ? 'Snipcart' : 'Site checkout') + (o.external_id ? ' · ' + esc(o.external_id) : '') + '</p>' +
+      '<p class="sub">Placed ' + esc(u.fmtDateTime(o.created_at)) + ' · ' + esc(o.source === 'snipcart' ? 'Snipcart' : 'Site checkout') + (o.external_id ? ' · ' + esc(o.external_id) : '') + '</p>' +
       '<div class="grid2 alignstart">' +
       ui.panel('Items', '<table class="adt"><tbody>' + (o.order_items || []).map(function (i) {
         return '<tr><td>' + (i.image ? '<img class="thumbsm" src="' + esc(HW.asset(i.image)) + '" alt="" loading="lazy">' : '') + '</td>' +
-          '<td>' + esc(HW.seo.clip(i.name, 70)) + '<div class="hint">' + esc(i.variant || '') + ' · SKU <code>' + esc(i.sku || '—') + '</code></div></td>' +
+          '<td><div>' + esc(HW.seo.clip(i.name, 70)) + '<div class="hint">' + esc(i.variant || '') + ' · SKU <code>' + esc(i.sku || '—') + '</code></div></div></td>' +
           '<td style="white-space:nowrap">' + i.qty + ' × ' + u.money(i.unit_price) + '</td><td style="text-align:right">' + u.money(i.line_total) + '</td></tr>';
       }).join('') + '</tbody></table>' +
         '<div class="sumbox"><div class="sumrow"><span>Subtotal</span><span>' + u.money(o.subtotal) + '</span></div>' +
@@ -424,11 +424,11 @@
         (ms.list.length ? ms.list.map(function (x) {
           var open = ms.open === x.id;
           var reply = 'mailto:' + encodeURIComponent(x.email) + '?subject=' + encodeURIComponent('Re: ' + (x.subject || 'Your message to ' + (A.draft.brand.name || 'Home Weavers'))) +
-            '&body=' + encodeURIComponent('\n\n---\nOn ' + new Date(x.created_at).toLocaleString('en-US') + ', ' + x.name + ' wrote:\n' + x.message);
+            '&body=' + encodeURIComponent('\n\n---\nOn ' + u.fmtDateTime(x.created_at) + ', ' + x.name + ' wrote:\n' + x.message);
           return '<section class="panel msg' + (x.is_read ? '' : ' unread') + '">' +
             '<button class="msghead" type="button" data-a="msg-open" data-id="' + x.id + '" aria-expanded="' + open + '">' +
             '<span>' + (x.is_read ? '' : '<span class="dot" aria-label="Unread"></span>') + '<b>' + esc(x.name) + '</b> <span class="hint">&lt;' + esc(x.email) + '&gt;</span></span>' +
-            '<span class="hint">' + esc(x.subject || '(no subject)') + ' · ' + esc(new Date(x.created_at).toLocaleString('en-US')) + '</span></button>' +
+            '<span class="hint">' + esc(x.subject || '(no subject)') + ' · ' + esc(u.fmtDateTime(x.created_at)) + '</span></button>' +
             (open ? '<div class="msgbody"><p style="white-space:pre-wrap;margin:12px 0">' + esc(x.message) + '</p>' +
               (x.phone ? '<p class="hint">Phone: ' + phoneHTML(x.phone) + '</p>' : '') +
               thread(x) +

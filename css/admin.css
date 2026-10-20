@@ -293,11 +293,30 @@ details.colgroup .gbody{padding:4px 14px 14px}
   table.adt,table.adt tbody,table.adt tr,table.adt td{display:block;width:100%}
   table.adt tr{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
   table.adt tr:last-child{margin-bottom:0}
-  table.adt td{border:none;padding:5px 0;display:flex;align-items:baseline;justify-content:space-between;gap:14px;text-align:right}
-  table.adt td::before{content:attr(data-label);flex:0 0 auto;text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);font-weight:600}
+  /* Pushed apart, label left and value right, nothing lined up and a long email ran off
+     the edge. Two tidy columns instead, so the eye has one edge to follow down the card. */
+  table.adt td{border:none;padding:4px 0;display:grid;grid-template-columns:84px minmax(0,1fr);
+    gap:10px;align-items:baseline;text-align:left}
+  table.adt td>*{min-width:0;max-width:100%;overflow-wrap:anywhere;grid-column:2;justify-self:start;text-align:left}
+  table.adt td::before{content:attr(data-label);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;line-height:1.5}
   table.adt td:empty{display:none}
-  table.adt td img.thumbsm{margin-left:auto}
+  table.adt td img.thumbsm{justify-self:start}
   .sizerow{grid-template-columns:1fr 72px 72px 28px;gap:8px}
+  /* Seven label and value rows per order is a form, not a list. A phone needs only enough
+     to recognise the order; everything else is one tap away on the order itself. */
+  table.ordt tr{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:12px 14px}
+  table.ordt td{display:block;width:auto;padding:0;grid-template-columns:none;text-align:left}
+  table.ordt td::before{display:none}
+  table.ordt td>*{grid-column:auto}
+  table.ordt td:nth-child(1){order:1;font-size:15px}
+  table.ordt td:nth-child(5){order:2;margin-left:auto;font-size:15px;font-weight:600}
+  table.ordt td:nth-child(3){order:3;flex:1 1 100%}
+  table.ordt td:nth-child(3) .hint{display:none}
+  table.ordt td:nth-child(2){order:4;font-size:12px}
+  table.ordt td:nth-child(6){order:5}
+  table.ordt td:nth-child(7){order:6}
+  table.ordt td:nth-child(4){display:none}
+  table.ordt td[colspan]{flex:1 1 100%;order:0}
   /* Everything here was sized for a desk. On a phone the headings, numbers and buttons
      each took a line of their own and pushed the actual work below the fold. */
   .admain{font-size:14px}
@@ -319,11 +338,19 @@ details.colgroup .gbody{padding:4px 14px 14px}
   /* The top bar wrapped onto two lines on a phone, so the buttons ate a third of the
      screen before any work was visible. It stays on one line now and the pieces shrink. */
   .adbar{flex-wrap:nowrap;padding:10px 12px;gap:8px}
-  .adbar .brand{font-size:15px;min-width:0;overflow:hidden;white-space:nowrap}
+  /* The name truncated mid-word to "Home Wea". The mark and "Admin" say it without the guesswork. */
+  .adbar .brand{font-size:15px;min-width:0;white-space:nowrap;gap:6px}
+  .adbar .adname{display:none}
   .adbar .adlogo{height:22px}
-  .adbar .btn.sm{padding:7px 10px;font-size:11.5px;white-space:nowrap}
+  .adbar .btn.sm{padding:6px 9px;font-size:11px;white-space:nowrap}
   .chip{padding:6px 11px;font-size:11.5px}
-  .toolbar{gap:8px}
+  /* Nine filters wrapped onto three rows and pushed the first order off the screen.
+     One row that scrolls sideways instead. */
+  .toolbar{gap:8px;margin-bottom:12px}
+  .subnav{display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
+    width:calc(100% + 28px);margin:0 -14px;padding:0 14px 1px}
+  .subnav::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto}
   .panel{padding:16px 14px}
   .adside button{padding:10px 12px;font-size:13px}
 }

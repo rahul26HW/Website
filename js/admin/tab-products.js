@@ -537,7 +537,7 @@
       '<div class="tablewrap"><table class="vartable"><thead><tr><th>Product</th><th>Color</th><th>Hex</th><th>Size / pack</th></tr></thead><tbody>' +
       items.map(function (p, i) {
         var g = guessParts(p.name);
-        return '<tr><td style="max-width:260px;font-size:12.5px">' + esc(HW.seo.clip(p.name, 90)) + '<div class="hint">SKU ' + esc(p.sku || '—') + ' · ' + u.money(p.price) + '</div></td>' +
+        return '<tr><td style="max-width:260px;font-size:12.5px"><div>' + esc(HW.seo.clip(p.name, 90)) + '<div class="hint">SKU ' + esc(p.sku || '—') + ' · ' + u.money(p.price) + '</div></div></td>' +
           '<td><input data-cmb="color" data-i="' + i + '" value="' + esc(g.color) + '" aria-label="Color for product ' + (i + 1) + '"></td>' +
           '<td><input type="color" data-cmb="hex" data-i="' + i + '" value="' + esc(p.swatch || '#C9BBA6') + '" aria-label="Swatch for product ' + (i + 1) + '"></td>' +
           '<td><input data-cmb="size" data-i="' + i + '" value="' + esc(g.size) + '" aria-label="Size for product ' + (i + 1) + '"></td></tr>';
