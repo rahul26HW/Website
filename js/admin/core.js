@@ -465,8 +465,24 @@
       '<span><b>Unsaved changes</b> — they are not live until you save.</span>' +
       '<span style="display:flex;gap:8px"><button class="btn ghost sm" type="button" data-a="discard">Discard</button><button class="btn loom sm" type="button" data-a="save-all">Save changes</button></span></div>';
     refreshDirtyBar();
+    labelCells();
     if (t.after) { try { t.after(); } catch (e) { console.error(e); } }
   };
+
+  /* A phone is too narrow for a table with seven columns. Each cell is given the name of
+     its column so the stylesheet can stack a row into a labelled card down there, while the
+     same markup stays an ordinary table on a wider screen. */
+  function labelCells() {
+    u.qsa('table.adt').forEach(function (tbl) {
+      var heads = u.qsa('thead th', tbl).map(function (th) { return th.textContent.trim(); });
+      if (!heads.length) return;
+      u.qsa('tbody tr', tbl).forEach(function (tr) {
+        u.qsa('td', tr).forEach(function (td, i) {
+          if (heads[i] && !td.dataset.label) td.dataset.label = heads[i];
+        });
+      });
+    });
+  }
 
   function refreshDirtyBar() {
     var bar = document.getElementById('dirtyBar');

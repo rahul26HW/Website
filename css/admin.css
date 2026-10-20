@@ -285,12 +285,18 @@ details.colgroup .gbody{padding:4px 14px 14px}
 /* The light logo in the top bar, level with the name beside it. */
 .adlogo{height:30px;width:auto;vertical-align:middle;margin-right:4px}
 
-/* Phones. The data tables have more columns than a phone has width, so they scroll
-   sideways inside their own panel rather than stretching the page under the thumb. */
+/* Phones. A table with seven columns cannot be read on a 390px screen, and scrolling it
+   sideways only hides half the order. Each row becomes a card instead, with the column
+   name beside its value, which is the same information in a shape that fits. */
 @media(max-width:720px){
-  .panel:has(table.adt){overflow-x:auto}
-  table.adt{min-width:560px}
-  table.adt th,table.adt td{padding:10px 8px;font-size:13px}
+  table.adt thead{display:none}
+  table.adt,table.adt tbody,table.adt tr,table.adt td{display:block;width:100%}
+  table.adt tr{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+  table.adt tr:last-child{margin-bottom:0}
+  table.adt td{border:none;padding:5px 0;display:flex;align-items:baseline;justify-content:space-between;gap:14px;text-align:right}
+  table.adt td::before{content:attr(data-label);flex:0 0 auto;text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);font-weight:600}
+  table.adt td:empty{display:none}
+  table.adt td img.thumbsm{margin-left:auto}
   .sizerow{grid-template-columns:1fr 72px 72px 28px;gap:8px}
   .admain h1{font-size:26px}
   .btnrow .btn{flex:0 1 auto}
