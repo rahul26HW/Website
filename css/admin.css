@@ -284,3 +284,16 @@ details.colgroup .gbody{padding:4px 14px 14px}
 
 /* The light logo in the top bar, level with the name beside it. */
 .adlogo{height:30px;width:auto;vertical-align:middle;margin-right:4px}
+
+/* Phones. The data tables have more columns than a phone has width, so they scroll
+   sideways inside their own panel rather than stretching the page under the thumb. */
+@media(max-width:720px){
+  .panel:has(table.adt){overflow-x:auto}
+  table.adt{min-width:560px}
+  table.adt th,table.adt td{padding:10px 8px;font-size:13px}
+  .sizerow{grid-template-columns:1fr 72px 72px 28px;gap:8px}
+  .admain h1{font-size:26px}
+  .btnrow .btn{flex:0 1 auto}
+  .msghead{flex-wrap:wrap;gap:4px}
+  .msgturn{max-width:100%}
+}
