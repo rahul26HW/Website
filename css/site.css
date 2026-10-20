@@ -642,11 +642,18 @@ footer.site{background:var(--ink);color:#E7E0D4;margin-top:10px}
 @media(max-width:720px){
   .hbar,.hactions .lbl{display:none}
   .menu-toggle{display:flex}
-  .htop{grid-template-columns:auto 1fr auto;gap:12px;padding:12px 18px}
+  /* The middle column has to be allowed to shrink. Left as plain 1fr it grows to fit the
+     logo and the name together, which pushes search, wishlist and cart off the right edge
+     and makes every page 49px wider than the phone. */
+  .htop{grid-template-columns:auto minmax(0,1fr) auto;gap:12px;padding:12px 18px}
+  .brand,.brand .mark,.brand .wordblock{min-width:0}
+  .brand .mark #brandName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* With a logo there is no room for the name beside it on a phone, and the mark says it. */
+  .brand .mark:has(.logo-img) #brandName{display:none}
   .cat-rail .cat-tile,.prod-rail .pcard{flex:0 0 78%}
   .brand{justify-self:center}
   .brand .tagline{display:none}
-  .brand .mark .logo-img{height:38px;max-width:200px}
+  .brand .mark .logo-img{height:34px;max-width:150px}
   .brand .mark{font-size:22px}
   .features{grid-template-columns:1fr}
   .fmain{gap:36px 40px;padding:44px 0 30px}
