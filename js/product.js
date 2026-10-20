@@ -354,6 +354,45 @@
     HW.gallery.fit();
     fitSwatches();
     HW.snip && HW.snip.refresh();
+    stickyBuy();
+  }
+
+  /* On a phone the buy box scrolls off the top long before someone has finished reading,
+     and they should not have to scroll back up to buy. A copy of the price and the button
+     follows them once the real one leaves the screen. The button is not a second button:
+     it presses the real one, so the two can never disagree about size, colour or stock. */
+  var stickyEl = null, stickyWatch = null;
+  function stickyBuy() {
+    var real = document.getElementById("buyBtn");
+    if (stickyWatch) { stickyWatch.disconnect(); stickyWatch = null; }
+    if (stickyEl) { stickyEl.remove(); stickyEl = null; }
+    if (!real) return;
+
+    var priceEl = document.querySelector(".price .now") || document.querySelector(".price");
+    var bar = document.createElement("div");
+    bar.className = "stickybuy";
+    bar.hidden = true;
+    bar.innerHTML = '<span class="sb-price"></span><button class="btn loom sb-go" type="button"></button>';
+    document.body.appendChild(bar);
+    stickyEl = bar;
+
+    function sync() {
+      var go = bar.querySelector(".sb-go");
+      go.textContent = real.textContent;
+      go.disabled = real.disabled;
+      bar.querySelector(".sb-price").textContent = priceEl ? priceEl.textContent.trim() : "";
+    }
+    sync();
+    bar.querySelector(".sb-go").addEventListener("click", function () {
+      var live = document.getElementById("buyBtn");
+      if (live) live.click();
+    });
+
+    /* Shown only while the real button is off the screen. */
+    stickyWatch = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { bar.hidden = e.isIntersecting; if (!e.isIntersecting) sync(); });
+    }, { rootMargin: "0px 0px -20px 0px" });
+    stickyWatch.observe(real);
   }
 
   /* Colors stay two rows deep. When there are more than fit, the strip slides sideways instead of

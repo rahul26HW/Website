@@ -298,7 +298,21 @@ details.colgroup .gbody{padding:4px 14px 14px}
   table.adt td:empty{display:none}
   table.adt td img.thumbsm{margin-left:auto}
   .sizerow{grid-template-columns:1fr 72px 72px 28px;gap:8px}
-  .admain h1{font-size:26px}
+  /* Everything here was sized for a desk. On a phone the headings, numbers and buttons
+     each took a line of their own and pushed the actual work below the fold. */
+  .admain{font-size:14px}
+  .admain h1{font-size:22px;margin:0 0 2px}
+  .admain .sub{font-size:13px;margin:0 0 16px;line-height:1.45}
+  .panel .ph3{font-size:12.5px;margin:0 0 12px}
+  .stat{padding:12px 14px}
+  .stat .n{font-size:24px}
+  .stat .l{font-size:10px}
+  .stat-row{gap:10px;margin-bottom:16px}
+  .btn{padding:9px 13px;font-size:12.5px}
+  .btn.sm{padding:7px 10px;font-size:11.5px}
+  .hint{font-size:12px}
+  input,select,textarea{font-size:16px}
+  .fld{margin-bottom:12px}
   .btnrow .btn{flex:0 1 auto}
   .msghead{flex-wrap:wrap;gap:4px}
   .msgturn{max-width:100%}
