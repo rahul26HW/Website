@@ -313,3 +313,29 @@ details.colgroup .gbody{padding:4px 14px 14px}
   .panel{padding:16px 14px}
   .adside button{padding:10px 12px;font-size:13px}
 }
+
+/* The bottom bar. Off on a desktop, where the sidebar does this job better. */
+.adtabs,.adsheet,.adsheet-scrim{display:none}
+@media(max-width:720px){
+  .adside{display:none}
+  .admain{padding-bottom:96px}
+  .adtabs{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--line);
+    padding:6px 2px calc(6px + env(safe-area-inset-bottom));justify-content:space-around}
+  .adtab{flex:1 1 0;min-width:0;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:5px 2px;font-size:10px;line-height:1.1;color:var(--ink-soft);position:relative}
+  .adtab span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .adtab.active{color:var(--loom);font-weight:600}
+  .adtab.active svg{color:var(--loom)}
+  .tabbadge{position:absolute;top:0;left:52%;background:var(--clay);color:#fff;border-radius:999px;
+    font-size:9px;line-height:1;padding:3px 5px;font-weight:700}
+  .adsheet-scrim{display:block;position:fixed;inset:0;background:rgba(20,18,16,.38);z-index:31}
+  .adsheet{display:block;position:fixed;left:0;right:0;bottom:0;z-index:32;background:#fff;
+    border-radius:16px 16px 0 0;padding:6px 10px calc(14px + env(safe-area-inset-bottom));
+    max-height:72vh;overflow:auto;box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+  .adsheet-head{display:flex;align-items:center;justify-content:space-between;padding:10px 6px 6px;font-size:15px}
+  .adsheet button[data-a=tab]{display:flex;gap:11px;align-items:center;width:100%;text-align:left;background:none;
+    border:none;padding:11px 8px;border-radius:var(--r);font-size:14.5px;color:var(--ink)}
+  .adsheet button[data-a=tab].active{background:var(--loom);color:#fff}
+  .adsheet button[data-a=tab].active svg{color:#fff}
+  .adsheet .sgroup{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);padding:12px 8px 3px;font-weight:600}
+}

@@ -42,6 +42,43 @@
     ['Inbox', [['messages', 'Messages', ICONS.mail]]]
   ];
 
+  /* The five a phone keeps within reach. Everything else lives behind More, which opens
+     the same list the desktop sidebar shows, groups and all. */
+  var TABS = ['dashboard', 'orders', 'products', 'messages'];
+  var MORE_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>';
+
+  function navItem(key) {
+    var found = null;
+    NAV.forEach(function (g) { g[1].forEach(function (n) { if (n[0] === key) found = n; }); });
+    return found;
+  }
+  function badgeFor(key) {
+    var n = key === 'messages' ? A.unread : key === 'orders' ? A.newOrders : 0;
+    return n ? '<span class="tabbadge">' + n + '</span>' : '';
+  }
+  function tabBar() {
+    var items = TABS.map(function (key) {
+      var n = navItem(key);
+      if (!n) return '';
+      return '<button type="button" class="adtab' + (A.tab === key ? ' active' : '') + '" data-a="tab" data-tab="' + key + '"' +
+        (A.tab === key ? ' aria-current="page"' : '') + '>' + n[2] + badgeFor(key) + '<span>' + esc(n[1]) + '</span></button>';
+    }).join('');
+    var otherUnread = TABS.indexOf('messages') < 0 && A.unread ? A.unread : 0;
+    return '<nav class="adtabs" aria-label="Sections">' + items +
+      '<button type="button" class="adtab' + (A.moreOpen ? ' active' : '') + '" data-a="more" aria-expanded="' + !!A.moreOpen + '">' +
+      MORE_ICON + (otherUnread ? '<span class="tabbadge">' + otherUnread + '</span>' : '') + '<span>More</span></button></nav>';
+  }
+  function moreSheet() {
+    if (!A.moreOpen) return '';
+    return '<div class="adsheet-scrim" data-a="more-close"></div><div class="adsheet" role="dialog" aria-label="All sections">' +
+      '<div class="adsheet-head"><b>All sections</b><button class="iconbtn" type="button" data-a="more-close" aria-label="Close">\u2715</button></div>' +
+      NAV.map(function (g) {
+        return '<div class="sgroup">' + esc(g[0]) + '</div>' + g[1].map(function (n) {
+          return '<button type="button" class="' + (A.tab === n[0] ? 'active' : '') + '" data-a="tab" data-tab="' + n[0] + '">' + n[2] + '<span>' + esc(n[1]) + badgeFor(n[0]) + '</span></button>';
+        }).join('');
+      }).join('') + '</div>';
+  }
+
   /* ================================================================ *
    * Sign-in
    * ================================================================ */
@@ -461,6 +498,7 @@
         }).join('');
       }).join('') +
       '</nav><main class="admain" id="adminMain">' + body + '</main></div>' +
+      tabBar() + moreSheet() +
       '<div class="dirtybar" id="dirtyBar" role="region" aria-label="Unsaved changes" hidden>' +
       '<span><b>Unsaved changes</b> — they are not live until you save.</span>' +
       '<span style="display:flex;gap:8px"><button class="btn ghost sm" type="button" data-a="discard">Discard</button><button class="btn loom sm" type="button" data-a="save-all">Save changes</button></span></div>';
@@ -821,6 +859,8 @@
   }
 
   /* ---------- shared actions ---------- */
+  A.actions.more = function () { A.moreOpen = !A.moreOpen; A.render(); };
+  A.actions['more-close'] = function () { A.moreOpen = false; A.render(); };
   A.actions.tab = function (el) { A.go(el.dataset.tab); };
   A.actions.signout = function () { A.signOut(); };
   A.actions['save-all'] = function () { return A.saveAll(); };
