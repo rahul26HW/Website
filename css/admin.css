@@ -302,4 +302,14 @@ details.colgroup .gbody{padding:4px 14px 14px}
   .btnrow .btn{flex:0 1 auto}
   .msghead{flex-wrap:wrap;gap:4px}
   .msgturn{max-width:100%}
+  /* The top bar wrapped onto two lines on a phone, so the buttons ate a third of the
+     screen before any work was visible. It stays on one line now and the pieces shrink. */
+  .adbar{flex-wrap:nowrap;padding:10px 12px;gap:8px}
+  .adbar .brand{font-size:15px;min-width:0;overflow:hidden;white-space:nowrap}
+  .adbar .adlogo{height:22px}
+  .adbar .btn.sm{padding:7px 10px;font-size:11.5px;white-space:nowrap}
+  .chip{padding:6px 11px;font-size:11.5px}
+  .toolbar{gap:8px}
+  .panel{padding:16px 14px}
+  .adside button{padding:10px 12px;font-size:13px}
 }
