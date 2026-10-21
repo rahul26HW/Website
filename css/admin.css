@@ -453,3 +453,11 @@ body.printing-slip #slipRoot{display:block}
 .ps-foot b{font-size:8px;letter-spacing:.12em;color:#6C6359;display:block}
 .ps-foot p{margin:4px 0 7px;font-size:9px;line-height:1.45}
 .ps-foot .barcode{display:block}
+
+/* ---- newsletter composer ---- */
+.nlpicks{display:flex;flex-wrap:wrap;gap:7px;max-height:230px;overflow:auto;padding:2px}
+.nlpick{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;
+  padding:6px 12px;font-size:12.5px;background:#fff;cursor:pointer;max-width:100%}
+.nlpick span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nlpick.on{border-color:var(--loom);background:rgba(44,70,63,.07);font-weight:600}
+.nlpick input{margin:0;flex:0 0 auto}
