@@ -333,8 +333,15 @@ fieldset.fld legend{font-size:13px;font-weight:600;margin:0 0 6px;padding:0}
 .pcard:hover .imgwrap .ph{transform:scale(1.04)}
 .pcard .badge{position:absolute;top:12px;left:12px;background:#fff;color:var(--ink);font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;padding:5px 10px;border-radius:999px}
 .pcard .badge.sale{background:var(--clay);color:#fff}
-.pcard .quick{position:absolute;left:12px;right:12px;bottom:12px;opacity:0;transform:translateY(8px);transition:.25s;z-index:2}
-.pcard:hover .quick{opacity:1;transform:none}
+/* Quick-add is an affordance for a pointer that can hover. On a phone it was still there,
+   invisible at zero opacity but still taking the tap: the lower third of every product card
+   answered to a button the shopper could not see, and tapping left it stuck open, since a
+   touch device has no way to stop hovering. It now exists only where hovering does. */
+.pcard .quick{display:none}
+@media(hover:hover) and (pointer:fine){
+  .pcard .quick{display:block;position:absolute;left:12px;right:12px;bottom:12px;opacity:0;transform:translateY(8px);transition:.25s;z-index:2}
+  .pcard:hover .quick{opacity:1;transform:none}
+}
 .pcard .meta .cat{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);font-weight:600}
 .pcard .meta{padding:14px 2px 0;display:flex;flex-direction:column;flex:1 1 auto}
 /* Two lines of room for every name, so price and colours line up across a row. */
