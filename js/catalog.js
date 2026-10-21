@@ -313,7 +313,6 @@
     if (!all.length) {
       var others = m.visibleCategories().filter(function (c) { return c !== cat; });
       body = '<div class="panelbox" style="text-align:center;margin:10px auto 80px;max-width:560px">' +
-        '<div class="weave-rule" style="margin-bottom:12px">' + HW.SVG.weave + '</div>' +
         '<h2 style="font-size:26px;margin-bottom:10px">New pieces are on the way</h2>' +
         '<p class="muted" style="margin:0 0 18px">This collection is being restocked. In the meantime, explore our other collections.</p>' +
         (others.length ? '<div class="subnav" style="justify-content:center">' + others.map(function (c) {

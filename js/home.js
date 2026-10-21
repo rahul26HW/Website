@@ -98,7 +98,7 @@
 
     if (cats.length) {
       html += '<section class="section"><div class="wrap">' +
-        '<div class="shead reveal"><div class="weave-rule">' + HW.SVG.weave + '</div><div class="eyebrow">Shop by room</div><h2>Explore the collections</h2></div>' +
+        '<div class="shead reveal"><div class="eyebrow">Shop by room</div><h2>Explore the collections</h2></div>' +
         railHTML('catRail', 'cat-rail', cats.map(function (c, i) {
           var n = m.productsIn(c).length;
           var pick = c.image || (function () { var first = m.stockSort(m.productsIn(c))[0]; return first ? m.primaryImage(first) : ''; })();
@@ -113,7 +113,7 @@
 
     if (b.title) {
       html += '<section class="band"><div class="grid">' +
-        '<div class="copy reveal"><div class="weave-rule" style="margin:0 0 14px">' + HW.SVG.weave + '</div>' +
+        '<div class="copy reveal">' +
         (b.eyebrow ? '<div class="eyebrow">' + esc(b.eyebrow) + '</div>' : '') +
         '<h2>' + esc(b.title) + '</h2>' + (b.body ? '<p>' + esc(b.body) + '</p>' : '') +
         ctaButton(b.ctaText, b.ctaLink, 'btn ghost') + '</div>' +
@@ -125,7 +125,7 @@
 
     if (feat.length >= 2) {
       html += '<section class="section"><div class="wrap">' +
-        '<div class="shead reveal"><div class="weave-rule">' + HW.SVG.weave + '</div><div class="eyebrow">Editors\' picks</div><h2>Featured this season</h2></div>' +
+        '<div class="shead reveal"><div class="eyebrow">Editors\' picks</div><h2>Featured this season</h2></div>' +
         railHTML('featRail', 'prod-rail', feat.map(function (p) { return HW.productCard(p); }).join(''), 'Featured products') +
         '</div></section>';
     }
@@ -150,7 +150,7 @@
 
     if (g.enabled && tiles.some(function (t) { return /^https?:\/\//i.test(t.url); })) {
       html += '<section class="sgband">' +
-        (g.heading ? '<div class="wrap"><div class="shead reveal" style="margin-bottom:18px"><div class="weave-rule">' + HW.SVG.weave + '</div><h2>' + esc(g.heading) + '</h2></div></div>' : '') +
+        (g.heading ? '<div class="wrap"><div class="shead reveal" style="margin-bottom:18px"><h2>' + esc(g.heading) + '</h2></div></div>' : '') +
         '<div class="sgrid">' + tiles.map(function (t) {
           var name = (t.platform || 'social').replace(/^\w/, function (c) { return c.toUpperCase(); });
           var inner = (t.image ? '<img src="' + esc(HW.asset(m.thumb(t.image))) + '" alt="" loading="lazy" decoding="async" width="600" height="540">' : '') +

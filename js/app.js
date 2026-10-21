@@ -250,7 +250,7 @@
   };
 
   function showFatal(text) {
-    main().innerHTML = '<div class="wrap"><div class="loading"><div><div class="weave-rule" style="margin-bottom:14px">' + HW.SVG.weave + '</div>' +
+    main().innerHTML = '<div class="wrap"><div class="loading"><div>' +
       '<p>' + u.esc(text) + '</p><button class="btn" type="button" data-act="reload">Try again</button></div></div></div>';
   }
 

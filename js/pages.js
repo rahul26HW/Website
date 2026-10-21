@@ -300,7 +300,7 @@
     return {
       status: 404,
       html: '<div class="wrap"><div class="confirm" style="padding:70px 0 100px">' +
-        '<div class="weave-rule">' + HW.SVG.weave + '</div><div class="eyebrow">Error 404</div>' +
+        '<div class="eyebrow">Error 404</div>' +
         '<h1>We couldn’t find that page</h1>' +
         '<p class="muted">The link may be old, or the item may no longer be available.</p>' +
         '<p><a class="btn" href="' + HW.link('/') + '">Back home</a></p>' +

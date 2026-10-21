@@ -96,7 +96,7 @@
     var t = HW.cart.totals();
     if (!t.lines.length) {
       return {
-        html: '<div class="wrap"><div class="confirm"><div class="weave-rule">' + HW.SVG.weave + '</div><h1>Your cart is empty</h1>' +
+        html: '<div class="wrap"><div class="confirm"><h1>Your cart is empty</h1>' +
           '<p class="muted">Add something you love, then come back to check out.</p><a class="btn" href="' + HW.link('/') + '">Start shopping</a></div></div>',
         seo: { title: 'Checkout', noindex: true }
       };
@@ -107,7 +107,7 @@
       // Orders are only taken with online payment (no pay-later / cash on delivery).
       var c = HW.DB.contact || {};
       return {
-        html: '<div class="wrap"><div class="confirm"><div class="weave-rule">' + HW.SVG.weave + '</div><h1>Checkout is opening soon</h1>' +
+        html: '<div class="wrap"><div class="confirm"><h1>Checkout is opening soon</h1>' +
           '<p class="muted">We’re finishing secure card payments. Your cart is saved on this device, so you can check out as soon as it opens.</p>' +
           (u.isEmail(c.email) ? '<p>Questions? Email <a class="link-u" style="font-size:inherit;letter-spacing:0;text-transform:none" href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>.</p>' : '') +
           '<a class="btn" href="' + HW.link('/') + '">Continue shopping</a></div></div>',
@@ -424,7 +424,7 @@
     if (payment === 'success' && !o.paid && !o.cod) {
       // Don't trust the address bar: ask the server whether Stripe really approved the card (the webhook can take a moment).
       return {
-        html: '<div class="wrap"><div class="confirm"><div class="weave-rule">' + HW.SVG.weave + '</div><h1>Confirming your payment…</h1>' +
+        html: '<div class="wrap"><div class="confirm"><h1>Confirming your payment…</h1>' +
           '<p class="muted" id="payWait" role="status">This takes a few seconds. Please keep this page open.</p></div></div>',
         seo: { title: 'Confirming payment', noindex: true },
         after: function () { HW.checkout.confirmPaid(o); }
@@ -435,7 +435,7 @@
     var linkStyle = ' style="font-size:inherit;letter-spacing:0;text-transform:none"';
     if (o.cancelled) {
       return {
-        html: '<div class="wrap"><div class="confirm"><div class="weave-rule">' + HW.SVG.weave + '</div>' +
+        html: '<div class="wrap"><div class="confirm">' +
           '<h1>Order cancelled</h1><p class="muted" style="margin:0">Order ' + esc(o.order_number) + (o.cod ? ' has been cancelled. It was cash on delivery, so there’s nothing to pay.' : ' has been cancelled and you haven’t been charged. The temporary hold on your card is released; depending on your bank it disappears within minutes to a few days.') + '</p>' +
           '<p><a class="btn" href="' + HW.link('/') + '">Continue shopping</a></p></div></div>',
         seo: { title: 'Order cancelled', noindex: true },
@@ -470,7 +470,6 @@
         : '<p class="muted">Online payment is closed right now, so this order can’t be paid here. Questions? Use the Contact us page.</p>';
     return {
       html: '<div class="wrap"><div class="confirm">' +
-        '<div class="weave-rule">' + HW.SVG.weave + '</div>' +
         head +
         '<div class="ordno">Order ' + esc(o.order_number) + '</div>' +
         next + codBox + cancelBox +

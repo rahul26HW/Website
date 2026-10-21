@@ -175,7 +175,7 @@
       if (!t.lines.length) {
         promoMsg = '';
         if (state.promo) { state.promo = ''; state.promoData = null; save(); } // an empty cart keeps no code
-        items.innerHTML = '<div class="empty-cart"><div class="weave-rule" style="margin-bottom:14px">' + HW.SVG.weaveLight + '</div><p>Your cart is empty.</p><a class="link-u" href="' + HW.link('/') + '" data-act="cart-close">Start shopping</a></div>';
+        items.innerHTML = '<div class="empty-cart"><p>Your cart is empty.</p><a class="link-u" href="' + HW.link('/') + '" data-act="cart-close">Start shopping</a></div>';
         foot.innerHTML = '';
         return;
       }
