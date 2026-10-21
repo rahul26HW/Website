@@ -182,6 +182,11 @@ export default {
         case "/account/verify": return await handleAccountVerify(request, env, cors);
         case "/account/google": return await handleAccountGoogle(request, env, cors);
         case "/account/orders": return await handleAccountOrders(request, env, cors);
+        case "/account/review": return await handleAccountReview(request, env, cors);
+        case "/account/review/upload": return await handleReviewUpload(request, env, cors);
+        /* The scheduled job that asks how an order went. Like /orders/release it needs no
+           key: it can only email customers whose order was delivered days ago. */
+        case "/reviews/invite": return await handleReviewInvite(request, env, cors);
         case "/account/profile": return await handleAccountProfile(request, env, cors);
         case "/account/return": return await handleAccountReturn(request, env, cors);
         case "/account/signout-all": return await handleAccountSignoutAll(request, env, cors);
@@ -606,7 +611,7 @@ async function handleOrderAccept(request, env, cors) {
 
 /* POST /orders/notify { order_id, kind } — admins only. Tells the customer what just happened to their order
    (cancelled, refunded, shipped), because a status changed in the admin never passes through this server. */
-const NOTIFY_KINDS = ["cancelled", "refunded", "shipped", "accepted", "delivered"];
+const NOTIFY_KINDS = ["cancelled", "refunded", "shipped", "accepted", "delivered", "review"];
 async function handleOrderNotify(request, env, cors) {
   const denied = await requireAdmin(request, env);
   if (denied) return json({ error: denied }, 401, cors);
@@ -1777,6 +1782,16 @@ function buildOrderEmail(kind, order, data, extra = {}) {
     title = "Your refund is on its way";
     body = hi + p(`We’ve refunded ${extra.amount != null ? "<b>" + money(extra.amount) + "</b>" : "your payment"} for order <b>${num}</b> to your original payment method. It usually shows up in 5–10 business days.`);
     text = `We've refunded ${extra.amount != null ? money(extra.amount) : "your payment"} for order ${order.order_number}. Allow 5–10 business days.`;
+  } else if (kind === "review") {
+    const list = (order.order_items || []).slice(0, 4).map((i) =>
+      `<li style="font-size:14px;line-height:1.7">${esc(i.name)}</li>`).join("");
+    subject = `How are your ${brand} pieces?`;
+    title = "How did we do?";
+    body = hi + p(`Your order <b>${num}</b> arrived a few days ago, and we would love to know how it is working out.`) +
+      (list ? `<ul style="margin:0 0 12px;padding-left:20px">${list}</ul>` : "") +
+      p(`A line or two helps the next person choose, and you can add a photograph if you have one.`) +
+      button(site + "account/orders#o-" + encodeURIComponent(order.order_number), "Write a review");
+    text = `How are your ${brand} pieces? Your order ${order.order_number} arrived a few days ago — we would love to know how it is working out. ${site}account/orders`;
   } else if (kind === "return") {
     const items = (extra.items || []).map((i) => `<li style="font-size:14px;line-height:1.6">${esc(i)}</li>`).join("");
     subject = `We’ve got your return request for ${order.order_number}`;
@@ -2353,10 +2368,13 @@ async function handleAccountOrders(request, env, cors) {
   if (!s) return signedOut(cors);
   // Only what the customer needs to see: no internal ids, notes, payment references or tokens.
   const cols = "order_number,created_at,paid_at,accepted_at,shipped_at,cancelled_at,status,payment_status,payment_method,cod_fee,subtotal,discount,shipping,tax,total,promo_code," +
-    "carrier,tracking_number,cancel_requested_at,return_requested_at,return_reason,name,phone,shipping_address,order_items(name,variant,qty,unit_price,image,line_total)";
-  const [rows, subs] = await Promise.all([
+    "carrier,tracking_number,cancel_requested_at,return_requested_at,return_reason,name,phone,shipping_address,order_items(product_id,name,variant,qty,unit_price,image,line_total)";
+  const [rows, subs, mine] = await Promise.all([
     db(env, "orders?email=eq." + encodeURIComponent(s.email) + "&payment_status=in." + PAID_STATES + "&select=" + cols + "&order=created_at.desc&limit=50"),
     db(env, "subscribers?email=eq." + encodeURIComponent(s.email) + "&select=id&limit=1"),
+    /* So each item can offer "Write a review" or show what was already written,
+       including one still waiting to be looked at. */
+    db(env, "reviews?email=eq." + encodeURIComponent(s.email) + "&select=order_number,product_id,rating,title,body,photos,status&limit=200"),
   ]);
   const list = Array.isArray(rows) ? rows : [];
   const last = list[0];
@@ -2366,7 +2384,125 @@ async function handleAccountOrders(request, env, cors) {
     delete c.order_items;
     return c;
   });
-  return json({ ok: true, email: s.email, orders, profile: publicProfile(s.profile), lastAddress, subscribed: Array.isArray(subs) && subs.length > 0 }, 200, cors);
+  return json({ ok: true, email: s.email, orders, profile: publicProfile(s.profile), lastAddress,
+    subscribed: Array.isArray(subs) && subs.length > 0, reviews: Array.isArray(mine) ? mine : [] }, 200, cors);
+}
+
+/* ---------------------------------------------------------------- *
+ * Reviews.
+ *
+ * The page may say anything it likes; none of it is believed. The signed-in
+ * customer's own email address is the only identity used, and file_review
+ * re-checks against the order that the item was really bought and really
+ * arrived before a word of it is stored.
+ * ---------------------------------------------------------------- */
+async function handleAccountReview(request, env, cors) {
+  if (!features(env).database) return json({ error: "Reviews aren't available right now." }, 501, cors);
+  const s = await customerSession(request, env);
+  if (!s) return signedOut(cors);
+  const b = await readJson(request);
+
+  const rating = Math.round(Number(b.rating) || 0);
+  if (rating < 1 || rating > 5) return json({ error: "Please choose between one and five stars." }, 400, cors);
+  const name = str(b.name, 80);
+  if (!name) return json({ error: "Please say how you'd like to be shown." }, 400, cors);
+
+  const data = await storeData(env);
+  const auto = !!((data.reviews || {}).autoPublish);
+  try {
+    const r = await db(env, "rpc/file_review", {
+      method: "POST",
+      body: JSON.stringify({
+        p_email: s.email,
+        p_order_number: str(b.orderNumber, 40),
+        p_product_id: str(b.productId, 80),
+        p_rating: rating,
+        p_name: name,
+        p_title: str(b.title, 120),
+        p_body: str(b.body, 4000),
+        p_photos: Array.isArray(b.photos) ? b.photos.slice(0, 4).map((x) => str(x, 200)) : [],
+        p_auto: auto,
+      }),
+    });
+    return json({ ok: true, status: (r && r.status) || (auto ? "published" : "pending") }, 200, cors);
+  } catch (e) {
+    const m = String((e && e.message) || "");
+    /* The database speaks in codes so that this layer can choose the wording. */
+    if (/NO_ORDER/.test(m)) return json({ error: "We couldn't find that order on your account." }, 400, cors);
+    if (/NOT_DELIVERED/.test(m)) return json({ error: "You can review this once it has arrived." }, 400, cors);
+    if (/NOT_IN_ORDER/.test(m)) return json({ error: "That item wasn't in this order." }, 400, cors);
+    if (/INVALID_RATING/.test(m)) return json({ error: "Please choose between one and five stars." }, 400, cors);
+    if (/INVALID_NAME/.test(m)) return json({ error: "Please say how you'd like to be shown." }, 400, cors);
+    throw e;
+  }
+}
+
+/* Somewhere to put the photographs. The browser never holds a key: it is given a
+   one-off link per file, into a folder named after the order it belongs to. */
+async function handleReviewUpload(request, env, cors) {
+  if (!features(env).database) return json({ error: "Reviews aren't available right now." }, 501, cors);
+  const s = await customerSession(request, env);
+  if (!s) return signedOut(cors);
+  const b = await readJson(request);
+
+  const number = str(b.orderNumber, 40);
+  const rows = await db(env, "orders?order_number=eq." + encodeURIComponent(number) +
+    "&email=eq." + encodeURIComponent(s.email) + "&select=id&limit=1");
+  const order = Array.isArray(rows) && rows[0];
+  if (!order) return json({ error: "We couldn't find that order on your account." }, 400, cors);
+
+  const want = Math.min(Math.max(Math.round(Number(b.count) || 0), 1), 4);
+  const kinds = Array.isArray(b.types) ? b.types : [];
+  const out = [];
+  for (let i = 0; i < want; i++) {
+    const ext = /png/.test(String(kinds[i] || "")) ? "png" : /jpe?g/.test(String(kinds[i] || "")) ? "jpg" : "webp";
+    const path = order.id + "/" + crypto.randomUUID() + "." + ext;
+    const res = await fetch(env.SUPABASE_URL + "/storage/v1/object/upload/sign/reviews/" + path, {
+      method: "POST",
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ expiresIn: 600 }),
+    });
+    if (!res.ok) {
+      console.error("review upload sign failed", res.status, (await res.text()).slice(0, 200));
+      return json({ error: "We couldn't prepare the upload. Please try again." }, 502, cors);
+    }
+    const d = await res.json();
+    /* The signed URL comes back as a path; the browser needs the whole address. */
+    out.push({ path, url: env.SUPABASE_URL + "/storage/v1" + String(d.url || "").replace(/^\/storage\/v1/, "") });
+  }
+  return json({ ok: true, uploads: out, publicBase: env.SUPABASE_URL + "/storage/v1/object/public/reviews/" }, 200, cors);
+}
+
+/* POST /reviews/invite — the scheduled job. Asks how it went, once, a few days
+   after the order arrived: long enough to have used it, soon enough to remember. */
+async function handleReviewInvite(request, env, cors) {
+  if (!features(env).database || !env.RESEND_API_KEY) return json({ ok: true, sent: 0, skipped: "not configured" }, 200, cors);
+  const data = await storeData(env);
+  const cfg = data.reviews || {};
+  if (cfg.invite === false) return json({ ok: true, sent: 0, skipped: "turned off" }, 200, cors);
+
+  const days = Math.min(Math.max(Math.round(Number(cfg.inviteDays) || 5), 1), 60);
+  const after = new Date(Date.now() - days * 86400000).toISOString();
+  /* A floor as well as a ceiling: an order delivered long before this feature existed
+     should not get an email out of the blue. */
+  const floor = new Date(Date.now() - (days + 21) * 86400000).toISOString();
+
+  const due = await db(env, "orders?status=eq.delivered&review_invited_at=is.null" +
+    "&delivered_at=lt." + encodeURIComponent(after) +
+    "&delivered_at=gt." + encodeURIComponent(floor) +
+    "&select=*,order_items(product_id,name,image)&order=delivered_at.asc&limit=40");
+
+  let sent = 0;
+  for (const order of (Array.isArray(due) ? due : [])) {
+    /* Marked first. A send that fails is better than one that goes twice. */
+    await patchOrder(env, "id=eq." + order.id + "&review_invited_at=is.null", { review_invited_at: new Date().toISOString() });
+    if (await sendOrderEmail(env, "review", order, {})) sent++;
+  }
+  return json({ ok: true, sent, considered: Array.isArray(due) ? due.length : 0 }, 200, cors);
 }
 
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");

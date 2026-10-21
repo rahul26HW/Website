@@ -28,6 +28,7 @@
     promo: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.6 9.4l-8-8a2 2 0 0 0-1.4-.6H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8 8a2 2 0 0 0 2.8 0l7.2-7.2a2 2 0 0 0 0-2.8z"/><circle cx="7" cy="7" r="1.2" fill="currentColor"/></svg>',
     page: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4M9 13h6M9 17h6"/></svg>',
     market: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 11l18-7-4 18-5-7-9-4z"/><path d="M12 15l5 5"/></svg>',
+    star: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.8 6.2 20.9l1.1-6.5L2.6 9.8l6.5-.9z" stroke-linejoin="round"/></svg>',
     orders: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M6 2l-2 4v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6l-2-4z"/><path d="M4 6h16M16 10a4 4 0 0 1-8 0"/></svg>',
     inv: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>',
     mail: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
@@ -38,7 +39,7 @@
     ['Overview', [['dashboard', 'Dashboard', ICONS.dash], ['analytics', 'Analytics', ICONS.chart]]],
     ['Content', [['storefront', 'Storefront', ICONS.store], ['banner', 'Hero banner', ICONS.banner], ['pages', 'Pages', ICONS.page]]],
     ['Catalog', [['categories', 'Categories', ICONS.cats], ['products', 'Products', ICONS.prod], ['inventory', 'Inventory', ICONS.inv]]],
-    ['Selling', [['orders', 'Orders', ICONS.orders], ['promotions', 'Promotions', ICONS.promo], ['marketing', 'Marketing', ICONS.market]]],
+    ['Selling', [['orders', 'Orders', ICONS.orders], ['reviews', 'Reviews', ICONS.star], ['promotions', 'Promotions', ICONS.promo], ['marketing', 'Marketing', ICONS.market]]],
     ['Inbox', [['messages', 'Messages', ICONS.mail]]]
   ];
 

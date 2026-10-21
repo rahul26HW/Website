@@ -624,6 +624,7 @@
         '<span aria-current="page">' + esc(HW.seo.clip(p.name, 70)) + '</span></nav>' +
         '<div id="pdpTop">' + r.pdp + '</div>' +
         '<div id="pdpTabs">' + r.tabs + '</div>' +
+        '<section class="section tight" id="rvMount"></section>' +
         related(p, cat) + HW.recent.section(p.id) + '<div style="height:40px"></div></div>',
       seo: {
         title: p.seoTitle || p.name,
@@ -633,7 +634,8 @@
         jsonld: [HW.ld.product(p), HW.ld.breadcrumb([['Home', '/']].concat(cat ? [[cat.name, '/category/' + cat.slug]] : []).concat([[p.name, '/product/' + p.slug]]))],
         image: m.primaryImage(p)
       },
-      after: function () { HW.gallery.fit(); fitSwatches(); HW.recent.add(p.id); if (p.summary) loadFull(p); }
+      after: function () { HW.gallery.fit(); fitSwatches(); HW.recent.add(p.id); if (p.summary) loadFull(p);
+        if (HW.reviews) HW.reviews.section(p.id, 'rvMount'); }
     };
   };
 })(window.HW = window.HW || {});

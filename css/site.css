@@ -1079,3 +1079,56 @@ main#view.booting ~ footer.site{visibility:hidden}
   .searchpage input,.news input,.fsignup input,.notify input,.promo input,
   .shipest-row input,.listing-tools select,.fld-inline{font-size:16px}
 }
+
+/* ---- reviews ----
+   Stars are one SVG per row with the filled copy clipped to the score, so 4.3 reads
+   as 4.3 rather than rounding to a whole star and overstating it. */
+.stars{display:inline-flex;vertical-align:middle;line-height:0}
+.stars .star-bg{fill:var(--line)}
+.stars .star-fg{fill:#C9922F}
+.prate{display:flex;align-items:center;gap:6px;margin-top:6px}
+.prate-n{font-size:11.5px;color:var(--ink-soft)}
+
+.rv-wrap{max-width:860px;margin:0 auto}
+.rv-wrap h2,.rv-empty h2{font-family:var(--disp);font-size:26px;margin:0 0 18px}
+.rv-empty{max-width:860px;margin:0 auto}
+.rv-top{display:flex;gap:34px;align-items:center;flex-wrap:wrap;padding:0 0 22px;border-bottom:1px solid var(--line)}
+.rv-score{display:flex;flex-direction:column;gap:5px}
+.rv-score b{font-family:var(--disp);font-size:40px;line-height:1}
+.rv-bars{flex:1 1 280px;min-width:0;display:flex;flex-direction:column;gap:5px}
+.rv-bar{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink-soft)}
+.rv-track{flex:1;height:7px;border-radius:999px;background:var(--linen);overflow:hidden}
+.rv-fill{display:block;height:100%;background:#C9922F}
+.rv-c{width:2.2em;text-align:right}
+
+.rv{padding:22px 0;border-bottom:1px solid var(--line)}
+.rv-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rv-name{font-size:14px}
+.rv-badge{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#3A5A52;background:rgba(58,90,82,.1);border-radius:999px;padding:3px 9px;font-weight:600}
+.rv-when{font-size:12.5px;color:var(--ink-soft);margin-left:auto}
+.rv-title{font-size:15.5px;margin:10px 0 4px}
+.rv-body{margin:6px 0 0;line-height:1.65}
+.rv-photos{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.rv-photo img{width:78px;height:78px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
+.rv-reply{margin:14px 0 0;padding:12px 14px;background:var(--linen);border-radius:var(--r)}
+.rv-reply b{font-size:12.5px}
+.rv-reply p{margin:4px 0 0;font-size:14px;line-height:1.6}
+
+/* Writing one, inside the customer's own order. */
+.aitem-review{margin-top:7px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.aitem-review.open{display:block}
+.arev-said{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}
+.rv-form{margin:12px 0 4px;padding:16px;border:1px solid var(--line);border-radius:var(--r);background:#fff}
+.rv-stars-pick{display:flex;gap:4px;margin-bottom:14px}
+.rv-star{background:none;border:none;padding:2px;cursor:pointer;line-height:0;color:var(--line)}
+.rv-star svg{fill:currentColor}
+.rv-star.on{color:#C9922F}
+.rv-picked{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-soft)}
+.rv-thumb{width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+
+@media(max-width:720px){
+  .rv-top{gap:18px}
+  .rv-score b{font-size:32px}
+  .rv-when{margin-left:0;width:100%}
+  .rv-wrap h2,.rv-empty h2{font-size:22px}
+}

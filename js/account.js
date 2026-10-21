@@ -12,7 +12,7 @@
   var NEXT = 'hw:accountNext';     // where to go after signing in (this tab only)
   var GOOGLE_G = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A11.9 11.9 0 0 1 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
   var linkStyle = ' style="font-size:inherit;letter-spacing:0;text-transform:none"';
-  var state = { data: null, email: null, loading: null, editing: null };
+  var state = { data: null, email: null, loading: null, editing: null, reviewing: null };
 
   function googleId() {
     var id = String(((HW.DB && HW.DB.settings) || {}).googleClientId || '').trim();
@@ -210,6 +210,42 @@
       '<span class="arow-go">' + icon('arrow', 16) + '</span></a>';
   }
 
+  /* A review belongs to an item in an order, so this is where it is offered. It appears
+     only once the thing has actually arrived — a carrier that never reports a delivery
+     would otherwise shut the customer out, so a week after it shipped counts too. */
+  function arrived(o) {
+    return o.status === 'delivered' ||
+      (o.shipped_at && Date.now() - new Date(o.shipped_at).getTime() > 7 * 86400000);
+  }
+  function myReview(number, productId) {
+    return ((state.data && state.data.reviews) || []).filter(function (r) {
+      return r.order_number === number && r.product_id === productId;
+    })[0] || null;
+  }
+  function reviewBlock(o, it) {
+    if (!HW.reviews || !it.product_id || !arrived(o)) return '';
+    var r = myReview(o.order_number, it.product_id);
+    var key = o.order_number + '|' + it.product_id;
+    if (state.reviewing === key) {
+      return '<div class="aitem-review open">' +
+        HW.reviews.formHTML(o.order_number, it, r, shownAs()) + '</div>';
+    }
+    var said = r
+      ? '<span class="arev-said">' + HW.reviews.stars(r.rating, 13) +
+        (r.status === 'pending' ? '<span class="muted"> · waiting to be published</span>' : '') + '</span>'
+      : '';
+    return '<div class="aitem-review">' + said +
+      '<button class="txtbtn" type="button" data-act="review" data-key="' + esc(key) + '">' +
+      (r ? 'Edit your review' : 'Write a review') + '</button></div>';
+  }
+  /* "Norrisa J." rather than the full name on the order: enough to be a person,
+     not enough to be looked up. The customer can change it before posting. */
+  function shownAs() {
+    var n = String(fullName(state.data) || '').trim().split(/\s+/);
+    if (!n[0]) return '';
+    return n.length > 1 ? n[0] + ' ' + n[n.length - 1].charAt(0).toUpperCase() + '.' : n[0];
+  }
+
   function orderCard(o, i, email) {
     var link = HW.trackingUrl(o.carrier, o.tracking_number), a = o.shipping_address || {};
     var pay = o.payment_status === 'cod' ? 'Cash on delivery — pay ' + u.money(o.total) + ' when it arrives'
@@ -225,7 +261,8 @@
       (o.items || []).map(function (it) {
         return '<div class="aitem">' + (it.image ? '<img src="' + esc(HW.asset(HW.m.thumb(it.image))) + '" alt="" width="64" height="64" loading="lazy">' : '<span class="athumb-empty"></span>') +
           '<div class="aitem-txt"><div class="aitem-name">' + esc(it.name) + '</div>' + (it.variant ? '<div class="muted">' + esc(it.variant) + '</div>' : '') +
-          '<div class="muted">' + u.money(it.unit_price != null ? it.unit_price : (it.line_total / (it.qty || 1))) + ' × ' + Number(it.qty) + '</div></div><div class="aitem-price">' + u.money(it.line_total) + '</div></div>';
+          '<div class="muted">' + u.money(it.unit_price != null ? it.unit_price : (it.line_total / (it.qty || 1))) + ' × ' + Number(it.qty) + '</div>' +
+          reviewBlock(o, it) + '</div><div class="aitem-price">' + u.money(it.line_total) + '</div></div>';
       }).join('') +
       HW.orderSteps(o) +
       (o.tracking_number ? '<p class="atrack">' + icon('truck', 16) + ' <span><b>Tracking:</b> ' + esc(o.carrier ? o.carrier + ' ' : '') +
@@ -425,8 +462,16 @@
 
   HW.account = {
     get: get,
+    /* Reviews are written from inside an order, so they go out over the same session. */
+    call: call,
     /* Forget the loaded data (after a cancel or request elsewhere), so the next view reloads it. */
     invalidate: function () { state.data = null; },
+
+    /* Which item is being reviewed, if any. One at a time keeps the order readable. */
+    review: function (key) {
+      state.reviewing = state.reviewing === key ? null : key;
+      HW.router.run({ scroll: false });
+    },
     paintHeader: paintHeader,
 
     /* Checkout: fill an empty form with the default address (or the last order's). */

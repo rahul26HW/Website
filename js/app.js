@@ -48,6 +48,7 @@
        page itself rendered in, which differs between a fresh visit and the back button. */
     if (HW.stickyBuy) HW.stickyBuy.refresh();
     HW.observeReveals();
+    if (HW.reviews) HW.reviews.paintCards();
     if (HW.saleClock) HW.saleClock.start();
     if (HW.rails) HW.rails.init();
     if (HW.measure) {
@@ -133,6 +134,8 @@
     'acct-signout-all': function (el) { HW.account.signOutAll(el); },
     'acct-delete': function (el) { HW.account.remove(el); },
     'acct-read': function () { HW.account.markRead(); },
+    /* Opens the review form against one item of one order, and closes any other. */
+    review: function (el) { HW.account.review(el.dataset.key); },
     'acct-addr-new': function () { HW.account.addr.edit(); },
     'acct-addr-edit': function (el) { HW.account.addr.edit(el.dataset.id); },
     'acct-addr-cancel': function () { HW.account.addr.cancel(); },
