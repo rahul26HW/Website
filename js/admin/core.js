@@ -906,6 +906,31 @@
     return data;
   };
 
+  /* The same call, for a route that answers with a file rather than JSON. The error
+     body is still JSON, so a failure reads like every other worker failure. */
+  A.workerFile = async function (path, body, filename) {
+    var base = A.workerUrl();
+    if (!/^https:\/\//.test(base)) throw new Error('The server address in Storefront › Card payments must start with https://');
+    var sess = await A.sb.auth.getSession();
+    var token = sess.data && sess.data.session && sess.data.session.access_token;
+    if (!token) throw new Error('Your session expired. Sign in again.');
+    var res;
+    try {
+      res = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(body || {}) });
+    } catch (e) { throw new Error('Couldn’t reach the server. Is the “hw” Edge Function deployed?'); }
+    if (!res.ok) {
+      var err = await res.json().catch(function () { return {}; });
+      throw new Error(err.error || ('Worker error ' + res.status));
+    }
+    var blob = await res.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename || 'download';
+    document.body.appendChild(a); a.click(); a.remove();
+    /* Revoked on the next tick: Safari needs the URL to still exist when the click lands. */
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  };
+
   A.actions.copy = function (el) {
     var t = document.getElementById(el.dataset.target);
     var text = t ? (t.value != null ? t.value : t.textContent) : (el.dataset.text || '');

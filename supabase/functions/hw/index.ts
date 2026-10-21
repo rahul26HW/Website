@@ -110,6 +110,22 @@ const handler = {
         /* Does the Stripe key actually work? Answers before the webhook secret is in, so the two
            can be set up one at a time. Reads the account only — never returns the key itself. */
         /* Which carriers ShipStation can quote for us — decides what the checkout can offer. */
+        /* The invoice for one order, as the customer received it. Read with the admin's own
+           rights, so this route can never hand out an order the signed-in user cannot see. */
+        case "/admin/invoice": {
+          const denied = await requireAdmin(request, env);
+          if (denied) return json({ error: denied }, 401, cors);
+          const q = await readJson(request);
+          const id = String(q.id || "");
+          if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "Which order?" }, 400, cors);
+          const rows = await dbAsCaller(request, env, "orders?id=eq." + id + "&select=*,order_items(*)&limit=1");
+          const row = Array.isArray(rows) && rows[0];
+          if (!row) return json({ error: "No such order." }, 404, cors);
+          const pdf = invoicePdf(row, await storeData(env));
+          return new Response(pdf, { status: 200, headers: { ...cors,
+            "Content-Type": "application/pdf",
+            "Content-Disposition": 'attachment; filename="Invoice-' + row.order_number + '.pdf"' } });
+        }
         case "/snipcart/shipping": return await handleSnipcartShipping(request, env, cors);
         case "/shipping/estimate": return await handleShippingEstimate(request, env, cors);
         /* Every rate for a test destination — so an odd shipping price can be explained. */
@@ -1433,7 +1449,242 @@ ${site ? `<a href="${esc(site)}" style="color:#3A5A52">${esc(site.replace(/^http
 </td></tr></table></td></tr></table></body></html>`;
 }
 
-function itemsTable(order) {
+/* ---------------------------------------------------------------- *
+ * The invoice PDF.
+ *
+ * Written by hand, byte by byte. The Edge runtime has no PDF library, and
+ * pulling one in for a single page of text would be a lot of moving parts
+ * sitting in the middle of a live checkout. Helvetica is one of the fourteen
+ * fonts every PDF reader is required to have, so nothing is embedded here and
+ * the file stays a couple of kilobytes — small enough to attach to every
+ * order email without anyone noticing.
+ * ---------------------------------------------------------------- */
+
+/* Readers expect WinAnsi (Windows-1252) bytes. Everything the shop writes has a
+   place in it — curly quotes, en dashes, accented names — and anything that
+   doesn't becomes a question mark rather than a broken glyph. */
+const CP1252 = {
+  0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87,
+  0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91,
+  0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97, 0x02DC: 0x98,
+  0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F,
+};
+function winAnsi(s) {
+  let out = "";
+  for (const ch of String(s == null ? "" : s)) {
+    const c = ch.codePointAt(0);
+    out += String.fromCharCode(c < 0x80 || (c >= 0xA0 && c <= 0xFF) ? c : (CP1252[c] || 0x3F));
+  }
+  return out;
+}
+function pdfStr(s) { return "(" + winAnsi(s).replace(/([\\()])/g, "\\$1") + ")"; }
+
+/* Character widths, in thousandths of the point size, for the two fonts used.
+   Without them the money column would wander: PDF has no idea how wide its own
+   text is, so right-aligning a total means measuring it first. ASCII only —
+   an accented letter in a name falls back to an average, which moves a
+   left-aligned line by a hair and nothing else. */
+const W_REG = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584];
+const W_BOLD = [278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584];
+function textWidth(s, size, bold) {
+  const w = bold ? W_BOLD : W_REG, str = winAnsi(s);
+  let t = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    t += (c >= 32 && c <= 126) ? w[c - 32] : 556;
+  }
+  return t * size / 1000;
+}
+
+/* Break a long product name across lines rather than letting it run into the
+   quantity column. */
+function wrapText(s, width, size, bold) {
+  const words = String(s || "").split(/\s+/).filter(Boolean), lines = [];
+  let line = "";
+  for (const word of words) {
+    const next = line ? line + " " + word : word;
+    if (line && textWidth(next, size, bold) > width) { lines.push(line); line = word; }
+    else line = next;
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [""];
+}
+
+const INV_TZ = "America/New_York";
+function invDate(iso) {
+  try {
+    return new Intl.DateTimeFormat("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: INV_TZ }).format(new Date(iso));
+  } catch (e) { return ""; }
+}
+function invMoney(n) {
+  const v = Number(n || 0);
+  return "$" + v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/* The rate we charged this order, for the tax line. Taken from the same table the
+   order was priced with, so the invoice can never quote a rate the customer
+   wasn't actually charged. */
+function invTaxLabel(order, store) {
+  const state = String((order.shipping_address || {}).state || "").toUpperCase();
+  const rates = ((store || {}).tax || {}).rates || [];
+  const hit = rates.find((r) => String(r.state || "").toUpperCase() === state);
+  return hit && Number(hit.rate) > 0 ? `Sales tax (${state} ${hit.rate}%)` : "Sales tax";
+}
+
+function invoicePdf(order, store) {
+  const PW = 612, PH = 792, L = 56, R = PW - 56;
+  const brandName = ((store || {}).brand || {}).name || "Home Weavers";
+  const contact = (store || {}).contact || {};
+  const addr = order.shipping_address || {};
+  const items = order.order_items || [];
+  const ops = [];
+
+  function text(x, y, s, o) {
+    o = o || {};
+    const size = o.size || 10, bold = !!o.bold;
+    const tx = o.align === "right" ? x - textWidth(s, size, bold) : x;
+    ops.push("BT /" + (bold ? "FB" : "FR") + " " + size + " Tf " + (o.grey == null ? 0 : o.grey) +
+      " g " + tx.toFixed(2) + " " + y.toFixed(2) + " Td " + pdfStr(s) + " Tj ET");
+  }
+  function rule(y, grey, from, to) {
+    ops.push((grey == null ? 0.75 : grey) + " G 0.7 w " + (from == null ? L : from) + " " + y.toFixed(2) +
+      " m " + (to == null ? R : to) + " " + y.toFixed(2) + " l S");
+  }
+
+  /* --- the shop, top left; the invoice's own details, top right --- */
+  let y = PH - 64;
+  text(L, y, brandName.toUpperCase(), { size: 17, bold: true });
+  text(R, y, "INVOICE", { size: 17, bold: true, align: "right" });
+  y -= 20;
+  const sellerLines = String(contact.address || "").split("\n").map((s) => s.trim()).filter(Boolean);
+  /* The first line of the address block is the legal name; the heading above is the
+     trading name, and on paper the two need to agree. */
+  const seller = sellerLines.length ? sellerLines : [brandName];
+  const meta = [
+    ["Invoice", "INV-" + order.order_number],
+    ["Order", order.order_number],
+    ["Date", invDate(order.created_at || Date.now())],
+  ];
+  let ys = y, ym = y;
+  seller.forEach((line) => { text(L, ys, line, { size: 9.5, grey: 0.25 }); ys -= 13; });
+  if (contact.email) { text(L, ys, contact.email, { size: 9.5, grey: 0.25 }); ys -= 13; }
+  if (contact.phone) { text(L, ys, contact.phone, { size: 9.5, grey: 0.25 }); ys -= 13; }
+  meta.forEach((m) => {
+    text(R - 140, ym, m[0], { size: 9.5, grey: 0.4 });
+    text(R, ym, m[1], { size: 9.5, bold: true, align: "right" });
+    ym -= 14;
+  });
+
+  /* --- who it's for --- */
+  y = Math.min(ys, ym) - 18;
+  text(L, y, "BILL TO", { size: 8.5, bold: true, grey: 0.45 });
+  y -= 15;
+  const cityState = [addr.city, addr.state].filter(Boolean).join(", ");
+  const to = [order.name, addr.line1, addr.line2, [cityState, addr.zip].filter(Boolean).join(" "), addr.country, order.email]
+    .map((s) => String(s || "").trim()).filter(Boolean);
+  to.forEach((line, i) => { text(L, y, line, { size: 10, bold: i === 0 }); y -= 14; });
+
+  /* --- the items --- */
+  y -= 10;
+  const X_QTY = R - 200, X_UNIT = R - 110, X_AMT = R;
+  rule(y + 12, 0.75);
+  text(L, y, "DESCRIPTION", { size: 8.5, bold: true, grey: 0.45 });
+  text(X_QTY, y, "QTY", { size: 8.5, bold: true, grey: 0.45, align: "right" });
+  text(X_UNIT, y, "UNIT", { size: 8.5, bold: true, grey: 0.45, align: "right" });
+  text(X_AMT, y, "AMOUNT", { size: 8.5, bold: true, grey: 0.45, align: "right" });
+  y -= 7;
+  rule(y, 0.75);
+  y -= 17;
+
+  items.forEach((i) => {
+    const name = String(i.name || "");
+    const variant = String(i.variant || "").trim();
+    const lines = wrapText(name, X_QTY - L - 26, 10, false);
+    lines.forEach((line, n) => {
+      text(L, y, line, { size: 10 });
+      if (n === 0) {
+        text(X_QTY, y, String(Number(i.qty) || 0), { size: 10, align: "right" });
+        text(X_UNIT, y, invMoney(i.unit_price), { size: 10, align: "right" });
+        text(X_AMT, y, invMoney(i.line_total), { size: 10, align: "right" });
+      }
+      y -= 14;
+    });
+    const sub = [variant, i.sku ? "SKU " + i.sku : ""].filter(Boolean).join("  ·  ");
+    if (sub) { text(L, y, sub, { size: 8.5, grey: 0.45 }); y -= 13; }
+    y -= 3;
+  });
+
+  /* --- what it came to --- */
+  y -= 2;
+  rule(y + 10, 0.75);
+  y -= 6;
+  const totals = [["Subtotal", invMoney(order.subtotal)]];
+  if (Number(order.discount) > 0) {
+    totals.push([order.promo_code ? "Discount (" + order.promo_code + ")" : "Discount", "-" + invMoney(order.discount)]);
+  }
+  totals.push(["Shipping", Number(order.shipping) > 0 ? invMoney(order.shipping) : "Free"]);
+  if (Number(order.cod_fee) > 0) totals.push(["Cash on delivery fee", invMoney(order.cod_fee)]);
+  /* Always shown, even at zero: an invoice that simply omits the line leaves the
+     customer unable to tell whether tax was charged or never calculated. */
+  totals.push([invTaxLabel(order, store), invMoney(order.tax)]);
+  totals.forEach((t) => {
+    text(X_UNIT, y, t[0], { size: 10, grey: 0.25, align: "right" });
+    text(X_AMT, y, t[1], { size: 10, align: "right" });
+    y -= 15;
+  });
+  rule(y + 10, 0.75, X_UNIT - 120, R);
+  y -= 6;
+  text(X_UNIT, y, "Total", { size: 12, bold: true, align: "right" });
+  text(X_AMT, y, invMoney(order.total), { size: 12, bold: true, align: "right" });
+  y -= 26;
+
+  /* --- how it was paid, and the closing line --- */
+  const paid = order.payment_status === "paid"
+    ? "Paid in full" + (order.paid_at ? " on " + invDate(order.paid_at) : "") + "."
+    : order.payment_status === "authorized"
+    ? "Card authorised. You are charged when we begin preparing your order."
+    : order.payment_method === "cod"
+    ? "Payable in cash on delivery."
+    : "Awaiting payment.";
+  text(L, y, paid, { size: 9.5, grey: 0.25 });
+  y -= 30;
+  text(L, y, "Thank you for your order.", { size: 10, grey: 0.25 });
+
+  /* --- assemble --- */
+  const stream = ops.join("\n");
+  const objs = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + PW + " " + PH + "] " +
+      "/Resources << /Font << /FR 5 0 R /FB 6 0 R >> >> /Contents 4 0 R >>",
+    "<< /Length " + stream.length + " >>\nstream\n" + stream + "\nendstream",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [];
+  objs.forEach((o, i) => {
+    offsets.push(pdf.length);
+    pdf += (i + 1) + " 0 obj\n" + o + "\nendobj\n";
+  });
+  const xref = pdf.length;
+  pdf += "xref\n0 " + (objs.length + 1) + "\n0000000000 65535 f \n";
+  offsets.forEach((o) => { pdf += String(o).padStart(10, "0") + " 00000 n \n"; });
+  pdf += "trailer\n<< /Size " + (objs.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
+
+  const bytes = new Uint8Array(pdf.length);
+  for (let i = 0; i < pdf.length; i++) bytes[i] = pdf.charCodeAt(i) & 0xFF;
+  return bytes;
+}
+
+function bytesToBase64(bytes) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+
+function itemsTable(order, store) {
+  const taxLabel = invTaxLabel(order, store);
   const rows = (order.order_items || []).map((i) =>
     `<tr><td style="padding:6px 0;font-size:14px">${esc(i.name)}${i.variant ? ` <span style="color:#6C6359">(${esc(i.variant)})</span>` : ""} × ${Number(i.qty)}</td>` +
     `<td align="right" style="padding:6px 0;font-size:14px">${money(i.line_total)}</td></tr>`).join("");
@@ -1444,8 +1695,28 @@ function itemsTable(order) {
     (Number(order.discount) > 0 ? line("Discount" + (order.promo_code ? " (" + esc(order.promo_code) + ")" : ""), "−" + money(order.discount)) : "") +
     line("Shipping", Number(order.shipping) > 0 ? money(order.shipping) : "Free") +
     (Number(order.cod_fee) > 0 ? line("Cash on delivery fee", money(order.cod_fee)) : "") +
-    (Number(order.tax) > 0 ? line("Sales tax", money(order.tax)) : "") +
+    (Number(order.tax) > 0 ? line(taxLabel, money(order.tax)) : "") +
     `<tr><td style="padding:6px 0;font-size:15px"><b>Total</b></td><td align="right" style="padding:6px 0;font-size:15px"><b>${money(order.total)}</b></td></tr></table>`;
+}
+
+/* The order email doubles as the invoice: the totals table above is the body of it,
+   and this is the part that makes it a document — who issued it, against which order,
+   on what date. The same thing is attached as a PDF for anyone who needs to file it. */
+function invoiceBlock(order, store) {
+  const contact = (store || {}).contact || {};
+  const seller = String(contact.address || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const row = (label, value) =>
+    `<tr><td style="padding:2px 0;font-size:12px;color:#6C6359">${label}</td>` +
+    `<td align="right" style="padding:2px 0;font-size:12px;color:#3A3530">${value}</td></tr>`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ` +
+    `style="border-top:1px solid #E6E0D6;margin:18px 0 0;padding-top:10px">` +
+    row("Invoice", "<b>INV-" + esc(order.order_number) + "</b>") +
+    row("Invoice date", esc(invDate(order.created_at || Date.now()))) +
+    `</table>` +
+    `<p style="font-size:12px;line-height:1.55;color:#6C6359;margin:8px 0 0">` +
+    seller.map(esc).join("<br>") + (contact.email ? "<br>" + esc(contact.email) : "") + `</p>` +
+    `<p style="font-size:12px;line-height:1.55;color:#6C6359;margin:8px 0 0">` +
+    `A PDF copy of this invoice is attached to this email.</p>`;
 }
 
 function button(href, label) {
@@ -1474,7 +1745,7 @@ function buildOrderEmail(kind, order, data, extra = {}) {
         ? p(`We’ve received order <b>${num}</b>. Your card is approved for <b>${money(order.total)}</b>; you’ll only be charged when we start preparing your order.`)
         : p(`Your payment went through and we’ve received order <b>${num}</b>.`)) +
       (windowMin > 0 ? p(`Changed your mind? You can cancel it yourself for the next <b>${windowMin} minutes</b>` + (order.payment_method === "cod" ? "." : order.payment_status === "authorized" ? " and you won’t be charged." : " and get a full refund.") + " After that we start preparing it.") : "") +
-      itemsTable(order) + button(trackUrl, windowMin > 0 ? "View or cancel your order" : "View your order");
+      itemsTable(order, data) + invoiceBlock(order, data) + button(trackUrl, windowMin > 0 ? "View or cancel your order" : "View your order");
     text = `Thank you for your order ${order.order_number} (${money(order.total)}).` + (order.payment_method === "cod" ? " Pay in cash when it's delivered." : order.payment_status === "authorized" ? " Your card is approved; you'll be charged when we start preparing it." : "") + (windowMin > 0 ? ` You can cancel within ${windowMin} minutes: ${trackUrl}` : ` Track it: ${trackUrl}`);
   } else if (kind === "accepted") {
     subject = `Your order ${order.order_number} is being prepared`;
@@ -1536,10 +1807,23 @@ async function sendOrderEmail(env, kind, order, extra) {
     const msg = buildOrderEmail(kind, order, data, ex);
     if (!msg) return false;
     const replyTo = env.EMAIL_REPLY_TO || (data.contact && data.contact.email) || undefined;
+    let attachment = null;
+    if (kind === "received") {
+      try {
+        attachment = { filename: "Invoice-" + order.order_number + ".pdf", content: bytesToBase64(invoicePdf(order, data)) };
+      } catch (e) { console.error("invoice pdf failed", order.order_number, e && e.message); }
+    }
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json", "Idempotency-Key": kind + "-" + order.id },
-      body: JSON.stringify({ from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT, to: [order.email], reply_to: replyTo, subject: msg.subject, html: msg.html, text: msg.text }),
+      body: JSON.stringify({
+        from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT, to: [order.email], reply_to: replyTo,
+        subject: msg.subject, html: msg.html, text: msg.text,
+        /* Only the confirmation carries it. A customer wants one invoice for an order,
+           not the same document again every time its status changes. A PDF that fails to
+           build must never cost them the email itself. */
+        ...(attachment ? { attachments: [attachment] } : {}),
+      }),
     });
     if (!res.ok) console.error("email " + kind + " " + order.order_number + " failed", res.status, (await res.text()).slice(0, 200));
     return res.ok;

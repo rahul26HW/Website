@@ -140,6 +140,7 @@
       '&body=' + encodeURIComponent('Hi ' + (o.name || '').split(' ')[0] + ',\n\nThank you for your order ' + o.order_number + ' (' + u.money(o.total) + ').\n\n' +
         (o.tracking_number ? 'It has shipped' + (o.carrier ? ' with ' + o.carrier : '') + '. Tracking number: ' + o.tracking_number + '\n\n' : '') + 'Best,\n' + (A.draft.brand.name || 'Home Weavers'));
     return '<p><button class="txtbtn" type="button" data-a="order-back">← All orders</button></p>' +
+      '<p class="btnrow"><button class="btn ghost sm" type="button" data-a="order-invoice" data-id="' + o.id + '" data-num="' + esc(o.order_number) + '">⬇ Download invoice</button></p>' +
       '<h1 class="h1row">Order ' + esc(o.order_number) + ' <span>' + payTag(o.payment_status) + ' ' + statusTag(o.status) + '</span></h1>' +
       '<p class="sub">Placed ' + esc(u.fmtDateTime(o.created_at)) + ' · ' + esc(o.source === 'snipcart' ? 'Snipcart' : 'Site checkout') + (o.external_id ? ' · ' + esc(o.external_id) : '') + '</p>' +
       '<div class="grid2 alignstart">' +
@@ -272,6 +273,15 @@
     A.editDirty = null; A.commitEdit = null;
     A.render(); window.scrollTo(0, 0);
   };
+  /* Built on the server, from the order as it stands now — never from what the browser
+     happens to be showing, so a stale screen cannot produce a wrong invoice. */
+  A.actions['order-invoice'] = async function (el) {
+    el.disabled = true;
+    try {
+      await A.workerFile('/admin/invoice', { id: el.dataset.id }, 'Invoice-' + el.dataset.num + '.pdf');
+    } finally { el.disabled = false; }
+  };
+
   A.actions['order-back'] = function () {
     if (A.edit && JSON.stringify(A.edit) !== os.start && !confirm('Discard changes to this order?')) return;
     closeOrder(); A.render();
