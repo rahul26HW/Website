@@ -32,7 +32,7 @@
   function mainHTML(it, alt, eager) {
     if (it.type === 'video') return '<div class="galvideo">' + videoPlayer(it.src) + '</div>';
     return '<button class="zoombtn" type="button" data-act="zoom" aria-label="Zoom photo: ' + esc(alt) + '">' +
-      '<img class="ph" src="' + esc(HW.asset(it.src)) + '"' + (m.srcset(it.src) ? ' srcset="' + esc(m.srcset(it.src)) + '" sizes="(max-width: 980px) 92vw, 50vw"' : '') + ' alt="' + esc(alt) + '" width="900" height="900" decoding="async"' + (eager ? ' fetchpriority="high"' : '') + '>' +
+      '<img class="ph" src="' + esc(HW.asset(m.shownImage(it.src))) + '"' + (m.srcset(it.src) ? ' srcset="' + esc(m.srcset(it.src)) + '" sizes="(max-width: 980px) 92vw, 50vw"' : '') + ' alt="' + esc(alt) + '" width="900" height="900" decoding="async"' + (eager ? ' fetchpriority="high"' : '') + '>' +
       '<span class="zoomhint" aria-hidden="true">⤢ Zoom</span></button>';
   }
 

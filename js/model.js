@@ -229,9 +229,21 @@
     return (t && url && t[url]) || url;
   };
   /* srcset for a large image that has a small version. */
+  /* A phone at three times pixel density asks for the largest candidate, which for most
+     of this catalogue is still the original on Dropbox — and when that does not arrive,
+     the main photograph on the page is a broken icon while the thumbnails beside it are
+     fine, because those are copies we host ourselves. Until the originals are moved over,
+     an image we serve is offered alone rather than risking the one we do not. */
+  m.ourOwn = function (url) {
+    var base = String((window.HW_CONFIG || {}).supabaseUrl || '').replace(/\/+$/, '');
+    var u = String(url || '');
+    return !/^https?:/i.test(u) || (!!base && u.indexOf(base) === 0);
+  };
+  m.shownImage = function (url) { return m.ourOwn(url) ? url : m.thumb(url); };
   m.srcset = function (url) {
     var t = m.thumb(url);
     if (!url || t === url) return '';
+    if (!m.ourOwn(url)) return '';
     return HW.asset(t) + ' 700w, ' + HW.asset(url) + ' 1600w';
   };
 

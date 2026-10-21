@@ -94,6 +94,19 @@ async function main() {
       description: p.seoDescription || text(m.pageText(p.body)).replace(/[#*\[\]()|-]/g, ' ') });
   });
 
+  const crypto = require('crypto');
+  const stampFrom = ['css/site.css'].concat(
+    fs.readdirSync(path.join(ROOT, 'js')).filter(function (f) { return f.endsWith('.js'); }).map(function (f) { return 'js/' + f; }));
+  const stamp = crypto.createHash('sha1')
+    .update(stampFrom.map(function (f) { return fs.readFileSync(path.join(ROOT, f)); }).join(''))
+    .digest('hex').slice(0, 8);
+  {
+    const idx = path.join(ROOT, 'index.html');
+    const before = fs.readFileSync(idx, 'utf8');
+    const after = before.replace(/css\/site\.css\?v=[A-Za-z0-9]+/, 'css/site.css?v=' + stamp);
+    if (after !== before) fs.writeFileSync(idx, after);
+  }
+
   // Keep the inline-script hashes current before copying. Snipcart's hosts are allowed only while it is switched on.
   const cspOpts = { snipcart: !!(data.snipcart && data.snipcart.enabled && String(data.snipcart.apiKey || '').trim()) };
   require('./csp.js').write('index.html', cspOpts);
