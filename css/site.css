@@ -646,14 +646,17 @@ footer.site{background:var(--ink);color:#E7E0D4;margin-top:10px}
      logo and the name together, which pushes search, wishlist and cart off the right edge
      and makes every page 49px wider than the phone. */
   .htop{grid-template-columns:auto minmax(0,1fr) auto;gap:12px;padding:12px 18px}
-  .brand,.brand .mark,.brand .wordblock{min-width:0}
-  .brand .mark #brandName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  /* With a logo there is no room for the name beside it on a phone, and the mark says it. */
-  .brand .mark:has(.logo-img) #brandName{display:none}
+  .brand,.brand .mark,.brand .wordblock{min-width:0;max-width:100%}
+  .brand .mark #brandName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+  /* The logo may be a monogram rather than a wordmark, in which case hiding the name
+     leaves a phone with nothing that says whose shop this is. Admin › Brand decides
+     whether the name shows; here it is only made small enough to sit beside the mark. */
+  .brand .mark{gap:7px}
+  .brand .mark #brandName{font-size:17px}
   .cat-rail .cat-tile,.prod-rail .pcard{flex:0 0 78%}
-  .brand{justify-self:center}
+  .brand{justify-self:center;max-width:100%}
   .brand .tagline{display:none}
-  .brand .mark .logo-img{height:34px;max-width:150px}
+  .brand .mark .logo-img{height:28px;max-width:84px}
   .brand .mark{font-size:22px}
   .features{grid-template-columns:1fr}
   .fmain{gap:36px 40px;padding:44px 0 30px}
