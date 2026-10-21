@@ -108,9 +108,20 @@
     brandLink.setAttribute('href', HW.link('/'));
     brandLink.setAttribute('aria-label', (DB.brand.name || 'Home Weavers') + ' home');
 
+    /* "Towels" above a lone "Towels", or "Rugs" above a lone "Bath Rugs": a heading and a
+       single child that lead to the same place. A sub-list earns its space only when it
+       offers a real choice, so one that does not is dropped and the category stands alone. */
+    function menuSubs(c) {
+      var name = String(c.name || '').trim().toLowerCase();
+      var subs = m.visibleSubcategories(c).filter(function (s2) {
+        return String(s2.name || '').trim().toLowerCase() !== name;
+      });
+      return subs.length > 1 ? subs : [];
+    }
+
     var cats = m.visibleCategories();
     document.getElementById('topnav').innerHTML = cats.map(function (c) {
-      var subs = m.visibleSubcategories(c);
+      var subs = menuSubs(c);
       var fly = subs.length
         ? '<div class="flyout">' + subs.map(function (s) {
             return '<a href="' + HW.link('/category/' + c.slug + '?sub=' + encodeURIComponent(s.slug)) + '">' + esc(s.name) + '</a>';
@@ -120,7 +131,7 @@
     }).join('');
 
     document.getElementById('mnavLinks').innerHTML = cats.map(function (c) {
-      var subs = m.visibleSubcategories(c);
+      var subs = menuSubs(c);
       return '<a href="' + HW.link('/category/' + c.slug) + '">' + esc(c.name) + '</a>' +
         (subs.length ? '<div class="msub">' + subs.map(function (s) {
           return '<a href="' + HW.link('/category/' + c.slug + '?sub=' + encodeURIComponent(s.slug)) + '">' + esc(s.name) + '</a>';
