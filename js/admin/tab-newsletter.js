@@ -32,26 +32,38 @@
 
   /* A JPEG copy of an image, made once and remembered, so sending the same newsletter
      twice does not fill the store with duplicates. Anything already safe is left alone. */
-  async function emailSafe(url) {
+  async function emailSafe(url, ratio) {
     var src = String(url || '').trim();
     if (!src) return '';
-    if (!/\.webp(\?|$)/i.test(src)) return src;
+    var key = src + (ratio ? '|' + ratio : '');
     var cache = u.store.get(JPEGS, {}) || {};
-    if (cache[src]) return cache[src];
+    if (cache[key]) return cache[key];
+    /* Already a shape and format every client can draw: leave it alone. */
+    if (!ratio && !/\.webp(\?|$)/i.test(src)) return src;
 
     var res = await fetch(src);
     if (!res.ok) throw new Error('Could not read one of the images.');
     var bmp = await createImageBitmap(await res.blob());
     var max = 1024;
-    var scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
     var c = document.createElement('canvas');
-    c.width = Math.round(bmp.width * scale);
-    c.height = Math.round(bmp.height * scale);
+    var sx = 0, sy = 0, sw = bmp.width, sh = bmp.height;
+    if (ratio) {
+      /* A product shot is roughly square, and at full width that is a banner so tall it
+         fills the screen before a word is read. Cropped from the middle to a band. */
+      if (sw / sh > ratio) { sw = Math.round(sh * ratio); sx = Math.round((bmp.width - sw) / 2); }
+      else { sh = Math.round(sw / ratio); sy = Math.round((bmp.height - sh) / 2); }
+      c.width = Math.min(max, sw);
+      c.height = Math.round(c.width / ratio);
+    } else {
+      var scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      c.width = Math.round(bmp.width * scale);
+      c.height = Math.round(bmp.height * scale);
+    }
     var cx = c.getContext('2d');
     /* JPEG has no transparency, so anything see-through would come out black. */
     cx.fillStyle = '#ffffff';
     cx.fillRect(0, 0, c.width, c.height);
-    cx.drawImage(bmp, 0, 0, c.width, c.height);
+    cx.drawImage(bmp, sx, sy, sw, sh, 0, 0, c.width, c.height);
     var jpg = await new Promise(function (r) { c.toBlob(r, 'image/jpeg', 0.82); });
     if (!jpg) throw new Error('Could not convert one of the images.');
 
@@ -61,7 +73,7 @@
     var up = await A.sb.storage.from('media').upload(path, jpg, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false });
     if (up.error) throw new Error(up.error.message || 'Could not store one of the images.');
     var out = A.sb.storage.from('media').getPublicUrl(path).data.publicUrl;
-    cache[src] = out;
+    cache[key] = out;
     u.store.set(JPEGS, cache);
     return out;
   }
@@ -80,8 +92,8 @@
   async function bannerHtml() {
     if (!st.banner) return '';
     var href = abs(st.bannerLink);
-    var src = await emailSafe(st.banner);
-    return '<a href="' + esc(href) + '" style="display:block;margin:0 0 18px">' +
+    var src = await emailSafe(st.banner, 2);
+    return '<a href="' + esc(href) + '" style="display:block;margin:0 0 22px">' +
       '<img src="' + esc(src) + '" alt="' + esc(st.title || st.subject || 'Home Weavers') + '" width="512" ' +
       'style="display:block;width:100%;max-width:512px;height:auto;border:0;border-radius:4px"></a>';
   }
@@ -94,7 +106,7 @@
       var pair = await Promise.all(st.picks.slice(i, i + 2).map(async function (id) {
         var p = all.filter(function (x) { return x.id === id; })[0];
         if (!p) return '<td class="nlcol" style="width:50%"></td>';
-        var img = await emailSafe(HW.asset(HW.m.thumb(HW.m.primaryImage(p)) || HW.m.primaryImage(p)));
+        var img = await emailSafe(HW.asset(HW.m.thumb(HW.m.primaryImage(p)) || HW.m.primaryImage(p)), 1);
         var r = HW.m.priceRange(p);
         var price = r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min);
         var href = site() + 'product/' + encodeURIComponent(p.slug);
@@ -131,7 +143,7 @@
 
   function toHtml(text) {
     return String(text || '').split(/\n{2,}/).map(function (para) {
-      return '<p style="font-size:15px;line-height:1.65;margin:0 0 12px">' +
+      return '<p style="font-size:15.5px;line-height:1.75;margin:0 0 15px;color:#3A3530">' +
         esc(para.trim()).replace(/\n/g, '<br>') + '</p>';
     }).join('');
   }

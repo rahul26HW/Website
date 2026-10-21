@@ -1439,7 +1439,7 @@ function trackingLink(carrier, number) {
 
 const money = (n) => "$" + Number(n || 0).toFixed(2);
 
-function emailLayout(brand, site, title, bodyHtml, why, footHtml) {
+function emailLayout(brand, site, title, bodyHtml, why, footHtml, navHtml) {
   const b = esc(brand);
   /* Most phone mail apps honour a media query; the ones that do not keep the two-column
      table, which still fits because every picture is set to the width of its cell. */
@@ -1448,9 +1448,14 @@ function emailLayout(brand, site, title, bodyHtml, why, footHtml) {
 </head><body style="margin:0;background:#F7F4EF;font-family:Arial,Helvetica,sans-serif;color:#2A2622">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F4EF;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #E6E0D6;border-radius:6px">
-<tr><td style="background:#2C463F;padding:18px 24px;border-radius:6px 6px 0 0">${site ? `<img src="${esc(site)}assets/email/hw-logo-light.png" width="120" height="54" alt="${b}" style="display:block;border:0;width:120px;height:auto">` : `<span style="font-family:Georgia,serif;font-size:22px;color:#ffffff">${b}</span>`}</td></tr>
-<tr><td style="padding:24px">
-<h1 style="font-family:Georgia,serif;font-weight:400;font-size:24px;margin:0 0 14px">${esc(title)}</h1>
+${/* Centred, with the shop's own line under it: a mark alone in the corner left most of
+     the bar empty, which read as something missing rather than as restraint. */ ""}
+<tr><td align="center" style="background:#2C463F;padding:24px 24px 18px;border-radius:6px 6px 0 0">${site ? `<img src="${esc(site)}assets/email/hw-logo-light.png" width="132" height="59" alt="${b}" style="display:block;margin:0 auto;border:0;width:132px;height:auto">` : `<span style="font-family:Georgia,serif;font-size:22px;color:#ffffff">${b}</span>`}
+<div style="font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:#A9B8B2;margin:11px 0 0">Woven for the way you live</div></td></tr>
+${navHtml ? `<tr><td align="center" style="background:#243A34;padding:11px 18px">${navHtml}</td></tr>` : ""}
+<tr><td style="padding:30px 28px 26px">
+<h1 style="font-family:Georgia,serif;font-weight:400;font-size:27px;line-height:1.25;margin:0 0 6px">${esc(title)}</h1>
+<div style="width:38px;height:2px;background:#C9922F;margin:0 0 18px"></div>
 ${bodyHtml}
 </td></tr>
 <tr><td style="padding:16px 24px;border-top:1px solid #E6E0D6;font-size:12px;color:#6C6359">
@@ -2593,6 +2598,12 @@ async function handleNewsletterSend(request, env, cors) {
   }
   if (!list.length) return json({ error: "Nobody is on the list yet." }, 400, cors);
 
+  /* A line of categories under the logo: somewhere to go for a reader who likes the look
+     of the email but not the particular thing in it. Newsletters only — an order
+     confirmation should not be trying to sell anything. */
+  const nav = (data.categories || []).filter((c) => c.hidden !== true).slice(0, 4).map((c) =>
+    `<a href="${esc(site)}category/${encodeURIComponent(c.slug)}" style="color:#D8D2C6;text-decoration:none;font-size:11px;letter-spacing:.14em;text-transform:uppercase;padding:0 9px">${esc(c.name)}</a>`).join("");
+
   let sent = 0, failed = 0;
   /* Resend takes a hundred at a time, and each message is built separately because
      the unsubscribe link is particular to the person it goes to. */
@@ -2610,7 +2621,7 @@ async function handleNewsletterSend(request, env, cors) {
            reply has to be pointed somewhere a person actually reads. */
         reply_to: env.EMAIL_REPLY_TO || (data.contact && data.contact.email) || undefined,
         subject,
-        html: emailLayout(brand, site, title, bodyHtml, "You’re getting this because you asked us for news and offers.", foot),
+        html: emailLayout(brand, site, title, bodyHtml, "You’re getting this because you asked us for news and offers.", foot, nav),
         headers: { "List-Unsubscribe": "<" + out + ">", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
       };
     }));
