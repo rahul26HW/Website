@@ -115,6 +115,10 @@
     fit: function () {
       var main = document.querySelector('.vmain'), wrap = document.querySelector('.vthumbs-wrap');
       if (!main || !wrap) return;
+      /* Beside the image the strip is matched to its height. On a phone it sits in a row
+         underneath instead, where that height would stretch it down the page — so the
+         measurement is cleared rather than applied, and re-applied on the way back. */
+      if (window.matchMedia('(max-width:720px)').matches) { wrap.style.height = ''; return; }
       var set = function () { var h = Math.round(main.getBoundingClientRect().height); if (h > 40) wrap.style.height = h + 'px'; };
       set(); requestAnimationFrame(set);
     }

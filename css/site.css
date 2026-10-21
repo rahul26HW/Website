@@ -644,7 +644,18 @@ footer.site{background:var(--ink);color:#E7E0D4;margin-top:10px}
   .pdp{grid-template-columns:1fr;gap:28px}
   .pdp-tabwrap{grid-template-columns:1fr;gap:28px}
   .pdt-panel .bullets{columns:1}
-  .vthumbs-wrap{width:62px}.vth{width:62px;height:62px}
+  /* A column of thumbnails beside the image is a desktop shape. On a phone it took a third
+     of the width and left the product itself the smaller part of the screen. The image gets
+     the full width and the thumbnails sit under it, swiped sideways like any phone gallery. */
+  .galleryV{flex-direction:column;gap:10px}
+  .vmain{width:100%;min-width:0}
+  .vthumbs-wrap{flex-direction:row;width:100%;max-width:100%;min-width:0;height:auto;max-height:none;order:2;gap:0}
+  .vth-nav{display:none}
+  /* min-width:0 is what lets the strip scroll rather than grow: without it the row takes
+     the width of all its thumbnails and simply runs off the side of the phone. */
+  .vthumbs{flex-direction:row;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;gap:8px;
+    scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;padding:1px}
+  .vth{width:62px;height:62px;scroll-snap-align:start}
 }
 @media(max-width:720px){
   .hbar,.hactions .lbl{display:none}
