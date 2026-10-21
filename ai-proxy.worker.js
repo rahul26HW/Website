@@ -1439,7 +1439,7 @@ function trackingLink(carrier, number) {
 
 const money = (n) => "$" + Number(n || 0).toFixed(2);
 
-function emailLayout(brand, site, title, bodyHtml, why, footHtml, navHtml) {
+function emailLayout(brand, site, title, bodyHtml, why, footHtml, navHtml, socialHtml) {
   const b = esc(brand);
   /* Most phone mail apps honour a media query; the ones that do not keep the two-column
      table, which still fits because every picture is set to the width of its cell. */
@@ -1458,8 +1458,11 @@ ${navHtml ? `<tr><td align="center" style="background:#243A34;padding:11px 18px"
 <div style="width:38px;height:2px;background:#C9922F;margin:0 0 18px"></div>
 ${bodyHtml}
 </td></tr>
-<tr><td style="padding:16px 24px;border-top:1px solid #E6E0D6;font-size:12px;color:#6C6359">
-${site ? `<a href="${esc(site)}" style="color:#3A5A52">${esc(site.replace(/^https?:\/\//, "").replace(/\/$/, ""))}</a> · ` : ""}${why ? esc(why) : `You’re getting this email because you placed an order with ${b}.`}${footHtml || ""}
+${/* A dark close, the way the site ends, rather than the message fading out into the
+     page. The legal lines sit here where somebody looking for them expects to find them. */ ""}
+<tr><td align="center" style="background:#2A2622;padding:22px 24px;font-size:12px;line-height:1.7;color:#9A9288;border-radius:0 0 6px 6px">
+${socialHtml ? `<div style="margin:0 0 12px">${socialHtml}</div>` : ""}
+${site ? `<a href="${esc(site)}" style="color:#C9C2B4;text-decoration:none">${esc(site.replace(/^https?:\/\//, "").replace(/\/$/, ""))}</a><br>` : ""}${why ? esc(why) : `You’re getting this email because you placed an order with ${b}.`}${footHtml || ""}
 </td></tr></table></td></tr></table></body></html>`;
 }
 
@@ -2604,6 +2607,16 @@ async function handleNewsletterSend(request, env, cors) {
   const nav = (data.categories || []).filter((c) => c.hidden !== true).slice(0, 4).map((c) =>
     `<a href="${esc(site)}category/${encodeURIComponent(c.slug)}" style="color:#D8D2C6;text-decoration:none;font-size:11px;letter-spacing:.14em;text-transform:uppercase;padding:0 9px">${esc(c.name)}</a>`).join("");
 
+  /* Only the places the shop actually has. A row of icons to empty profiles is worse
+     than no row: it asks the reader to go somewhere and then shows them nothing. */
+  const SOCIALS = [["instagram", "Instagram"], ["pinterest", "Pinterest"], ["facebook", "Facebook"],
+    ["tiktok", "TikTok"], ["x", "X"], ["linkedin", "LinkedIn"], ["youtube", "YouTube"]];
+  const social = SOCIALS
+    .filter(([k]) => /^https?:\/\//i.test(String((data.social || {})[k] || "").trim()))
+    .map(([k, label]) =>
+      `<a href="${esc(String(data.social[k]).trim())}" style="color:#C9C2B4;text-decoration:none;font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:0 8px">${esc(label)}</a>`)
+    .join("");
+
   let sent = 0, failed = 0;
   /* Resend takes a hundred at a time, and each message is built separately because
      the unsubscribe link is particular to the person it goes to. */
@@ -2621,7 +2634,7 @@ async function handleNewsletterSend(request, env, cors) {
            reply has to be pointed somewhere a person actually reads. */
         reply_to: env.EMAIL_REPLY_TO || (data.contact && data.contact.email) || undefined,
         subject,
-        html: emailLayout(brand, site, title, bodyHtml, "You’re getting this because you asked us for news and offers.", foot, nav),
+        html: emailLayout(brand, site, title, bodyHtml, "You’re getting this because you asked us for news and offers.", foot, nav, social),
         headers: { "List-Unsubscribe": "<" + out + ">", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
       };
     }));

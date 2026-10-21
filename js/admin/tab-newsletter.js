@@ -11,7 +11,7 @@
   var st = Object.assign(
     { count: null, subject: '', title: '', body: '', test: '', sending: false, last: null,
       banner: '', bannerLink: '', picks: [], ctaLabel: '', ctaLink: '',
-      offer: '', offerCode: '' },
+      offer: '', offerCode: '', picksTitle: '' },
     u.store.get(DRAFT, {}) || {});
   st.count = null; st.sending = false; st.last = null;
   if (!Array.isArray(st.picks)) st.picks = [];
@@ -21,7 +21,7 @@
       subject: st.subject, title: st.title, body: st.body, test: st.test,
       banner: st.banner, bannerLink: st.bannerLink, picks: st.picks,
       ctaLabel: st.ctaLabel, ctaLink: st.ctaLink,
-      offer: st.offer, offerCode: st.offerCode,
+      offer: st.offer, offerCode: st.offerCode, picksTitle: st.picksTitle,
     });
   }
 
@@ -130,8 +130,12 @@
       if (pair.length === 1) pair.push('<td class="nlcol" style="width:50%"></td>');
       rows.push('<tr>' + pair.join('') + '</tr>');
     }
-    return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
-      'style="margin:18px -6px 6px;border-collapse:separate;border-spacing:0 14px">' + rows.join('') + '</table>';
+    var head = st.picksTitle.trim()
+      ? '<h2 style="font-family:Georgia,serif;font-weight:400;font-size:19px;margin:26px 0 2px">' + esc(st.picksTitle) + '</h2>' +
+        '<div style="width:30px;height:2px;background:#C9922F;margin:0 0 6px"></div>'
+      : '';
+    return head + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
+      'style="margin:8px -6px 6px;border-collapse:separate;border-spacing:0 14px">' + rows.join('') + '</table>';
   }
 
   function offerHtml() {
@@ -222,6 +226,8 @@
 
         '<section class="panel"><h2 class="ph3">Products to show</h2>' +
         '<p style="margin:0 0 10px">Up to four. Each one is a picture, a name and a price, and all of it is a link to that product.</p>' +
+        '<div class="fld"><label for="nlPicksTitle">Heading above them <span class="muted">(optional)</span></label>' +
+        '<input id="nlPicksTitle" type="text" maxlength="60" placeholder="Shop the Willow collection" value="' + esc(st.picksTitle) + '"></div>' +
         '<div class="nlpicks">' + (A.draft.products || []).filter(function (p) { return !p.hidden; }).slice(0, 60).map(function (p) {
           var on = st.picks.indexOf(p.id) >= 0;
           return '<label class="nlpick' + (on ? ' on' : '') + '"><input type="checkbox" data-a="nl-pick" data-id="' + esc(p.id) + '"' + (on ? ' checked' : '') + '>' +
@@ -259,7 +265,7 @@
       var ttl = document.getElementById('nlTitle');
       if (ttl) ttl.addEventListener('input', function () { st.title = ttl.value; keep(); });
       [['nlBanner','banner'], ['nlBannerLink','bannerLink'], ['nlCtaLabel','ctaLabel'], ['nlCtaLink','ctaLink'],
-       ['nlOffer','offer'], ['nlOfferCode','offerCode']].forEach(function (pair) {
+       ['nlOffer','offer'], ['nlOfferCode','offerCode'], ['nlPicksTitle','picksTitle']].forEach(function (pair) {
         var el = document.getElementById(pair[0]);
         if (el) el.addEventListener('input', function () { st[pair[1]] = el.value; keep(); });
       });
@@ -292,7 +298,7 @@
       st.last = out;
       u.toast(testTo ? 'Test sent' : 'Sent to ' + out.sent);
       if (!testTo) { st.subject = ''; st.title = ''; st.body = ''; st.banner = ''; st.bannerLink = '';
-        st.picks = []; st.ctaLabel = ''; st.ctaLink = ''; st.offer = ''; st.offerCode = ''; keep(); }
+        st.picks = []; st.ctaLabel = ''; st.ctaLink = ''; st.offer = ''; st.offerCode = ''; st.picksTitle = ''; keep(); }
     } catch (e) {
       u.toast('Couldn’t send: ' + e.message);
     } finally {
