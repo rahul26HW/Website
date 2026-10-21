@@ -362,11 +362,20 @@
      follows them once the real one leaves the screen. The button is not a second button:
      it presses the real one, so the two can never disagree about size, colour or stock. */
   var stickyEl = null, stickyWatch = null;
-  function stickyBuy() {
-    var real = document.getElementById("buyBtn");
+  /* Taking the bar down is its own job because the router has to do it too: the bar is
+     appended to the body, not to the view the router replaces, so it outlived the product
+     that made it and went on advertising a price for something nobody was looking at. */
+  function clearSticky() {
     if (stickyWatch) { stickyWatch.disconnect(); stickyWatch = null; }
     if (stickyEl) { stickyEl.remove(); stickyEl = null; }
+    document.body.classList.remove('has-stickybuy');
+  }
+  HW.stickyBuy = { clear: clearSticky, refresh: stickyBuy };
+  function stickyBuy() {
+    clearSticky();
+    var real = document.getElementById("buyBtn");
     if (!real) return;
+    document.body.classList.add('has-stickybuy');
 
     var priceEl = document.querySelector(".price .now") || document.querySelector(".price");
     var bar = document.createElement("div");
@@ -390,7 +399,18 @@
 
     /* Shown only while the real button is off the screen. */
     stickyWatch = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) { bar.hidden = e.isIntersecting; if (!e.isIntersecting) sync(); });
+      /* A re-render leaves the previous observer alive for one more callback. It is
+         reporting on a button that no longer exists, so it must not touch the bar the
+         new render has already put up. */
+      if (stickyEl !== bar) return;
+      entries.forEach(function (e) {
+        /* The bar lives exactly as long as the button it stands in for. When that button
+           leaves the document — the shopper has gone to another page — the bar goes with
+           it, instead of staying to advertise a price for something nobody is looking at. */
+        if (!e.target.isConnected) { clearSticky(); return; }
+        bar.hidden = e.isIntersecting;
+        if (!e.isIntersecting) sync();
+      });
     }, { rootMargin: "0px 0px -20px 0px" });
     stickyWatch.observe(real);
   }

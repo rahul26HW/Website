@@ -1041,6 +1041,7 @@ main#view.booting ~ footer.site{visibility:hidden}
     background:var(--card);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));
     box-shadow:0 -6px 20px rgba(0,0,0,.08)}
   .stickybuy[hidden]{display:none}
+  body.has-stickybuy footer.site{padding-bottom:calc(74px + env(safe-area-inset-bottom))}
   .stickybuy .sb-price{font-family:var(--disp);font-size:19px;white-space:nowrap}
   .stickybuy .sb-go{flex:1;justify-content:center}
 }

@@ -41,6 +41,12 @@
     main().classList.remove('booting');
     HW.seo.set(view.seo || {});
     if (view.after) { try { view.after(); } catch (e) { console.error(e); } }
+    /* The sticky buy bar hangs off the body, not off the view, so swapping the view does
+       not take it with it: left alone it stayed on screen offering a price for a product
+       the shopper had left. Asked once here, with the new page already in place, it puts
+       the bar up on a product and takes it down everywhere else — whichever order the
+       page itself rendered in, which differs between a fresh visit and the back button. */
+    if (HW.stickyBuy) HW.stickyBuy.refresh();
     HW.observeReveals();
     if (HW.saleClock) HW.saleClock.start();
     if (HW.rails) HW.rails.init();
