@@ -1447,7 +1447,7 @@ function emailLayout(brand, site, title, bodyHtml, why, footHtml, navHtml) {
 <style>@media only screen and (max-width:480px){.nlcol{display:block !important;width:100% !important;padding:0 0 16px !important}}</style>
 </head><body style="margin:0;background:#F7F4EF;font-family:Arial,Helvetica,sans-serif;color:#2A2622">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F4EF;padding:24px 12px"><tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #E6E0D6;border-radius:6px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #E6E0D6;border-radius:6px">
 ${/* Centred, with the shop's own line under it: a mark alone in the corner left most of
      the bar empty, which read as something missing rather than as restraint. */ ""}
 <tr><td align="center" style="background:#2C463F;padding:24px 24px 18px;border-radius:6px 6px 0 0">${site ? `<img src="${esc(site)}assets/email/hw-logo-light.png" width="132" height="59" alt="${b}" style="display:block;margin:0 auto;border:0;width:132px;height:auto">` : `<span style="font-family:Georgia,serif;font-size:22px;color:#ffffff">${b}</span>`}

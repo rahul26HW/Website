@@ -10,7 +10,8 @@
   var DRAFT = 'hw:newsletterDraft';
   var st = Object.assign(
     { count: null, subject: '', title: '', body: '', test: '', sending: false, last: null,
-      banner: '', bannerLink: '', picks: [], ctaLabel: '', ctaLink: '' },
+      banner: '', bannerLink: '', picks: [], ctaLabel: '', ctaLink: '',
+      offer: '', offerCode: '' },
     u.store.get(DRAFT, {}) || {});
   st.count = null; st.sending = false; st.last = null;
   if (!Array.isArray(st.picks)) st.picks = [];
@@ -20,6 +21,7 @@
       subject: st.subject, title: st.title, body: st.body, test: st.test,
       banner: st.banner, bannerLink: st.bannerLink, picks: st.picks,
       ctaLabel: st.ctaLabel, ctaLink: st.ctaLink,
+      offer: st.offer, offerCode: st.offerCode,
     });
   }
 
@@ -94,8 +96,8 @@
     var href = abs(st.bannerLink);
     var src = await emailSafe(st.banner, 2);
     return '<a href="' + esc(href) + '" style="display:block;margin:0 0 22px">' +
-      '<img src="' + esc(src) + '" alt="' + esc(st.title || st.subject || 'Home Weavers') + '" width="512" ' +
-      'style="display:block;width:100%;max-width:512px;height:auto;border:0;border-radius:4px"></a>';
+      '<img src="' + esc(src) + '" alt="' + esc(st.title || st.subject || 'Home Weavers') + '" width="584" ' +
+      'style="display:block;width:100%;max-width:584px;height:auto;border:0;border-radius:4px"></a>';
   }
 
   async function productCards() {
@@ -108,20 +110,40 @@
         if (!p) return '<td class="nlcol" style="width:50%"></td>';
         var img = await emailSafe(HW.asset(HW.m.thumb(HW.m.primaryImage(p)) || HW.m.primaryImage(p)), 1);
         var r = HW.m.priceRange(p);
-        var price = r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min);
+        /* The same shape the shop uses: what it costs now in bold, what it cost struck
+           through beside it, and a word to say why. A price that has not moved gets
+           none of that — a sale tag on everything says nothing. */
+        var now = r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min);
+        var cut = r.wasMin != null && r.wasMin > r.min;
+        var price = '<span style="font-weight:bold;color:#2A2622">' + esc(now) + '</span>' +
+          (cut ? ' <s style="color:#8A8178">' + esc(u.money(r.wasMin)) + '</s>' +
+            '<span style="display:inline-block;margin-left:7px;background:#B5754F;color:#ffffff;' +
+            'font-size:10px;letter-spacing:.1em;padding:2px 7px;border-radius:2px;vertical-align:1px">SALE</span>' : '');
         var href = site() + 'product/' + encodeURIComponent(p.slug);
         /* The picture is a link and so is the name: people click whichever they reach for. */
         return '<td class="nlcol" style="width:50%;padding:0 6px;vertical-align:top">' +
           '<a href="' + esc(href) + '" style="text-decoration:none;color:#2A2622">' +
-          (img ? '<img src="' + esc(img) + '" alt="' + esc(p.name) + '" width="248" style="display:block;width:100%;height:auto;border:0;border-radius:4px;background:#F4F1EB">' : '') +
+          (img ? '<img src="' + esc(img) + '" alt="' + esc(p.name) + '" width="288" style="display:block;width:100%;height:auto;border:0;border-radius:4px;background:#F4F1EB">' : '') +
           '<div style="font-size:14px;line-height:1.4;margin:8px 0 2px">' + esc(p.name) + '</div>' +
-          '<div style="font-size:14px;color:#6C6359">' + esc(price) + '</div></a></td>';
+          '<div style="font-size:14px;color:#6C6359">' + price + '</div></a></td>';
       }));
       if (pair.length === 1) pair.push('<td class="nlcol" style="width:50%"></td>');
       rows.push('<tr>' + pair.join('') + '</tr>');
     }
     return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
       'style="margin:18px -6px 6px;border-collapse:separate;border-spacing:0 14px">' + rows.join('') + '</table>';
+  }
+
+  function offerHtml() {
+    if (!st.offer.trim()) return '';
+    var code = st.offerCode.trim();
+    return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
+      'style="margin:0 0 22px;background:#F4F1EB;border-radius:4px"><tr>' +
+      '<td align="center" style="padding:18px 20px">' +
+      '<div style="font-family:Georgia,serif;font-size:19px;line-height:1.35;color:#2C463F">' + esc(st.offer) + '</div>' +
+      (code ? '<div style="margin:11px 0 0"><span style="display:inline-block;border:1px dashed #B5754F;color:#B5754F;' +
+        'padding:7px 16px;border-radius:3px;font-size:14px;letter-spacing:.16em;font-weight:bold">' + esc(code) + '</span></div>' : '') +
+      '</td></tr></table>';
   }
 
   /* A real button, drawn as a table cell so Outlook renders it too. */
@@ -138,7 +160,7 @@
      newsletter that is mostly words lands in more inboxes than one that is mostly
      pictures. */
   async function bodyHtml(text) {
-    return (await bannerHtml()) + toHtml(text) + (await productCards()) + ctaHtml();
+    return (await bannerHtml()) + offerHtml() + toHtml(text) + (await productCards()) + ctaHtml();
   }
 
   function toHtml(text) {
@@ -189,6 +211,15 @@
         '<p class="hint">A picture in an email should always be clickable. Blank sends them to the shop front.</p></div>' +
         '</section>' +
 
+        '<section class="panel"><h2 class="ph3">Offer</h2>' +
+        '<p style="margin:0 0 10px">A band under the picture. Leave it blank for a newsletter with no offer in it.</p>' +
+        '<div class="fld"><label for="nlOffer">The offer</label>' +
+        '<input id="nlOffer" type="text" maxlength="90" placeholder="15% off your first order" value="' + esc(st.offer) + '">' +
+        '<p class="hint">Say the thing plainly. “15% off your first order” beats “a little something for you”.</p></div>' +
+        '<div class="fld"><label for="nlOfferCode">Code <span class="muted">(optional)</span></label>' +
+        '<input id="nlOfferCode" type="text" maxlength="24" placeholder="WELCOME15" value="' + esc(st.offerCode) + '"></div>' +
+        '</section>' +
+
         '<section class="panel"><h2 class="ph3">Products to show</h2>' +
         '<p style="margin:0 0 10px">Up to four. Each one is a picture, a name and a price, and all of it is a link to that product.</p>' +
         '<div class="nlpicks">' + (A.draft.products || []).filter(function (p) { return !p.hidden; }).slice(0, 60).map(function (p) {
@@ -227,7 +258,8 @@
       if (subj) subj.addEventListener('input', function () { st.subject = subj.value; keep(); });
       var ttl = document.getElementById('nlTitle');
       if (ttl) ttl.addEventListener('input', function () { st.title = ttl.value; keep(); });
-      [['nlBanner','banner'], ['nlBannerLink','bannerLink'], ['nlCtaLabel','ctaLabel'], ['nlCtaLink','ctaLink']].forEach(function (pair) {
+      [['nlBanner','banner'], ['nlBannerLink','bannerLink'], ['nlCtaLabel','ctaLabel'], ['nlCtaLink','ctaLink'],
+       ['nlOffer','offer'], ['nlOfferCode','offerCode']].forEach(function (pair) {
         var el = document.getElementById(pair[0]);
         if (el) el.addEventListener('input', function () { st[pair[1]] = el.value; keep(); });
       });
@@ -260,7 +292,7 @@
       st.last = out;
       u.toast(testTo ? 'Test sent' : 'Sent to ' + out.sent);
       if (!testTo) { st.subject = ''; st.title = ''; st.body = ''; st.banner = ''; st.bannerLink = '';
-        st.picks = []; st.ctaLabel = ''; st.ctaLink = ''; keep(); }
+        st.picks = []; st.ctaLabel = ''; st.ctaLink = ''; st.offer = ''; st.offerCode = ''; keep(); }
     } catch (e) {
       u.toast('Couldn’t send: ' + e.message);
     } finally {
