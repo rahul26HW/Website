@@ -2612,6 +2612,9 @@ async function handleNewsletterSend(request, env, cors) {
       return {
         from: env.NEWSLETTER_FROM || env.EMAIL_FROM || EMAIL_FROM_DEFAULT,
         to: [to],
+        /* The newsletter may go out from an address that has no mailbox behind it, so a
+           reply has to be pointed somewhere a person actually reads. */
+        reply_to: env.EMAIL_REPLY_TO || (data.contact && data.contact.email) || undefined,
         subject,
         html: emailLayout(brand, site, title, bodyHtml, "You’re getting this because you asked us for news and offers.", foot),
         headers: { "List-Unsubscribe": "<" + out + ">", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
