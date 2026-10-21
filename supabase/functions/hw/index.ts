@@ -1447,7 +1447,11 @@ const money = (n) => "$" + Number(n || 0).toFixed(2);
 
 function emailLayout(brand, site, title, bodyHtml, why, footHtml) {
   const b = esc(brand);
-  return `<!doctype html><html><body style="margin:0;background:#F7F4EF;font-family:Arial,Helvetica,sans-serif;color:#2A2622">
+  /* Most phone mail apps honour a media query; the ones that do not keep the two-column
+     table, which still fits because every picture is set to the width of its cell. */
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>@media only screen and (max-width:480px){.nlcol{display:block !important;width:100% !important;padding:0 0 16px !important}}</style>
+</head><body style="margin:0;background:#F7F4EF;font-family:Arial,Helvetica,sans-serif;color:#2A2622">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F4EF;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #E6E0D6;border-radius:6px">
 <tr><td style="background:#2C463F;padding:18px 24px;border-radius:6px 6px 0 0">${site ? `<img src="${esc(site)}assets/email/hw-logo-light.png" width="120" height="54" alt="${b}" style="display:block;border:0;width:120px;height:auto">` : `<span style="font-family:Georgia,serif;font-size:22px;color:#ffffff">${b}</span>`}</td></tr>

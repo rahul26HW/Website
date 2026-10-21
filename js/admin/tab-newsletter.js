@@ -28,6 +28,44 @@
     st.count = r.error ? 0 : (r.count || 0);
   }
 
+  var JPEGS = 'hw:newsletterJpegs';
+
+  /* A JPEG copy of an image, made once and remembered, so sending the same newsletter
+     twice does not fill the store with duplicates. Anything already safe is left alone. */
+  async function emailSafe(url) {
+    var src = String(url || '').trim();
+    if (!src) return '';
+    if (!/\.webp(\?|$)/i.test(src)) return src;
+    var cache = u.store.get(JPEGS, {}) || {};
+    if (cache[src]) return cache[src];
+
+    var res = await fetch(src);
+    if (!res.ok) throw new Error('Could not read one of the images.');
+    var bmp = await createImageBitmap(await res.blob());
+    var max = 1024;
+    var scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    var c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * scale);
+    c.height = Math.round(bmp.height * scale);
+    var cx = c.getContext('2d');
+    /* JPEG has no transparency, so anything see-through would come out black. */
+    cx.fillStyle = '#ffffff';
+    cx.fillRect(0, 0, c.width, c.height);
+    cx.drawImage(bmp, 0, 0, c.width, c.height);
+    var jpg = await new Promise(function (r) { c.toBlob(r, 'image/jpeg', 0.82); });
+    if (!jpg) throw new Error('Could not convert one of the images.');
+
+    var name = (src.split('?')[0].split('/').pop() || 'image').replace(/\.webp$/i, '');
+    var path = 'newsletter/' + new Date().getFullYear() + '/' +
+      name.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 60) + '-' + Math.random().toString(36).slice(2, 8) + '.jpg';
+    var up = await A.sb.storage.from('media').upload(path, jpg, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false });
+    if (up.error) throw new Error(up.error.message || 'Could not store one of the images.');
+    var out = A.sb.storage.from('media').getPublicUrl(path).data.publicUrl;
+    cache[src] = out;
+    u.store.set(JPEGS, cache);
+    return out;
+  }
+
   function site() {
     return String((A.draft.settings || {}).siteUrl || 'https://www.homeweavers.com/').replace(/\/?$/, '/');
   }
@@ -39,34 +77,35 @@
 
   /* An email client is not a browser: no flexbox, no grid, and half of them strip a
      stylesheet entirely. Tables and inline styles are what survives. */
-  function bannerHtml() {
+  async function bannerHtml() {
     if (!st.banner) return '';
     var href = abs(st.bannerLink);
+    var src = await emailSafe(st.banner);
     return '<a href="' + esc(href) + '" style="display:block;margin:0 0 18px">' +
-      '<img src="' + esc(st.banner) + '" alt="' + esc(st.title || st.subject || 'Home Weavers') + '" width="512" ' +
+      '<img src="' + esc(src) + '" alt="' + esc(st.title || st.subject || 'Home Weavers') + '" width="512" ' +
       'style="display:block;width:100%;max-width:512px;height:auto;border:0;border-radius:4px"></a>';
   }
 
-  function productCards() {
+  async function productCards() {
     if (!st.picks.length) return '';
     var all = A.draft.products || [];
     var rows = [];
     for (var i = 0; i < st.picks.length; i += 2) {
-      var pair = st.picks.slice(i, i + 2).map(function (id) {
+      var pair = await Promise.all(st.picks.slice(i, i + 2).map(async function (id) {
         var p = all.filter(function (x) { return x.id === id; })[0];
-        if (!p) return '<td style="width:50%"></td>';
-        var img = HW.asset(HW.m.thumb(HW.m.primaryImage(p)) || HW.m.primaryImage(p));
+        if (!p) return '<td class="nlcol" style="width:50%"></td>';
+        var img = await emailSafe(HW.asset(HW.m.thumb(HW.m.primaryImage(p)) || HW.m.primaryImage(p)));
         var r = HW.m.priceRange(p);
         var price = r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min);
         var href = site() + 'product/' + encodeURIComponent(p.slug);
         /* The picture is a link and so is the name: people click whichever they reach for. */
-        return '<td style="width:50%;padding:0 6px;vertical-align:top">' +
+        return '<td class="nlcol" style="width:50%;padding:0 6px;vertical-align:top">' +
           '<a href="' + esc(href) + '" style="text-decoration:none;color:#2A2622">' +
           (img ? '<img src="' + esc(img) + '" alt="' + esc(p.name) + '" width="248" style="display:block;width:100%;height:auto;border:0;border-radius:4px;background:#F4F1EB">' : '') +
           '<div style="font-size:14px;line-height:1.4;margin:8px 0 2px">' + esc(p.name) + '</div>' +
           '<div style="font-size:14px;color:#6C6359">' + esc(price) + '</div></a></td>';
-      });
-      if (pair.length === 1) pair.push('<td style="width:50%"></td>');
+      }));
+      if (pair.length === 1) pair.push('<td class="nlcol" style="width:50%"></td>');
       rows.push('<tr>' + pair.join('') + '</tr>');
     }
     return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
@@ -86,8 +125,8 @@
   /* Written as plain paragraphs. Anything fancier belongs in a design tool, and a
      newsletter that is mostly words lands in more inboxes than one that is mostly
      pictures. */
-  function bodyHtml(text) {
-    return bannerHtml() + toHtml(text) + productCards() + ctaHtml();
+  async function bodyHtml(text) {
+    return (await bannerHtml()) + toHtml(text) + (await productCards()) + ctaHtml();
   }
 
   function toHtml(text) {
@@ -203,7 +242,7 @@
       var out = await A.workerCall('/newsletter/send', {
         subject: st.subject,
         title: st.title,
-        html: bodyHtml(st.body),
+        html: await bodyHtml(st.body),
         test: testTo || '',
       });
       st.last = out;
