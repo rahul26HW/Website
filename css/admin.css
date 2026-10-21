@@ -390,3 +390,66 @@ details.colgroup .gbody{padding:4px 14px 14px}
 .rvreply{margin:10px 0 0}
 .rvreply textarea{width:100%}
 .rvreply .btnrow{margin-top:8px}
+
+/* ---- packing slip ----
+   Hidden until printing. The slip is laid out in the admin page itself so it can
+   use these styles; on paper everything else steps out of the way. */
+#slipRoot{display:none}
+body.printing-slip #slipRoot{display:block}
+@media print{
+  body.printing-slip > *:not(#slipRoot){display:none !important}
+  body.printing-slip{background:#fff}
+  @page{size:letter;margin:12mm}
+}
+.ps-page{font-family:var(--ui);color:#2A2622;font-size:11px;line-height:1.5;background:#fff;max-width:200mm;margin:0 auto;padding:4mm}
+.ps-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1.5px solid #2A2622;padding-bottom:10px}
+.ps-brand{display:flex;align-items:center;gap:10px}
+.ps-brand img{height:30px;width:auto}
+.ps-brand b{font-family:var(--disp);font-size:17px;display:block;line-height:1.1}
+.ps-brand span{font-size:7.5px;letter-spacing:.22em;text-transform:uppercase;color:#6C6359}
+.ps-meta{text-align:right;font-size:11px}
+.ps-meta b{font-size:13px}
+.ps-meta span{display:block;font-size:9px;color:#6C6359;margin-top:3px}
+
+.ps-hello{display:flex;gap:22px;justify-content:space-between;margin:18px 0 0}
+.ps-hello h1{font-family:var(--disp);font-size:26px;margin:0;letter-spacing:.01em}
+.ps-thanks{font-family:var(--disp);font-size:15px;margin:2px 0 8px}
+.ps-note{margin:0;max-width:78mm;color:#4A443D}
+.ps-sign{margin:8px 0 0;font-style:italic;color:#6C6359}
+.ps-gift{margin:10px 0 0;padding:9px 11px;background:#F4F1EB;border-radius:4px;max-width:78mm}
+.ps-ship{flex:0 0 62mm;background:#F4F1EB;padding:11px 13px;border-radius:3px}
+.ps-ship b{font-size:8px;letter-spacing:.14em;color:#6C6359;display:block}
+.ps-ship p{margin:4px 0 10px}
+.ps-ship p:last-child{margin-bottom:0}
+
+.ps-items{width:100%;border-collapse:collapse;margin:20px 0 0;font-size:10.5px}
+.ps-items th{text-align:left;font-size:8px;letter-spacing:.12em;color:#6C6359;border-top:1px solid #D9D2C7;border-bottom:1px solid #D9D2C7;padding:6px 6px}
+.ps-items td{padding:8px 6px;border-bottom:1px solid #EDE8E0;vertical-align:top}
+.ps-sku{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:9.5px;color:#4A443D}
+.ps-opt{color:#6C6359;font-style:italic}
+.ps-num{text-align:right;white-space:nowrap}
+.ps-tot{font-weight:600}
+.ps-totals{margin:10px 0 0 auto;border-collapse:collapse;font-size:10.5px;min-width:62mm}
+.ps-totals td{padding:3px 6px}
+.ps-totals .ps-grand td{border-top:1px solid #D9D2C7;padding-top:6px;font-size:12px}
+.ps-giftnote{margin:12px 0 0;font-size:10px;color:#6C6359;font-style:italic}
+
+.ps-look{margin:22px 0 0}
+.ps-eyebrow{font-size:8px;letter-spacing:.14em;color:#6C6359}
+.ps-look h2{font-family:var(--disp);font-size:15px;margin:3px 0 10px;font-weight:400}
+.ps-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.ps-tile img,.ps-noimg{display:block;width:100%;height:24mm;object-fit:cover;border-radius:2px;background:#F4F1EB}
+.ps-tile b{display:block;font-size:10px;margin:5px 0 1px}
+.ps-tile span{font-size:8.5px;color:#6C6359;line-height:1.35;display:block}
+
+.ps-strip{background:#2C463F;color:#fff;text-align:center;font-size:9px;padding:7px 10px;margin:16px 0 0;border-radius:2px}
+.ps-review{display:flex;gap:14px;align-items:center;justify-content:space-between;background:#F4F1EB;padding:12px 14px;margin:12px 0 0;border-radius:3px}
+.ps-review b{font-family:var(--disp);font-size:14px;font-weight:400}
+.ps-review p{margin:4px 0 0;font-size:9.5px;color:#4A443D;max-width:118mm}
+.ps-scan{font-size:8.5px;letter-spacing:.1em;color:#2C463F;font-weight:600;margin-top:7px}
+.ps-review .qr{flex:0 0 auto}
+
+.ps-foot{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0 0;padding-top:12px;border-top:1px solid #D9D2C7}
+.ps-foot b{font-size:8px;letter-spacing:.12em;color:#6C6359;display:block}
+.ps-foot p{margin:4px 0 7px;font-size:9px;line-height:1.45}
+.ps-foot .barcode{display:block}

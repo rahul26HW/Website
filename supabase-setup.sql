@@ -295,68 +295,6 @@ create table if not exists public.contact_messages (
 );
 alter table public.contact_messages enable row level security;
 
--- Replies sent from the admin are kept on the message, so the next person to
--- open it can see what was already said.
-alter table public.contact_messages add column if not exists replied_at timestamptz;
-alter table public.contact_messages add column if not exists reply_body text;
--- ---------------------------------------------------------------------
--- 7b. message_replies  (the conversation after the first contact message)
--- Replies we send and replies that come back, oldest first. Inbound mail
--- arrives through the Edge Function, which may insert but never read.
--- ---------------------------------------------------------------------
-create table if not exists public.message_replies (
-  id          uuid primary key default gen_random_uuid(),
-  message_id  uuid not null references public.contact_messages(id) on delete cascade,
-  direction   text not null check (direction in ('in', 'out')),
-  body        text not null check (length(trim(body)) between 1 and 20000),
-  from_email  text check (length(from_email) <= 254),
-  provider_id text unique,
-  created_at  timestamptz not null default now()
-);
-create index if not exists message_replies_thread on public.message_replies (message_id, created_at);
-alter table public.message_replies enable row level security;
-
-drop policy if exists "admins read replies"   on public.message_replies;
-drop policy if exists "admins add replies"    on public.message_replies;
-drop policy if exists "admins delete replies" on public.message_replies;
-create policy "admins read replies"   on public.message_replies for select to authenticated using ((select public.is_admin()));
-create policy "admins add replies"    on public.message_replies for insert to authenticated with check ((select public.is_admin()));
-create policy "admins delete replies" on public.message_replies for delete to authenticated using ((select public.is_admin()));
-
-grant select, insert, delete on public.message_replies to authenticated;
-grant insert (message_id, direction, body, from_email, provider_id) on public.message_replies to service_role;
--- An answer that arrives puts the message back in the unread list.
-grant update (is_read) on public.contact_messages to service_role;
-
--- Filing an inbound reply runs as the table owner, so the server never needs a key
--- that could read other people's messages. It adds the reply and puts the message
--- back in the unread list in one statement.
-create or replace function public.file_inbound_reply(
-  p_message_id uuid,
-  p_body       text,
-  p_from       text,
-  p_provider_id text
-) returns void
-language plpgsql
-security definer
-set search_path = ''
-as $
-begin
-  if p_message_id is null or coalesce(trim(p_body), '') = '' then
-    return;
-  end if;
-  insert into public.message_replies (message_id, direction, body, from_email, provider_id)
-  values (p_message_id, 'in', left(p_body, 20000), left(p_from, 254), p_provider_id)
-  on conflict (provider_id) do nothing;
-  update public.contact_messages set is_read = false where id = p_message_id;
-end;
-$;
-
-revoke all on function public.file_inbound_reply(uuid, text, text, text) from public, anon, authenticated;
-grant execute on function public.file_inbound_reply(uuid, text, text, text) to service_role;
-
-
-
 -- Light spam guard: max 3 messages per email per 10 minutes.
 create or replace function public._contact_before_insert()
 returns trigger language plpgsql security definer set search_path = '' as $$
@@ -434,13 +372,7 @@ alter table public.orders add column if not exists accepted_at           timesta
 alter table public.orders add column if not exists cancelled_at          timestamptz;
 alter table public.orders add column if not exists cancel_requested_at   timestamptz; -- customer asked to cancel after the window
 alter table public.orders add column if not exists cancel_reason         text;
-alter table public.orders add column if not exists return_requested_at   timestamptz;
-
--- Carrier scans (ShipStation API v2), so an order closes itself when it arrives.
-alter table public.orders add column if not exists delivered_at    timestamptz;
-alter table public.orders add column if not exists tracking_status text;
-alter table public.orders add column if not exists tracking_eta    timestamptz;
-alter table public.orders add column if not exists tracking_events jsonb; -- customer asked to return (from their account)
+alter table public.orders add column if not exists return_requested_at   timestamptz; -- customer asked to return (from their account)
 alter table public.orders add column if not exists return_reason         text;
 alter table public.orders add column if not exists payment_method        text not null default 'card'; -- card (Stripe) | cod
 alter table public.orders add column if not exists review_reason         text;          -- set when an order needs a person (e.g. Stripe amount mismatch); never auto-released
@@ -787,7 +719,8 @@ begin
 
   insert into public.orders (order_number, email, name, phone, shipping_address,
                              subtotal, discount, shipping, tax, total, promo_code, customer_note,
-                             payment_method, cod_fee, payment_status, paid_at, visit_source, visit_medium)
+                             payment_method, cod_fee, payment_status, paid_at, visit_source, visit_medium,
+                             is_gift, gift_message)
   values (v_number, v_email, v_name, left(nullif(trim(p_order->>'phone'),''), 40),
           jsonb_build_object(
             'line1',   left(trim(v_addr->>'line1'), 200),
@@ -804,7 +737,11 @@ begin
           case when v_method = 'cod' then now() end,
           -- Where this shopper came from, for the Analytics screen. Just a label, never anything personal.
           left(nullif(trim(coalesce(p_order->>'visitSource','')), ''), 80),
-          left(nullif(trim(coalesce(p_order->>'visitMedium','')), ''), 20))
+          left(nullif(trim(coalesce(p_order->>'visitMedium','')), ''), 20),
+          -- A gift goes to someone who did not pay for it, so the packing slip in the box
+          -- leaves the prices off. It changes what is printed, never what is charged.
+          coalesce((p_order->>'isGift')::boolean, false),
+          left(nullif(trim(coalesce(p_order->>'giftMessage','')), ''), 300))
   returning id, pay_token into v_order_id, v_token;
 
   insert into public.order_items (order_id, product_id, sku, name, variant, unit_price, qty, line_total, image)

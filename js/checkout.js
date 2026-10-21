@@ -116,6 +116,7 @@
     }
     if (HW.account) HW.account.prefillCheckout(DRAFT);
     var saved = (u.session.get(DRAFT, {}) || {}).pay;
+    var giftOn = !!(u.session.get(DRAFT, {}) || {}).gift;
     var pay = card && cod ? (saved === 'cod' ? 'cod' : 'card') : cod ? 'cod' : 'card';
     var pmax = Number(((HW.DB && HW.DB.payments) || {}).codMax) || 500;
     var codDesc = 'Pay in cash when your order is delivered' + (codFee() ? ' · ' + u.money(codFee()) + ' fee' : '') + ' · orders up to ' + u.money(pmax) + '.';
@@ -145,6 +146,13 @@
         field('zip', 'ZIP code', 'text', { ac: 'postal-code', inputmode: 'numeric', pattern: '\\d{5}(-\\d{4})?', max: 10 }) + '</div>' +
         '<p class="muted" style="font-size:13px;margin:0">We currently ship within the United States.</p>' +
         field('note', 'Order note', 'textarea', { optional: true }) +
+        /* A gift goes to someone who did not pay for it, so the slip in the box leaves the
+           prices off. It changes what is printed and nothing about what is charged, which
+           is why it says so here — the total underneath does not move. */
+        '<label class="giftbox"><input type="checkbox" id="coGift" name="gift"' + (giftOn ? ' checked' : '') + '>' +
+        '<span><b>This is a gift</b><span class="muted">We’ll leave the prices off the packing slip in the box. Your total is unchanged.</span></span></label>' +
+        '<div id="coGiftMsg"' + (giftOn ? '' : ' hidden') + '>' +
+        field('giftMessage', 'Gift message', 'textarea', { optional: true, max: 300 }) + '</div>' +
         payBlock +
         '<p class="form-msg" id="coMsg" role="alert" hidden></p>' +
         '<button class="btn loom block" id="coSubmit" type="submit"' + (anyOut || codBlock(t, pay) ? ' disabled' : '') + '>' + submitLabel(pay, t) + '</button>' +
@@ -238,6 +246,13 @@
       var form = document.querySelector('form[data-form="checkout"]');
       if (!HW.cart.lines().length) { HW.router.run({ scroll: false }); return; }
       if (form) HW.checkout.payChanged(form);
+    },
+    giftChanged: function (el) {
+      var box = document.getElementById('coGiftMsg');
+      if (box) box.hidden = !el.checked;
+      var d = u.session.get(DRAFT, {}) || {};
+      d.gift = !!el.checked;
+      u.session.set(DRAFT, d);
     },
     payChanged: function (form) {
       var t = HW.cart.totals(), pay = method(form), block = codBlock(t, pay);
@@ -347,6 +362,8 @@
         var result = await HW.api.rpc('place_order', {
           p_order: {
             email: get('email'), name: get('name'), phone: get('phone'), note: get('note'),
+            isGift: !!(document.getElementById('coGift') || {}).checked,
+            giftMessage: get('giftMessage'),
             address: { line1: get('line1'), line2: get('line2'), city: get('city'), state: get('state'), zip: get('zip'), country: 'US' },
             promoCode: t.promo && t.promoValid ? t.promo.code : '',
             visitSource: HW.measure ? HW.measure.source().s : '',

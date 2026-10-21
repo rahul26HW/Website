@@ -207,6 +207,7 @@
       else if (el.dataset.act === 'sort') HW.catalog.sort(el);
       else if (el.dataset.act === 'acct-sub') HW.account.subscribe(el);
       else if ((el.name === 'pay' || el.id === 'co_state') && el.closest('form[data-form="checkout"]')) HW.checkout.payChanged(el.closest('form'));
+      else if (el.id === 'coGift') HW.checkout.giftChanged(el);
       else if (el.dataset.act === 'acct-ret-order') HW.account.returnOrder(el);
     });
     document.addEventListener('input', function (e) {
