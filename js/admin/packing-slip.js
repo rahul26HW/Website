@@ -13,8 +13,9 @@
 
   var A = HW.A, u = HW.u, esc = u.esc;
 
-  /* The PDF the shop designed has a line under each category. They are not in the
-     catalogue, so they live here until there is a reason to make them editable. */
+  /* Each category carries its own line, set in Admin → Categories. These are what the
+     shop first wrote, kept as a fallback so a category nobody has got to still reads
+     like the rest rather than showing a gap. */
   var TAGLINES = {
     towels: 'Soft. Absorbent. Everyday luxury.',
     rugs: 'Plush comfort for every step.',
@@ -50,7 +51,7 @@
       var img = c.image ? '<img src="' + esc(HW.asset(c.image)) + '" alt="">' : '<span class="ps-noimg"></span>';
       return '<div class="ps-tile">' + img +
         '<b>' + esc(c.name) + '</b>' +
-        '<span>' + esc(TAGLINES[c.slug] || '') + '</span></div>';
+        '<span>' + esc(c.tagline || TAGLINES[c.slug] || '') + '</span></div>';
     }).join('');
   }
 

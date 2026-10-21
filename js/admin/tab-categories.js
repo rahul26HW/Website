@@ -41,6 +41,7 @@
       ui.panel('', '<div class="grid2">' + ui.field('Name', '@name', c.name, { live: 'catName', maxlength: 40 }) +
         ui.field('URL slug', '@slug', c.slug, { type: 'slug', id: 'catSlug', hint: 'Link: /category/<b>slug</b>' }) + '</div>' +
         ui.imageInput('Tile image', '@image', c.image, { folder: 'categories', max: 1200, hint: 'Portrait, about 1200 × 1540 px. Blank = woven color tile.' }) +
+        ui.field('Line on the packing slip', '@tagline', c.tagline, { maxlength: 60, hint: 'Printed under this category on the slip in the box, e.g. “Soft. Absorbent. Everyday luxury.”' }) +
         ui.check('Hide this category from shoppers', '@hidden', c.hidden)) +
       ui.panel('Search engine listing (SEO)',
         ui.field('SEO title', '@seoTitle', c.seoTitle, { maxlength: 70, hint: 'Blank = category name.' }) +

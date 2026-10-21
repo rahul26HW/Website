@@ -209,6 +209,7 @@
       if (!Array.isArray(c.subcategories)) c.subcategories = [];
       c.subcategories.forEach(function (s) { if (!s.id) s.id = uid('s'); if (!s.slug) s.slug = slugify(s.name); });
       if (!isObj(c.filters)) c.filters = { type: true, color: true, material: true, price: true };
+      c.tagline = str(c.tagline).slice(0, 60);
       if (typeof c.hidden !== 'boolean') c.hidden = false;
       c.image = fixImageUrl(c.image);
       c.seoTitle = str(c.seoTitle); c.seoDescription = str(c.seoDescription);
