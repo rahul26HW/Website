@@ -329,6 +329,12 @@
       if (!confirm(ask)) return;
       patch.payment_status = held ? 'voided' : 'refunded';
     }
+    /* Marking it delivered by hand has to stamp the time, the way the carrier's own
+       update does. Without it the order is delivered but dateless, and the job that
+       asks how it went — which works backwards from that date — never sees it. */
+    if (patch.status === 'delivered' && o.status !== 'delivered' && !o.delivered_at) {
+      patch.delivered_at = new Date().toISOString();
+    }
     var was = o.status;
     var r = await A.sb.from('orders').update(patch).eq('id', o.id).select('*, order_items(*)');
     if (r.error || !r.data || !r.data.length) { u.toast('Save failed: ' + (r.error ? r.error.message : 'not allowed')); return; }
