@@ -1444,7 +1444,7 @@ function emailLayout(brand, site, title, bodyHtml, why, footHtml) {
   return `<!doctype html><html><body style="margin:0;background:#F7F4EF;font-family:Arial,Helvetica,sans-serif;color:#2A2622">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F4EF;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #E6E0D6;border-radius:6px">
-<tr><td style="background:#2C463F;padding:18px 24px;border-radius:6px 6px 0 0"><span style="font-family:Georgia,serif;font-size:22px;color:#ffffff">${b}</span></td></tr>
+<tr><td style="background:#2C463F;padding:18px 24px;border-radius:6px 6px 0 0">${site ? `<img src="${esc(site)}assets/email/hw-logo-light.png" width="120" height="54" alt="${b}" style="display:block;border:0;width:120px;height:auto">` : `<span style="font-family:Georgia,serif;font-size:22px;color:#ffffff">${b}</span>`}</td></tr>
 <tr><td style="padding:24px">
 <h1 style="font-family:Georgia,serif;font-weight:400;font-size:24px;margin:0 0 14px">${esc(title)}</h1>
 ${bodyHtml}
