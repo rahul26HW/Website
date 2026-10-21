@@ -649,7 +649,11 @@ footer.site{background:var(--ink);color:#E7E0D4;margin-top:10px}
      the full width and the thumbnails sit under it, swiped sideways like any phone gallery. */
   .galleryV{flex-direction:column;gap:10px}
   .vmain{width:100%;min-width:0}
-  .vthumbs-wrap{flex-direction:row;width:100%;max-width:100%;min-width:0;height:auto;max-height:none;order:2;gap:0}
+  /* The height is forced because the script sets one inline to match the image, and a
+     browser can hold a stale copy of that script alongside a fresh copy of this file —
+     which left a row of thumbnails sitting in a 361px box, with the rest of it blank.
+     The layout must not depend on the two files arriving together. */
+  .vthumbs-wrap{flex-direction:row;width:100%;max-width:100%;min-width:0;height:auto!important;max-height:none;order:2;gap:0}
   .vth-nav{display:none}
   /* min-width:0 is what lets the strip scroll rather than grow: without it the row takes
      the width of all its thumbnails and simply runs off the side of the phone. */
