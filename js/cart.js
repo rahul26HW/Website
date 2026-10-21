@@ -209,7 +209,7 @@
         var err = promoMsg.indexOf('err:') === 0;
         promoArea = '<form class="promo-wrap" data-form="promo" novalidate><div class="promo-row">' +
           '<label class="sr-only" for="promoInput">Promo code</label>' +
-          '<input id="promoInput" class="fld-inline" placeholder="Promo code" autocomplete="off" style="border:1px solid var(--line);border-radius:var(--r);padding:9px 12px;font-size:14px;font-family:inherit;background:#fff"' + (err ? ' aria-invalid="true" aria-describedby="promoNote"' : '') + '>' +
+          '<input id="promoInput" class="fld-inline" placeholder="Promo code" autocomplete="off" style="border:1px solid var(--line);border-radius:var(--r);padding:9px 12px;font-family:inherit;background:#fff"' + (err ? ' aria-invalid="true" aria-describedby="promoNote"' : '') + '>' +
           '<button class="btn ghost sm" type="submit">Apply</button></div>' +
           (promoMsg ? '<div id="promoNote" class="promo-note ' + (err ? 'err' : 'ok') + '" role="alert">' + esc(promoMsg.replace(/^err:/, '')) + '</div>' : '') + '</form>';
       }
