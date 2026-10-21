@@ -42,7 +42,13 @@
   function authShell(inner) {
     var bd = HW.DB.brand || {}, name = bd.name || 'Home Weavers';
     return '<div class="auth">' +
-      '<div class="auth-brand"><a class="auth-logo" href="' + HW.link('/') + '"><svg width="26" height="26" viewBox="0 0 22 22" fill="none" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M1 6h20M1 11h20M1 16h20M6 1v20M11 1v20M16 1v20" stroke="currentColor" stroke-width="1" opacity=".55"/></svg><span>' + esc(name) + '</span></a>' +
+      /* This panel is dark, so it wants the pale copy of the logo — the near-black one
+         would disappear into it. Until now it showed neither and drew its own mark. */
+      '<div class="auth-brand"><a class="auth-logo" href="' + HW.link('/') + '">' +
+      (bd.logoLight
+        ? '<img class="auth-logo-img" src="' + esc(HW.asset(bd.logoLight)) + '" alt="">'
+        : '<svg width="26" height="26" viewBox="0 0 22 22" fill="none" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M1 6h20M1 11h20M1 16h20M6 1v20M11 1v20M16 1v20" stroke="currentColor" stroke-width="1" opacity=".55"/></svg>') +
+      '<span>' + esc(name) + '</span></a>' +
       '<div class="auth-pitch"><p class="auth-eyebrow">' + esc(bd.tagline || 'Woven for the way you live') + '</p><p class="auth-title">Welcome home</p>' +
       '<p class="auth-text">Track your orders, save your addresses and check out faster — all in one place.</p></div>' +
       '<p class="auth-foot">© ' + new Date().getFullYear() + ' ' + esc(name) + '</p></div>' +

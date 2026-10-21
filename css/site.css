@@ -94,7 +94,7 @@ header.site{position:sticky;top:var(--snip-top,0);z-index:40;background:rgba(247
 .acct-items img{width:56px;height:56px;object-fit:cover;border-radius:var(--r);background:var(--linen);display:block}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--loom);text-decoration:underline;cursor:pointer;min-height:24px}
 .acct-code{font-size:22px;letter-spacing:.35em;max-width:12em}
-@media(max-width:720px){.acct-link{display:none}}
+@media(max-width:720px){.hactions{gap:2px}.hactions .iconbtn{padding:6px}#wishLink{display:none}}
 /* Signed-in header icon: initials */
 .hactions .acct-link.signed svg{display:none}
 .acct-ini{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--loom-dk);color:#fff;font-size:10.5px;letter-spacing:.04em;font-weight:600}
@@ -673,12 +673,12 @@ footer.site{background:var(--ink);color:#E7E0D4;margin-top:10px}
   /* The logo may be a monogram rather than a wordmark, in which case hiding the name
      leaves a phone with nothing that says whose shop this is. Admin › Brand decides
      whether the name shows; here it is only made small enough to sit beside the mark. */
-  .brand .mark{gap:7px}
-  .brand .mark #brandName{font-size:17px}
+  .brand .mark{gap:6px}
+  .brand .mark #brandName{font-size:16px}
   .cat-rail .cat-tile,.prod-rail .pcard{flex:0 0 78%}
   .brand{justify-self:center;max-width:100%}
   .brand .tagline{display:none}
-  .brand .mark .logo-img{height:28px;max-width:84px}
+  .brand .mark .logo-img{height:26px;max-width:70px}
   .brand .mark{font-size:22px}
   .features{grid-template-columns:1fr}
   .fmain{gap:36px 40px;padding:44px 0 30px}
@@ -1132,3 +1132,12 @@ main#view.booting ~ footer.site{visibility:hidden}
   .rv-when{margin-left:0;width:100%}
   .rv-wrap h2,.rv-empty h2{font-size:22px}
 }
+
+/* The drawer, grouped. A flat list of eleven identical rows hides the one the
+   visitor came for: the account sat between Bath Accessories and Shipping. */
+.mgroup{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;padding:20px 0 4px;border:none}
+.mgroup:first-child{padding-top:4px}
+.macct{display:flex;align-items:center;gap:11px;padding:14px 0;border-bottom:1px solid var(--line);font-size:15px;letter-spacing:.02em;text-transform:none}
+.macct svg{flex:0 0 auto}
+.macct b{font-weight:600}
+.auth-logo-img{height:30px;width:auto;max-width:150px;object-fit:contain;display:block}

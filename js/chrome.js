@@ -130,15 +130,33 @@
       return '<div class="navitem"><a href="' + HW.link('/category/' + c.slug) + '">' + esc(c.name) + '</a>' + fly + '</div>';
     }).join('');
 
-    document.getElementById('mnavLinks').innerHTML = cats.map(function (c) {
-      var subs = menuSubs(c);
-      return '<a href="' + HW.link('/category/' + c.slug) + '">' + esc(c.name) + '</a>' +
-        (subs.length ? '<div class="msub">' + subs.map(function (s) {
-          return '<a href="' + HW.link('/category/' + c.slug + '?sub=' + encodeURIComponent(s.slug)) + '">' + esc(s.name) + '</a>';
-        }).join('') + '</div>' : '');
-    }).join('') + '<a href="' + HW.link('/account') + '">Your account</a>' + visiblePages('service').concat(visiblePages('company')).map(function (p) {
-      return '<a href="' + HW.link('/page/' + p.slug) + '">' + esc(p.title) + '</a>';
-    }).join('');
+    /* Eleven rows that all looked alike, with the account between Bath Accessories and
+       Shipping & Returns: whatever the visitor opened the menu for, they had to read the
+       whole list to find it. Shopping, help and the account are three different errands,
+       so they are three different blocks — and the account, the one people come looking
+       for, is the first thing in it rather than the fifth. */
+    var acct = HW.account && HW.account.get();
+    var PERSON = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20.5c1.4-3.9 4.4-6 8-6s6.6 2.1 8 6" stroke-linecap="round"/></svg>';
+    function pageLinks(group) {
+      return visiblePages(group).map(function (p) {
+        return '<a href="' + HW.link('/page/' + p.slug) + '">' + esc(p.title) + '</a>';
+      }).join('');
+    }
+    function block(label, links) { return links ? '<div class="mgroup">' + esc(label) + '</div>' + links : ''; }
+
+    document.getElementById('mnavLinks').innerHTML =
+      '<a class="macct" href="' + HW.link('/account') + '">' + PERSON +
+      (acct ? '<span><b>Your account</b></span>' : '<span><b>Sign in</b> or create an account</span>') + '</a>' +
+      '<a class="macct" href="' + HW.link('/wishlist') + '">' + '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.6 8.4 3.4 5 6.8 5c2 0 3.4 1.1 4.2 2.4C11.8 6.1 13.2 5 15.2 5c3.4 0 5.2 3.4 4.1 6.3C19.5 15.9 12 20.5 12 20.5z" stroke-linejoin="round"/></svg>' + '<span>Wishlist</span></a>' +
+      block('Shop', cats.map(function (c) {
+        var subs = menuSubs(c);
+        return '<a href="' + HW.link('/category/' + c.slug) + '">' + esc(c.name) + '</a>' +
+          (subs.length ? '<div class="msub">' + subs.map(function (s) {
+            return '<a href="' + HW.link('/category/' + c.slug + '?sub=' + encodeURIComponent(s.slug)) + '">' + esc(s.name) + '</a>';
+          }).join('') + '</div>' : '');
+      }).join('')) +
+      block('Help', pageLinks('service')) +
+      block(DB.brand.name || 'Home Weavers', pageLinks('company'));
 
     var shopLinks = cats.map(function (c) { return '<a href="' + HW.link('/category/' + c.slug) + '">' + esc(c.name) + '</a>'; }).join('');
     function pageCol(key, label, first) {
