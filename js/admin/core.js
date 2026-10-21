@@ -108,7 +108,11 @@
     var bd = (HW.DB && HW.DB.brand) || { name: 'Home Weavers' };
     document.getElementById('admin').innerHTML =
       '<div class="login"><form class="box" data-aform="login" novalidate aria-labelledby="loginHead">' +
-      '<div class="mark">' + HW.SVG.logo + ' ' + esc(bd.name) + '</div>' +
+      /* This box is light, so it wants the dark mark. It had been drawing the woven grid
+         that stood in before there was a logo at all. */
+      '<div class="mark">' + (bd.logoImage
+        ? '<img src="' + esc(HW.asset(bd.logoImage)) + '" alt="" style="height:30px;width:auto;vertical-align:middle;margin-right:9px">'
+        : HW.SVG.logo + ' ') + esc(bd.name) + '</div>' +
       '<h1 id="loginHead" class="muted" style="margin:0 0 20px;font-family:var(--ui);font-size:15px;font-weight:400">Store admin</h1>' +
       (note ? '<p class="form-msg err" role="alert" style="margin:0 0 14px;text-align:left">' + esc(note) + '</p>' : '') +
       '<div class="field" style="text-align:left"><label for="ademail">Email</label><input id="ademail" name="email" type="email" autocomplete="username" required></div>' +
