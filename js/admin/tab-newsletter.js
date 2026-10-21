@@ -7,8 +7,21 @@
   'use strict';
 
   var A = HW.A, u = HW.u, esc = u.esc;
-  var st = { count: null, subject: '', title: '', body: '', test: '', sending: false, last: null,
-    banner: '', bannerLink: '', picks: [], ctaLabel: '', ctaLink: '' };
+  var DRAFT = 'hw:newsletterDraft';
+  var st = Object.assign(
+    { count: null, subject: '', title: '', body: '', test: '', sending: false, last: null,
+      banner: '', bannerLink: '', picks: [], ctaLabel: '', ctaLink: '' },
+    u.store.get(DRAFT, {}) || {});
+  st.count = null; st.sending = false; st.last = null;
+  if (!Array.isArray(st.picks)) st.picks = [];
+
+  function keep() {
+    u.store.set(DRAFT, {
+      subject: st.subject, title: st.title, body: st.body, test: st.test,
+      banner: st.banner, bannerLink: st.bannerLink, picks: st.picks,
+      ctaLabel: st.ctaLabel, ctaLink: st.ctaLink,
+    });
+  }
 
   async function loadCount() {
     var r = await A.sb.from('subscribers').select('id', { count: 'exact', head: true });
@@ -158,17 +171,17 @@
     after: function () {
       if (st.count == null) loadCount().then(function () { if (A.tab === 'newsletter') A.render(); });
       var body = document.getElementById('nlBody');
-      if (body) body.addEventListener('input', function () { st.body = body.value; });
+      if (body) body.addEventListener('input', function () { st.body = body.value; keep(); });
       var subj = document.getElementById('nlSubject');
-      if (subj) subj.addEventListener('input', function () { st.subject = subj.value; });
+      if (subj) subj.addEventListener('input', function () { st.subject = subj.value; keep(); });
       var ttl = document.getElementById('nlTitle');
-      if (ttl) ttl.addEventListener('input', function () { st.title = ttl.value; });
+      if (ttl) ttl.addEventListener('input', function () { st.title = ttl.value; keep(); });
       [['nlBanner','banner'], ['nlBannerLink','bannerLink'], ['nlCtaLabel','ctaLabel'], ['nlCtaLink','ctaLink']].forEach(function (pair) {
         var el = document.getElementById(pair[0]);
-        if (el) el.addEventListener('input', function () { st[pair[1]] = el.value; });
+        if (el) el.addEventListener('input', function () { st[pair[1]] = el.value; keep(); });
       });
       var test = document.getElementById('nlTest');
-      if (test) test.addEventListener('input', function () { st.test = test.value; });
+      if (test) test.addEventListener('input', function () { st.test = test.value; keep(); });
     },
   };
 
@@ -179,6 +192,7 @@
     else if (st.picks.length >= 4) { el.checked = false; u.toast('Four is the most that fits.'); return; }
     else st.picks.push(id);
     el.closest('.nlpick').classList.toggle('on', at < 0);
+    keep();
   };
 
   async function send(testTo) {
@@ -194,6 +208,8 @@
       });
       st.last = out;
       u.toast(testTo ? 'Test sent' : 'Sent to ' + out.sent);
+      if (!testTo) { st.subject = ''; st.title = ''; st.body = ''; st.banner = ''; st.bannerLink = '';
+        st.picks = []; st.ctaLabel = ''; st.ctaLink = ''; keep(); }
     } catch (e) {
       u.toast('Couldn’t send: ' + e.message);
     } finally {
