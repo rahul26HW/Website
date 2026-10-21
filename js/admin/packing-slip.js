@@ -24,6 +24,8 @@
     'bath-accessories': 'Function meets everyday style.',
   };
 
+  A.slipTaglines = TAGLINES;
+
   function money(n) { return u.money(n); }
 
   function addressLines(a) {
