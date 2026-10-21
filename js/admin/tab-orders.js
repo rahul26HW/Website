@@ -19,6 +19,23 @@
   }
   function payTag(s) { return A.ui.tag((PAYMENTS.find(function (x) { return x[0] === s; }) || [s, s])[1], s === 'paid' ? 'green' : (/^(unpaid|failed)$/.test(s) ? 'clay' : '')); }
 
+  /* Sales tax, always on the order — including at zero. A missing line reads the same
+     whether tax was waived, never calculated, or quietly switched off, and that is the
+     one thing you cannot afford to guess about. So the line says which it was. */
+  function taxRow(o) {
+    var st = String((o.shipping_address || {}).state || '').toUpperCase();
+    var tx = A.draft.tax || {};
+    var hit = (tx.rates || []).filter(function (r) { return String(r.state || '').toUpperCase() === st; })[0];
+    var rated = hit && Number(hit.rate) > 0;
+    var label = rated ? 'Sales tax (' + esc(st) + ' ' + hit.rate + '%)' : 'Sales tax';
+    var why = Number(o.tax) ? ''
+      : !tx.enabled ? ' <span class="hint">— sales tax is switched off</span>'
+      : !st ? ' <span class="hint">— this order has no state</span>'
+      : rated ? ' <span class="hint badmsg-i">— a rate exists for ' + esc(st) + ' but nothing was charged</span>'
+      : ' <span class="hint">— not registered in ' + esc(st) + '</span>';
+    return '<div class="sumrow"><span>' + label + why + '</span><span>' + u.money(o.tax) + '</span></div>';
+  }
+
   /* US style: a comma between city and state, a space before the ZIP, and nothing at all for the parts the order didn’t have. */
   function addressHTML(a) {
     var cityState = [a.city, a.state].filter(Boolean).join(', ');
@@ -152,7 +169,7 @@
         '<div class="sumbox"><div class="sumrow"><span>Subtotal</span><span>' + u.money(o.subtotal) + '</span></div>' +
         (Number(o.discount) ? '<div class="sumrow"><span>Discount' + (o.promo_code ? ' (' + esc(o.promo_code) + ')' : '') + '</span><span>−' + u.money(o.discount) + '</span></div>' : '') +
         '<div class="sumrow"><span>Shipping</span><span>' + (Number(o.shipping) ? u.money(o.shipping) : 'Free') + '</span></div>' +
-        (Number(o.tax) ? '<div class="sumrow"><span>Tax</span><span>' + u.money(o.tax) + '</span></div>' : '') +
+        taxRow(o) +
         '<div class="sumrow total"><span>Total</span><span>' + u.money(o.total) + '</span></div></div>' +
         // Stock comes off as the order is placed and goes back if it is cancelled — nothing to do here by hand.
         (o.stock_deducted ? '<p class="hint">✓ Counted stock came off when this order came in.</p>'
