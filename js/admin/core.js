@@ -39,7 +39,7 @@
     ['Overview', [['dashboard', 'Dashboard', ICONS.dash], ['analytics', 'Analytics', ICONS.chart]]],
     ['Content', [['storefront', 'Storefront', ICONS.store], ['banner', 'Hero banner', ICONS.banner], ['pages', 'Pages', ICONS.page]]],
     ['Catalog', [['categories', 'Categories', ICONS.cats], ['products', 'Products', ICONS.prod], ['inventory', 'Inventory', ICONS.inv]]],
-    ['Selling', [['orders', 'Orders', ICONS.orders], ['reviews', 'Reviews', ICONS.star], ['promotions', 'Promotions', ICONS.promo], ['marketing', 'Marketing', ICONS.market]]],
+    ['Selling', [['orders', 'Orders', ICONS.orders], ['reviews', 'Reviews', ICONS.star], ['promotions', 'Promotions', ICONS.promo], ['marketing', 'Marketing', ICONS.market], ['newsletter', 'Newsletter', ICONS.mail]]],
     ['Inbox', [['messages', 'Messages', ICONS.mail]]]
   ];
 

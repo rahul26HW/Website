@@ -79,6 +79,11 @@ const handler = {
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     if (request.method === "GET" && url.pathname === "/") return json({ ok: true, service: "home-weavers-worker" }, 200, cors);
+    /* An unsubscribe link is clicked from an email, so it arrives as a GET. It is the
+       one route here that does, and the law requires it to work without a login. */
+    if (request.method === "GET" && url.pathname.replace(/\/+$/, "") === "/newsletter/unsubscribe") {
+      return await handleUnsubscribe(request, env);
+    }
     if (request.method !== "POST") return json({ error: "Use POST" }, 405, cors);
 
     try {
@@ -193,6 +198,7 @@ const handler = {
         /* The scheduled job that asks how an order went. Like /orders/release it needs no
            key: it can only email customers whose order was delivered days ago. */
         case "/reviews/invite": return await handleReviewInvite(request, env, cors);
+        case "/newsletter/send": return await handleNewsletterSend(request, env, cors);
         case "/account/profile": return await handleAccountProfile(request, env, cors);
         case "/account/return": return await handleAccountReturn(request, env, cors);
         case "/account/signout-all": return await handleAccountSignoutAll(request, env, cors);
@@ -1439,7 +1445,7 @@ function trackingLink(carrier, number) {
 
 const money = (n) => "$" + Number(n || 0).toFixed(2);
 
-function emailLayout(brand, site, title, bodyHtml, why) {
+function emailLayout(brand, site, title, bodyHtml, why, footHtml) {
   const b = esc(brand);
   return `<!doctype html><html><body style="margin:0;background:#F7F4EF;font-family:Arial,Helvetica,sans-serif;color:#2A2622">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F4EF;padding:24px 12px"><tr><td align="center">
@@ -1450,7 +1456,7 @@ function emailLayout(brand, site, title, bodyHtml, why) {
 ${bodyHtml}
 </td></tr>
 <tr><td style="padding:16px 24px;border-top:1px solid #E6E0D6;font-size:12px;color:#6C6359">
-${site ? `<a href="${esc(site)}" style="color:#3A5A52">${esc(site.replace(/^https?:\/\//, "").replace(/\/$/, ""))}</a> · ` : ""}${why ? esc(why) : `You’re getting this email because you placed an order with ${b}.`}
+${site ? `<a href="${esc(site)}" style="color:#3A5A52">${esc(site.replace(/^https?:\/\//, "").replace(/\/$/, ""))}</a> · ` : ""}${why ? esc(why) : `You’re getting this email because you placed an order with ${b}.`}${footHtml || ""}
 </td></tr></table></td></tr></table></body></html>`;
 }
 
@@ -2509,6 +2515,116 @@ async function handleReviewInvite(request, env, cors) {
     if (await sendOrderEmail(env, "review", order, {})) sent++;
   }
   return json({ ok: true, sent, considered: Array.isArray(due) ? due.length : 0 }, 200, cors);
+}
+
+/* ---------------------------------------------------------------- *
+ * The newsletter.
+ *
+ * Two things the law asks of a marketing email in the United States: a way
+ * out that works without signing in, and a real postal address. Both are in
+ * the footer of every one of these, and the way out is checked here rather
+ * than taken on trust — the link carries a signature derived from the
+ * address it belongs to, so nobody can unsubscribe anyone but themselves.
+ * ---------------------------------------------------------------- */
+async function unsubToken(env, email) {
+  return hexOf(await hmacBytes(await accountKey(env), "unsub:" + String(email || "").toLowerCase())).slice(0, 16);
+}
+
+async function unsubUrl(env, data, email) {
+  const base = String(env.SUPABASE_URL || "").replace(/\/+$/, "") + "/functions/v1/hw/newsletter/unsubscribe";
+  return base + "?e=" + encodeURIComponent(email) + "&t=" + (await unsubToken(env, email));
+}
+
+/* A plain page rather than a redirect: the person clicked to be done with it, and
+   should see that it worked without being sent anywhere else. */
+function unsubPage(title, line) {
+  return new Response(
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
+    `<title>${esc(title)}</title></head>` +
+    `<body style="margin:0;background:#F7F4EF;font-family:Arial,Helvetica,sans-serif;color:#2A2622">` +
+    `<div style="max-width:460px;margin:12vh auto;background:#fff;border:1px solid #E6E0D6;border-radius:6px;padding:28px 26px">` +
+    `<h1 style="font-family:Georgia,serif;font-weight:400;font-size:23px;margin:0 0 10px">${esc(title)}</h1>` +
+    `<p style="font-size:15px;line-height:1.6;margin:0">${esc(line)}</p></div></body></html>`,
+    { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
+  );
+}
+
+async function handleUnsubscribe(request, env) {
+  const url = new URL(request.url);
+  const email = String(url.searchParams.get("e") || "").toLowerCase().trim();
+  const token = String(url.searchParams.get("t") || "");
+  if (!email || !token || token !== (await unsubToken(env, email))) {
+    return unsubPage("That link didn’t work", "Please use the unsubscribe link from the bottom of a recent email, or reply to any of ours and we’ll take you off the list.");
+  }
+  try {
+    await db(env, "subscribers?email=eq." + encodeURIComponent(email), { method: "DELETE" });
+  } catch (e) {
+    console.error("unsubscribe failed", e && e.message);
+    return unsubPage("Something went wrong", "We couldn’t update the list just now. Reply to any of our emails and we’ll do it by hand.");
+  }
+  return unsubPage("You’re unsubscribed", "You won’t get any more marketing email from us. Order updates for anything you’ve bought will still arrive.");
+}
+
+/* POST /newsletter/send — admins only. A test goes to one address; a real send
+   goes to the list, in batches, each with its own way out. */
+async function handleNewsletterSend(request, env, cors) {
+  const denied = await requireAdmin(request, env);
+  if (denied) return json({ error: denied }, 401, cors);
+  if (!env.RESEND_API_KEY) return json({ error: "Email isn’t set up on the server yet." }, 501, cors);
+
+  const b = await readJson(request);
+  const subject = str(b.subject, 200);
+  const title = str(b.title, 200) || subject;
+  const bodyHtml = String(b.html || "").slice(0, 60000);
+  if (!subject) return json({ error: "Give it a subject line." }, 400, cors);
+  if (!bodyHtml.trim()) return json({ error: "There’s nothing to send." }, 400, cors);
+
+  const data = await storeData(env);
+  const brand = (data.brand && data.brand.name) || "Home Weavers";
+  const site = String((data.settings && data.settings.siteUrl) || "").replace(/\/?$/, "/");
+  const address = String((data.contact && data.contact.address) || "").split("\n").map((x) => x.trim()).filter(Boolean).join(", ");
+
+  let list;
+  if (b.test) {
+    const one = str(b.test, 254).toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(one)) return json({ error: "That test address doesn’t look right." }, 400, cors);
+    list = [one];
+  } else {
+    const rows = await db(env, "subscribers?select=email&order=created_at.asc&limit=5000");
+    list = (Array.isArray(rows) ? rows : []).map((r) => r.email).filter(Boolean);
+  }
+  if (!list.length) return json({ error: "Nobody is on the list yet." }, 400, cors);
+
+  let sent = 0, failed = 0;
+  /* Resend takes a hundred at a time, and each message is built separately because
+     the unsubscribe link is particular to the person it goes to. */
+  for (let i = 0; i < list.length; i += 100) {
+    const chunk = list.slice(i, i + 100);
+    const messages = await Promise.all(chunk.map(async (to) => {
+      const out = await unsubUrl(env, data, to);
+      const foot =
+        `<br><br><span style="color:#8A8178">${esc(address)}</span>` +
+        `<br><a href="${esc(out)}" style="color:#3A5A52">Unsubscribe</a>`;
+      return {
+        from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT,
+        to: [to],
+        subject,
+        html: emailLayout(brand, site, title, bodyHtml, "You’re getting this because you asked us for news and offers.", foot),
+        headers: { "List-Unsubscribe": "<" + out + ">", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
+      };
+    }));
+    const res = await fetch("https://api.resend.com/emails/batch", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(messages),
+    });
+    if (res.ok) { sent += chunk.length; }
+    else {
+      failed += chunk.length;
+      console.error("newsletter batch failed", res.status, (await res.text()).slice(0, 200));
+    }
+  }
+  return json({ ok: true, sent, failed, test: !!b.test }, 200, cors);
 }
 
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
