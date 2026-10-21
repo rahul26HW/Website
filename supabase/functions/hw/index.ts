@@ -2606,7 +2606,7 @@ async function handleNewsletterSend(request, env, cors) {
         `<br><br><span style="color:#8A8178">${esc(address)}</span>` +
         `<br><a href="${esc(out)}" style="color:#3A5A52">Unsubscribe</a>`;
       return {
-        from: env.EMAIL_FROM || EMAIL_FROM_DEFAULT,
+        from: env.NEWSLETTER_FROM || env.EMAIL_FROM || EMAIL_FROM_DEFAULT,
         to: [to],
         subject,
         html: emailLayout(brand, site, title, bodyHtml, "You’re getting this because you asked us for news and offers.", foot),
