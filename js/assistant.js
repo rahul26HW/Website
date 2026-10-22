@@ -235,8 +235,13 @@
 
   A.route = function (text) {
     var t = String(text || '');
-    if (ORDER_RE.test(t)) return 'order';
     var answer = bestFaq(t), products = catalogHits(t).length;
+    if (ORDER_RE.test(t)) {
+      // "How long will my order take" names an order but asks about our dispatch time, not
+      // about theirs. The question frame tells them apart: a lookup has no "how long" in it.
+      var framed = words(t).some(function (w) { return FRAME.indexOf(w) >= 0; });
+      if (!(framed && answer)) return 'order';
+    }
     // When both could answer, the phrasing decides. A question gets an answer; a list of
     // things gets things. Without that, "navy bath towels" lands on "how do I wash towels".
     if (answer && products) return isQuestion(t) ? 'faq' : 'finder';

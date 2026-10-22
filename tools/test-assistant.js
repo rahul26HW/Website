@@ -282,6 +282,19 @@ test('a genuine "how long" question still finds the delivery-time entry', functi
   assert(html.indexOf('How long will my order take') >= 0, 'got: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
 });
 
+test('"how long will my order take" is a delivery question, not a lookup', function () {
+  askReal('x');  // load the real-sized faq into the context
+  assert(asstCtx.HW.assistant.route('how long will my order take') === 'faq',
+    'routed to ' + asstCtx.HW.assistant.route('how long will my order take'));
+});
+
+test('"where is my order" is still a lookup', function () {
+  askReal('x');
+  assert(asstCtx.HW.assistant.route('where is my order') === 'order',
+    'routed to ' + asstCtx.HW.assistant.route('where is my order'));
+  assert(asstCtx.HW.assistant.route('track my parcel') === 'order', 'tracking should still be a lookup');
+});
+
 test('a shipping-cost question still finds the shipping entry', function () {
   const html = askReal('how much is delivery');
   assert(html.indexOf('How much is shipping') >= 0, 'got: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
