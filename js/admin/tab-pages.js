@@ -21,7 +21,29 @@
             '<button class="txtbtn" type="button" data-a="page-toggle" data-i="' + i + '">' + (p.show === false ? 'Show' : 'Hide') + '</button>' +
             (SYSTEM.indexOf(p.slug) > -1 ? '<span class="hint" title="The site needs this page">Built-in</span>' : '<button class="txtbtn danger" type="button" data-a="page-delete" data-i="' + i + '">Delete</button>') + '</div></div>';
         }).join('') : '<p class="muted" style="font-size:14px">No pages in this column.</p>');
-      }).join('') + A.ui.saveBtn();
+      }).join('') + A.ui.saveBtn() + faqPanel();
+  }
+
+  /* The questions customers keep asking, answered once in your own words. They show on
+     /page/faq and they are what the assistant answers from, so an answer written here is
+     the same answer a customer gets either way. */
+  function faqPanel() {
+    var ui = A.ui, faq = A.draft.faq || [];
+    return '<section class="panel"><div class="slidehead"><h2 class="ph3" style="margin:0">Frequently asked questions</h2>' +
+      '<button class="btn loom sm" type="button" data-a="faq-add">+ Add question</button></div>' +
+      '<p class="hint">These show on the FAQ page and are what the assistant answers from. Write them the way you would answer an email.</p>' +
+      (faq.length ? faq.map(function (f, i) {
+        return '<div class="colorcard"><div class="slidehead" style="margin-bottom:10px">' +
+          '<strong style="font-size:13px">' + esc(f.q ? HW.seo.clip(f.q, 60) : 'New question') + '</strong><div class="rowbtns">' +
+          '<button class="txtbtn" type="button" data-a="faq-move" data-i="' + i + '" data-d="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move question ' + (i + 1) + ' up">↑</button>' +
+          '<button class="txtbtn" type="button" data-a="faq-move" data-i="' + i + '" data-d="1"' + (i === faq.length - 1 ? ' disabled' : '') + ' aria-label="Move question ' + (i + 1) + ' down">↓</button>' +
+          '<button class="txtbtn danger" type="button" data-a="faq-remove" data-i="' + i + '">Remove</button></div></div>' +
+          ui.field('Question', 'faq.' + i + '.q', f.q, { maxlength: 160, placeholder: 'Do your towels shrink?' }) +
+          ui.field('Answer', 'faq.' + i + '.a', f.a, { textarea: true, rows: 4 }) +
+          ui.field('Other words customers use', 'faq.' + i + '.tags', f.tags, { hint: 'Words that are not in the question itself — “refund”, “exchange”, “money back”. Helps the assistant find this answer.' }) +
+          ui.check('Show this question', 'faq.' + i + '.show', f.show !== false) + '</div>';
+      }).join('') : '<p class="muted" style="font-size:14px">No questions yet. The FAQ page stays hidden until you add one.</p>') +
+      ui.saveBtn() + '</section>';
   }
 
   function editor() {
@@ -66,6 +88,22 @@
     A.edit = null; A.editKey = null; A.editDirty = null; A.commitEdit = null;
     return true;
   }
+
+  function rerenderFaq() { var y = window.scrollY; A.render(); window.scrollTo(0, y); A.refreshDirtyBar(); }
+  A.actions['faq-add'] = function () {
+    if (!Array.isArray(A.draft.faq)) A.draft.faq = [];
+    A.draft.faq.push({ id: 'faq_' + Math.random().toString(36).slice(2, 8), q: '', a: '', tags: '', show: true });
+    rerenderFaq();
+  };
+  A.actions['faq-remove'] = function (el) {
+    if (!confirm('Remove this question?')) return;
+    A.draft.faq.splice(+el.dataset.i, 1); rerenderFaq();
+  };
+  A.actions['faq-move'] = function (el) {
+    var a = A.draft.faq, i = +el.dataset.i, j = i + (+el.dataset.d);
+    if (j < 0 || j >= a.length) return;
+    var t = a[i]; a[i] = a[j]; a[j] = t; rerenderFaq();
+  };
 
   A.actions['page-new'] = function () { openEditor('new', { title: '', slug: '', group: 'service', show: true, body: '', seoTitle: '', seoDescription: '' }); };
   A.actions['page-edit'] = function (el) { openEditor(el.dataset.i, A.clone(A.draft.pages[+el.dataset.i])); };
