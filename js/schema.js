@@ -273,7 +273,7 @@
     });
 
     (d.socialGallery.tiles || []).forEach(function (t) { t.image = fixImageUrl(t.image); t.url = str(t.url); });
-    (d.features || []).forEach(function (f) { f.image = str(f.image); });
+    (d.features || []).forEach(function (f) { f.image = str(f.image); f.icon = str(f.icon); });
 
     if (!isObj(d.inventory)) d.inventory = {};
     d.schemaVersion = SCHEMA_VERSION;

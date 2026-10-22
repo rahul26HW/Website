@@ -4,8 +4,25 @@
 
   var u = HW.u, esc = u.esc;
 
+  /* One wrapper for the hand-drawn line icons below: same box, same weight, inherits the text colour. */
+  function S(body) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>';
+  }
+
   HW.SVG = {
     logo: '<svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="2" stroke="#3A5A52" stroke-width="1.4"/><path d="M1 6h20M1 11h20M1 16h20M6 1v20M11 1v20M16 1v20" stroke="#3A5A52" stroke-width="1" opacity=".55"/></svg>',
+    /* Little line marks for the homepage highlight strip — one per claim, so three highlights
+       never show the same woven square. HW.featureIcon() picks the one that fits. */
+    feat: {
+      wash: S('<rect x="4" y="2.6" width="16" height="18.8" rx="2.6"/><path d="M4 7.6h16"/><circle cx="12" cy="14.6" r="4.4"/><path d="M9.2 14.6c.7-.8 1.4-.8 2.1 0s1.4.8 2.1 0 1.4-.8 2.1 0"/><circle cx="7" cy="5.1" r=".85" fill="currentColor" stroke="none"/><circle cx="9.9" cy="5.1" r=".85" fill="currentColor" stroke="none"/>'),
+      origin: S('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.6 4 5.6 4 9s-1.4 6.4-4 9c-2.6-2.6-4-5.6-4-9s1.4-6.4 4-9Z"/>'),
+      returns: S('<path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 3.5v4.8h-4.8"/><path d="M12 7.8v4.6l3 1.7"/>'),
+      shipping: S('<path d="M2.8 6.4h10.6v9.2H2.8z"/><path d="M13.4 9.6h3.6l3.2 2.9v3.1h-6.8z"/><circle cx="6.6" cy="17.6" r="1.8"/><circle cx="17.2" cy="17.6" r="1.8"/>'),
+      secure: S('<path d="M12 2.8 20 6v6.1c0 4.3-3.1 7.8-8 9.1-4.9-1.3-8-4.8-8-9.1V6l8-3.2Z"/><path d="m8.8 12 2.3 2.3 4.1-4.6"/>'),
+      cotton: S('<path d="M12 21v-5"/><path d="M12 16c0-5 2.9-8 7.8-9-1 6-3.9 9-7.8 9Z"/><path d="M12 16c0-4.3-2.5-6.9-6.8-7.8.8 5.2 3.3 7.8 6.8 7.8Z"/>'),
+      gift: S('<rect x="3.2" y="9.4" width="17.6" height="11.4" rx="1.6"/><path d="M3.2 13.6h17.6M12 9.4v11.4"/><path d="M12 9.4S10.7 4.2 8.2 4.2a2.4 2.4 0 0 0 0 5.2H12Zm0 0s1.3-5.2 3.8-5.2a2.4 2.4 0 0 1 0 5.2H12Z"/>'),
+      support: S('<path d="M20.4 15.1a2.6 2.6 0 0 1-2.6 2.6H9.1L4 21.4V6.5a2.6 2.6 0 0 1 2.6-2.6h11.2a2.6 2.6 0 0 1 2.6 2.6v8.6Z"/><path d="M9.8 9.4a2.3 2.3 0 1 1 3 2.2v1.3"/><circle cx="12.8" cy="15.2" r=".85" fill="currentColor" stroke="none"/>')
+    },
     weave: '<svg viewBox="0 0 62 14" fill="none" aria-hidden="true"><path d="M2 7h58M9 2v10M20 2v10M31 2v10M42 2v10M53 2v10" stroke="#3A5A52" stroke-width="1.3" stroke-linecap="round" opacity=".7"/></svg>',
     weaveLight: '<svg viewBox="0 0 62 14" fill="none" style="width:62px" aria-hidden="true"><path d="M2 7h58M9 2v10M20 2v10M31 2v10M42 2v10M53 2v10" stroke="#C9BFAE" stroke-width="1.3" stroke-linecap="round"/></svg>',
     facebook: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5 3.66 9.15 8.44 9.94v-7.03H7.9v-2.9h2.54V9.85c0-2.52 1.5-3.91 3.79-3.91 1.1 0 2.24.2 2.24.2v2.47h-1.26c-1.24 0-1.63.78-1.63 1.57v1.88h2.78l-.44 2.9h-2.34V22c4.78-.79 8.44-4.94 8.44-9.94Z"/></svg>',
@@ -16,6 +33,26 @@
     youtube: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23 12s0-3.2-.4-4.7a2.5 2.5 0 0 0-1.8-1.8C19.2 5 12 5 12 5s-7.2 0-8.8.5A2.5 2.5 0 0 0 1.4 7.3C1 8.8 1 12 1 12s0 3.2.4 4.7a2.5 2.5 0 0 0 1.8 1.8C4.8 19 12 19 12 19s7.2 0 8.8-.5a2.5 2.5 0 0 0 1.8-1.8C23 15.2 23 12 23 12Zm-13 3V9l5 3-5 3Z"/></svg>',
     tiktok: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 3c.3 2 1.6 3.6 3.5 3.9v2.6c-1.3.1-2.5-.3-3.6-1v6.1a5.6 5.6 0 1 1-5.6-5.6c.3 0 .6 0 .9.1v2.7a2.9 2.9 0 1 0 2 2.8V3H16Z"/></svg>',
     houzz: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3l7 4V3l7 4v14h-5v-6h-4v6H5V3Z"/></svg>'
+  };
+
+  /* Which mark a homepage highlight gets: the one chosen in the admin, else one read off the
+     wording, else the woven square. Keeps "Machine washable" from sharing a logo with "30-day returns". */
+  var FEAT_GUESS = [
+    [/return|refund|exchange/i, 'returns'],
+    [/wash|laundr|tumble dry|care/i, 'wash'],
+    [/india|made in|origin|hand ?woven|loom/i, 'origin'],
+    [/ship|deliver|arrives/i, 'shipping'],
+    [/secure|safe|checkout|payment|card/i, 'secure'],
+    [/cotton|fiber|fibre|natural|organic|oeko/i, 'cotton'],
+    [/gift|wrap/i, 'gift'],
+    [/help|support|question|contact|email us/i, 'support']
+  ];
+  HW.featureIcon = function (f) {
+    f = f || {};
+    if (HW.SVG.feat[f.icon]) return HW.SVG.feat[f.icon];
+    var text = String(f.title || '') + ' ' + String(f.body || '');
+    for (var i = 0; i < FEAT_GUESS.length; i++) if (FEAT_GUESS[i][0].test(text)) return HW.SVG.feat[FEAT_GUESS[i][1]];
+    return HW.SVG.logo;
   };
 
   /* ---------- logo (image with silent fallback to the text logo) ---------- */

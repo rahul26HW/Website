@@ -4,6 +4,9 @@
 
   var A = HW.A, u = HW.u, esc = u.esc;
   var PLATFORMS = [['facebook', 'Facebook'], ['instagram', 'Instagram'], ['pinterest', 'Pinterest'], ['houzz', 'Houzz'], ['youtube', 'YouTube'], ['tiktok', 'TikTok']];
+  // Marks for the bottom highlight strip. "Choose for me" reads the heading and picks the fitting one.
+  var FEAT_ICONS = [['', 'Choose for me'], ['wash', 'Washing machine'], ['origin', 'Globe (made in…)'], ['returns', 'Returns arrow'],
+    ['shipping', 'Delivery truck'], ['secure', 'Shield (secure)'], ['cotton', 'Cotton sprig'], ['gift', 'Gift box'], ['support', 'Help bubble']];
 
   function slidePanel(s, i, n) {
     var ui = A.ui, p = 'hero.slides.' + i + '.';
@@ -55,7 +58,9 @@
           return '<div class="colorcard"><div class="slidehead" style="margin-bottom:10px"><strong style="font-size:13px">Highlight ' + (i + 1) + '</strong>' +
             '<button class="txtbtn danger" type="button" data-a="feat-remove" data-i="' + i + '"' + (d.features.length <= 1 ? ' disabled' : '') + '>Remove</button></div>' +
             '<div class="grid2">' + ui.field('Heading', 'features.' + i + '.title', f.title) + ui.field('Text', 'features.' + i + '.body', f.body) + '</div>' +
-            ui.imageInput('Picture (optional)', 'features.' + i + '.image', f.image, { folder: 'home', max: 600, hint: 'Square, about 600 × 600 px. Blank = woven icon.' }) + '</div>';
+            '<div class="grid2"><div>' + ui.field('Icon', 'features.' + i + '.icon', f.icon || '', { options: FEAT_ICONS, live: 'featIcon', hint: 'Used when there is no picture below.' }) +
+            '<div class="featprev" data-featprev="' + i + '">' + HW.featureIcon(f) + '</div></div>' +
+            ui.imageInput('Picture (optional)', 'features.' + i + '.image', f.image, { folder: 'home', max: 600, hint: 'Square, about 600 × 600 px. Blank = the icon above.' }) + '</div></div>';
         }).join('') + ui.saveBtn() + '</section>' +
 
         '<section class="panel"><div class="slidehead"><h2 class="ph3" style="margin:0">Social gallery (follow-us band)</h2>' +
@@ -73,6 +78,13 @@
     after: function () { A.wireImgChecks(document.getElementById('adminMain')); }
   };
 
+  /* Swap the little preview the moment a different mark is chosen. */
+  A.live.featIcon = function (el) {
+    var i = +(String(el.dataset.bind).split('.')[1] || 0);
+    var box = document.querySelector('[data-featprev="' + i + '"]');
+    if (box) box.innerHTML = HW.featureIcon(A.draft.features[i] || {});
+  };
+
   A.live.interval = function (el) { A.draft.hero.interval = Math.max(4, parseInt(el.value, 10) || 5) * 1000; };
 
   function rerender() { var y = window.scrollY; A.render(); window.scrollTo(0, y); A.refreshDirtyBar(); }
@@ -83,7 +95,7 @@
     if (j < 0 || j >= a.length) return;
     var t = a[i]; a[i] = a[j]; a[j] = t; rerender();
   };
-  A.actions['feat-add'] = function () { A.draft.features.push({ image: '', title: 'New highlight', body: '' }); rerender(); };
+  A.actions['feat-add'] = function () { A.draft.features.push({ image: '', icon: '', title: 'New highlight', body: '' }); rerender(); };
   A.actions['feat-remove'] = function (el) { A.draft.features.splice(+el.dataset.i, 1); rerender(); };
   A.actions['tile-add'] = function () { A.draft.socialGallery.tiles.push({ image: '', platform: 'instagram', url: '' }); rerender(); };
   A.actions['tile-remove'] = function (el) { A.draft.socialGallery.tiles.splice(+el.dataset.i, 1); rerender(); };

@@ -143,7 +143,7 @@
     if (feats.length) {
       html += '<section class="section tight"><div class="wrap"><div class="features">' + feats.map(function (f) {
         return '<div class="feature reveal"><div class="ic">' +
-          (f.image ? '<img src="' + esc(HW.asset(f.image)) + '" alt="" loading="lazy" height="46">' : HW.SVG.logo) +
+          (f.image ? '<img src="' + esc(HW.asset(f.image)) + '" alt="" loading="lazy" height="46">' : HW.featureIcon(f)) +
           '</div><h3 class="h4">' + esc(f.title || '') + '</h3><p>' + esc(f.body || '') + '</p></div>';
       }).join('') + '</div></div></section>';
     }

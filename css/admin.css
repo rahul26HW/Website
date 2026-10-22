@@ -461,3 +461,5 @@ body.printing-slip #slipRoot{display:block}
 .nlpick span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nlpick.on{border-color:var(--loom);background:rgba(44,70,63,.07);font-weight:600}
 .nlpick input{margin:0;flex:0 0 auto}
+.featprev{display:flex;align-items:center;justify-content:center;height:54px;margin-top:8px;border:1px solid var(--line,#E4DED3);border-radius:6px;background:#fff;color:#3A5A52}
+.featprev svg{width:30px;height:30px}
