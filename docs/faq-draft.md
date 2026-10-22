@@ -98,9 +98,20 @@ source for how much.***
 *Keywords: shrink, size after washing, smaller*
 
 **Q: Can I put bath rugs in the washing machine?**
-A: NEEDS YOUR ANSWER — the care guide covers textiles generally but doesn't call out rugs with
-backing. Say whether the non-slip backing is machine washable and at what temperature.
-*Keywords: wash rug, machine, backing, tumble dry*
+A: Yes, all of them. Machine wash cold, separately, on a gentle cycle with a mild soap. Tumble
+dry on a gentle setting. Don't bleach, don't wring and don't iron. The backing is made for it —
+our cotton rugs are sprayed with natural latex rather than PVC or TPR, which is why they hold
+their grip wash after wash.
+*Source: owner-supplied product feature sheets for both the microfibre and cotton ranges, plus
+the care text already on the products. **Confirmed by Rahul 2026-10-22.***
+*Keywords: wash rug, machine, backing, tumble dry, latex, bleach, iron*
+
+**Q: Will the rug slide around?**
+A: No. Every bath rug has a skid-resistant backing that holds it in place and won't scratch or
+mark delicate flooring. It's breathable too, so the rug dries quickly instead of trapping damp
+underneath.
+*Source: owner-supplied feature sheets — anti-skid, gentle on floors, breathable backing.*
+*Keywords: slip, slide, skid, grip, non slip, backing, floor, scratch*
 
 ---
 
@@ -198,7 +209,6 @@ account under notifications.
 These are worth adding once you've answered them — they're the ones most likely to be asked
 that I have no source for:
 
-1. Can bath rugs go in the washing machine, and what about the backing?
 2. A size guide for rugs: vanity, double vanity, in front of the tub, cloakroom.
 3. Is cash on delivery available to customers right now?
 4. How much do towels shrink, in practice?
