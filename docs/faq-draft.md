@@ -91,11 +91,10 @@ A: Yes — washing new towels before first use sets the weave and improves absor
 *Keywords: first wash, new towels, before use*
 
 **Q: Do your towels shrink?**
-A: A little on the first wash, which is normal for cotton and part of how the weave settles.
-Long-staple cotton softens with every wash, so they get better with use.
-*Source: Care Guide (softening). **The shrinkage sentence needs your confirmation — I have no
-source for how much.***
-*Keywords: shrink, size after washing, smaller*
+A: No. They hold their size through the wash. Long-staple cotton also softens with every wash,
+so they get better with use rather than smaller.
+*Source: **Confirmed by Rahul 2026-10-22** — no shrinkage. Softening is from the Care Guide.*
+*Keywords: shrink, shrinkage, size after washing, smaller, first wash*
 
 **Q: Can I put bath rugs in the washing machine?**
 A: Yes, all of them. Machine wash cold, separately, on a gentle cycle with a mild soap. Tumble
@@ -217,5 +216,4 @@ account under notifications.
 These are worth adding once you've answered them — they're the ones most likely to be asked
 that I have no source for:
 
-4. How much do towels shrink, in practice?
-5. Do you restock sold-out colours, and how long does that take?
+1. Do you restock sold-out colours, and how long does that take?

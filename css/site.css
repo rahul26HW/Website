@@ -1205,3 +1205,10 @@ main#view.booting ~ footer.site{visibility:hidden}
 
 /* The admin has no storefront to ask about, and the click is swallowed there anyway. */
 body.admin-mode .assistbubble,body.admin-mode .assistpanel{display:none}
+/* What other shoppers did, said quietly. One line at a time, because two stacked claims
+   read as a sales pitch and one reads as a fact. */
+.socialproof{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-family:var(--ui);font-size:12.5px;color:var(--ink-soft);min-height:18px}
+.socialproof[hidden]{display:none}
+.socialproof .sp-dot{width:7px;height:7px;border-radius:50%;background:var(--loom);flex:0 0 auto;opacity:.75}
+.socialproof .sp-line{transition:opacity .26s ease}
+@media(prefers-reduced-motion:reduce){.socialproof .sp-line{transition:none}}
