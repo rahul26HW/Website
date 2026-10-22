@@ -120,6 +120,10 @@
   /* ---------- header + footer ---------- */
   HW.paintChrome = function () {
     var DB = HW.DB, m = HW.m;
+    // The assistant stays out of the way until there is a catalog behind it, so it can never
+    // answer "we don't sell that" to someone who arrived before the store finished loading.
+    var assistBtn = document.getElementById('assistBtn');
+    if (assistBtn) assistBtn.hidden = !(HW.assistant && HW.assistant.ready());
     var ann = HW.tokens(DB.announcement || '').trim();
     var annBar = document.getElementById('announce');
     var annText = document.getElementById('announceText');

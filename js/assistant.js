@@ -21,7 +21,7 @@
   function btn(href, label) { return '<a class="btn ghost sm" href="' + esc(href) + '">' + esc(label) + '</a>'; }
 
   function signInPrompt(why) {
-    return p(esc(why)) + '<div class="asst-actions">' + btn(HW.link('/account'), 'Sign in') + '</div>';
+    return p(esc(why)) + '<div class="as-actions">' + btn(HW.link('/account'), 'Sign in') + '</div>';
   }
 
   /* ---------------------------------------------------------------- *
@@ -40,7 +40,7 @@
       var orders = (data && data.orders) || [];
       if (!orders.length) {
         return p('You haven’t placed an order with us yet.') +
-          '<div class="asst-actions">' + btn(HW.link('/'), 'Start shopping') + '</div>';
+          '<div class="as-actions">' + btn(HW.link('/'), 'Start shopping') + '</div>';
       }
       var o = orders.slice().sort(function (a, b) {
         return (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0);
@@ -54,7 +54,7 @@
               ? '<a class="link-u" href="' + esc(link) + '" target="_blank" rel="noopener noreferrer">' + esc(o.tracking_number) + '</a>'
               : esc(o.tracking_number)))
           : '') +
-        '<div class="asst-actions">' + btn(HW.link('/account/orders'), 'See all your orders') + '</div>';
+        '<div class="as-actions">' + btn(HW.link('/account/orders'), 'See all your orders') + '</div>';
     }, function () {
       // call() already signs this device out on a 401; say so plainly rather than showing a code.
       return signInPrompt('Your session has expired. Sign in again and I’ll look it up.');
@@ -165,7 +165,7 @@
     if (!f) return A.handlers.handoff(text);
     return '<p class="asst-q">' + esc(f.q) + '</p>' +
       HW.richText(HW.tokens(HW.m.pageText(f.a))) +
-      '<div class="asst-actions">' + btn(HW.link('/page/faq'), 'All questions') + '</div>';
+      '<div class="as-actions">' + btn(HW.link('/page/faq'), 'All questions') + '</div>';
   };
 
   /* ---------------------------------------------------------------- *
@@ -189,7 +189,7 @@
     A.lastQuestion = String(text || '');
     try { u.session.set('hw:asked', A.lastQuestion); } catch (e) { /* private mode */ }
     return p('Send it to us and we’ll answer properly — usually the same day.') +
-      '<div class="asst-actions">' + btn(HW.link('/page/contact-us'), 'Contact us') + '</div>';
+      '<div class="as-actions">' + btn(HW.link('/page/contact-us'), 'Contact us') + '</div>';
   }
 
   A.handlers.handoff = function (text) {
@@ -217,6 +217,74 @@
      run against an empty store and answer "we don't sell that". */
   A.ready = function () {
     return !!(HW.DB && Array.isArray(HW.DB.products) && HW.DB.products.length);
+  };
+
+  /* ---------------------------------------------------------------- *
+   * The panel
+   * ---------------------------------------------------------------- */
+  var release = null;
+
+  function log() { return document.getElementById('assistLog'); }
+
+  function say(who, html) {
+    var box = log();
+    if (!box) return;
+    var row = document.createElement('div');
+    row.className = 'as-row as-' + who;
+    row.innerHTML = html;
+    box.appendChild(row);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function greet() {
+    var box = log();
+    if (!box || box.childNodes.length) return;
+    say('bot', p('Ask me about sizes, materials, care, delivery or returns — or tell me what you’re looking for.' +
+      (HW.account && HW.account.get() ? ' You’re signed in, so I can also tell you where your order is.' : '')));
+  }
+
+  HW.assistantPanel = {
+    open: function () {
+      var panel = document.getElementById('assistPanel');
+      if (!panel || !panel.hidden) return;
+      if (HW.menu) HW.menu.close(false);
+      if (HW.cart) HW.cart.close(false);
+      if (HW.searchPanel) HW.searchPanel.close(false);
+      panel.hidden = false;
+      var btn = document.getElementById('assistBtn');
+      if (btn) btn.setAttribute('aria-expanded', 'true');
+      release = u.trapFocus(panel, HW.assistantPanel.close);
+      greet();
+      setTimeout(function () {
+        var input = document.getElementById('assistInput');
+        if (input) input.focus();
+      }, 40);
+    },
+    close: function (restore) {
+      var panel = document.getElementById('assistPanel');
+      if (!panel || panel.hidden) return;
+      panel.hidden = true;
+      var btn = document.getElementById('assistBtn');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+      if (release) { release(restore); release = null; }
+      var a = document.activeElement;
+      if (restore !== false && btn && (!a || a === document.body || panel.contains(a))) btn.focus();
+    },
+    ask: function (text) {
+      text = String(text || '').trim().slice(0, 200);
+      if (!text) return Promise.resolve();
+      say('you', '<p>' + esc(text) + '</p>');
+      var where = A.route(text);
+      say('bot', '<p class="as-wait">…</p>');
+      return Promise.resolve(A.handlers[where](text)).then(function (html) {
+        var box = log();
+        if (box && box.lastChild) box.lastChild.innerHTML = html;
+        if (box) box.scrollTop = box.scrollHeight;
+      }, function () {
+        var box = log();
+        if (box && box.lastChild) box.lastChild.innerHTML = p('Something went wrong on our side. Try again in a moment.');
+      });
+    }
   };
 
   function statusWord(s) {

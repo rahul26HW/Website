@@ -115,6 +115,8 @@
     'cf-clear': function () { HW.catalog.clear(); },
     'cf-toggle': function (el) { HW.catalog.toggleSidebar(el); },
     'search-open': function () { HW.searchPanel.open(); },
+    'assist-open': function () { HW.assistantPanel.open(); },
+    'assist-close': function () { HW.assistantPanel.close(); },
     'search-close': function () { HW.searchPanel.close(); },
     wish: function (el) { HW.wishlist.toggle(el.dataset.id, el); },
     zoom: function (el) { HW.pdp.zoom(el); },
@@ -148,6 +150,7 @@
 
   var forms = {
     newsletter: function (f) { HW.subscribe(f); },
+    assist: function (f) { var i = f.querySelector('input'); HW.assistantPanel.ask(i.value); i.value = ''; },
     promo: function (f) { HW.cart.applyPromo(f.querySelector('input').value); },
     checkout: function (f) { HW.checkout.submit(f); },
     contact: function (f) { HW.contact.submit(f); },

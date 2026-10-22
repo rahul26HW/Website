@@ -8,7 +8,6 @@ exclude:
   - ai-proxy.worker.js
   - supabase
   - tools
-  - docs
   - .claude
   - .gitignore
 include:

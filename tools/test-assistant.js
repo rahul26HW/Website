@@ -241,6 +241,18 @@ test('the router falls back to the finder for a product-shaped question', functi
 });
 
 /* ================================================================ *
+ * Task 6 — the readiness guard
+ * ================================================================ */
+test('the assistant is not ready before the catalog has loaded', function () {
+  asstCtx.HW.DB = {};
+  assert(asstCtx.HW.assistant.ready() === false, 'empty store should not be ready');
+  asstCtx.HW.DB = { products: [], faq: [] };
+  assert(asstCtx.HW.assistant.ready() === false, 'no products should not be ready');
+  asstCtx.HW.DB = { products: [{ id: 'p1' }], faq: [] };
+  assert(asstCtx.HW.assistant.ready() === true, 'a loaded catalog should be ready');
+});
+
+/* ================================================================ *
  * Routing against the real catalog, when a snapshot is available.
  * Fixtures prove the rules; this proves they survive 35 real products.
  * ================================================================ */

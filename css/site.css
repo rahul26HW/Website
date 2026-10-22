@@ -1163,3 +1163,27 @@ main#view.booting ~ footer.site{visibility:hidden}
 .faqans{padding:0 28px 18px 0;color:var(--ink-soft);font-size:14.5px;line-height:1.7}
 .faqans p:first-child{margin-top:0}
 .faqans p:last-child{margin-bottom:0}
+/* The assistant: a panel, not a floating bubble, so it sits with the cart and search rather
+   than hovering over the shop. */
+.assistpanel{position:fixed;inset:0;z-index:70;background:rgba(32,28,24,.45);display:flex;justify-content:flex-end}
+.assistpanel[hidden]{display:none}
+.as-inner{background:var(--paper,#F7F4EE);width:min(420px,100%);height:100%;display:flex;flex-direction:column;box-shadow:-18px 0 50px rgba(0,0,0,.18)}
+.as-head{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 12px;border-bottom:1px solid var(--line)}
+.as-title{font-family:var(--disp);font-size:20px;margin:0;font-weight:400}
+.as-log{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+.as-row{max-width:100%}
+.as-row p{margin:0 0 8px}
+.as-row p:last-child{margin-bottom:0}
+.as-you{align-self:flex-end;background:var(--loom,#3A5A52);color:#fff;border-radius:14px 14px 3px 14px;padding:9px 13px;font-size:14px;max-width:85%}
+.as-bot{font-size:14.5px;line-height:1.65;color:var(--ink)}
+.as-bot .asst-q{font-weight:600;margin-bottom:6px}
+.as-wait{color:var(--ink-soft);letter-spacing:.2em}
+.as-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.as-form{display:flex;gap:8px;padding:12px 18px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+.as-form input{flex:1;min-width:0}
+.asst-grid{grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.asst-grid .pcard .meta .pname{font-size:15px;height:auto;line-height:20px}
+@media(max-width:720px){
+  .as-inner{width:100%}
+  .asst-grid{grid-template-columns:1fr 1fr}
+}
