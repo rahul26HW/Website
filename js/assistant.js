@@ -250,10 +250,11 @@
     return 'handoff';
   };
 
-  /* True once a catalog is loaded. The launcher stays hidden until then, so no handler can
-     run against an empty store and answer "we don't sell that". */
+  /* The launcher stays hidden until there is both a catalog to search and at least one answer
+     written. An assistant with no answers sends every question to the contact form, which is
+     worse than no assistant: it looks like help and isn't. */
   A.ready = function () {
-    return !!(HW.DB && Array.isArray(HW.DB.products) && HW.DB.products.length);
+    return !!(HW.DB && Array.isArray(HW.DB.products) && HW.DB.products.length && shownFaq().length);
   };
 
   /* ---------------------------------------------------------------- *

@@ -309,7 +309,11 @@ test('the assistant is not ready before the catalog has loaded', function () {
   asstCtx.HW.DB = { products: [], faq: [] };
   assert(asstCtx.HW.assistant.ready() === false, 'no products should not be ready');
   asstCtx.HW.DB = { products: [{ id: 'p1' }], faq: [] };
-  assert(asstCtx.HW.assistant.ready() === true, 'a loaded catalog should be ready');
+  assert(asstCtx.HW.assistant.ready() === false, 'a catalog with no answers written is not ready');
+  asstCtx.HW.DB = { products: [{ id: 'p1' }], faq: [{ id: 'f', q: 'Q?', a: 'A.', tags: '', show: true }] };
+  assert(asstCtx.HW.assistant.ready() === true, 'a catalog plus one answer is ready');
+  asstCtx.HW.DB = { products: [{ id: 'p1' }], faq: [{ id: 'f', q: 'Q?', a: 'A.', tags: '', show: false }] };
+  assert(asstCtx.HW.assistant.ready() === false, 'a hidden-only faq is not ready');
 });
 
 /* ================================================================ *

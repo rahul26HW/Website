@@ -1187,3 +1187,18 @@ main#view.booting ~ footer.site{visibility:hidden}
   .as-inner{width:100%}
   .asst-grid{grid-template-columns:1fr 1fr}
 }
+/* The ask button: bottom right, where people look for help, and out of the way of the
+   sticky buy bar on a product page. */
+.assistbubble{position:fixed;right:20px;bottom:20px;z-index:60;display:inline-flex;align-items:center;gap:9px;
+  background:var(--loom,#3A5A52);color:#fff;border:none;border-radius:999px;cursor:pointer;
+  padding:13px 20px 13px 17px;font-family:var(--ui);font-size:13px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;
+  box-shadow:0 8px 26px rgba(32,28,24,.26);transition:transform .18s ease,box-shadow .18s ease,background .18s ease}
+.assistbubble[hidden]{display:none}
+.assistbubble:hover{background:var(--loom-dk,#2C463F);transform:translateY(-2px);box-shadow:0 12px 32px rgba(32,28,24,.32)}
+.assistbubble:focus-visible{outline:2px solid var(--loom-dk,#2C463F);outline-offset:3px}
+.assistbubble svg{flex:0 0 auto}
+@media(max-width:720px){
+  .assistbubble{right:14px;bottom:14px;padding:13px;border-radius:50%}
+  .assistbubble-txt{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  body.has-stickybuy .assistbubble{bottom:calc(84px + env(safe-area-inset-bottom))}
+}

@@ -62,7 +62,7 @@
 <link rel="preconnect" href="https://soydgxrrwozmiqzutypr.supabase.co" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/inter-latin.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/fraunces-latin.woff2" crossorigin>
-<link rel="stylesheet" href="../css/site.css?v=62e85ecc">
+<link rel="stylesheet" href="../css/site.css?v=d89fa1c1">
 <script>
   /* Scripts load right after the first paint, so the header shows while they download.
      Order is kept (async=false). A background tab may never paint, so it loads at once there. */
@@ -102,10 +102,6 @@
         <span class="mark"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="2" stroke="#3A5A52" stroke-width="1.4"/><path d="M1 6h20M1 11h20M1 16h20M6 1v20M11 1v20M16 1v20" stroke="#3A5A52" stroke-width="1" opacity=".55"/></svg><span class="wordblock"><span id="brandName">Home Weavers</span><small class="tagline">Woven for the way you live</small></span></span>
       </a>
       <div class="hactions">
-        <button class="iconbtn" id="assistBtn" type="button" data-act="assist-open" aria-label="Ask us a question" aria-controls="assistPanel" aria-expanded="false" hidden>
-          <span class="lbl" aria-hidden="true">Ask</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 15.1a2.6 2.6 0 0 1-2.6 2.6H9.1L4 21.4V6.5a2.6 2.6 0 0 1 2.6-2.6h11.2a2.6 2.6 0 0 1 2.6 2.6v8.6Z"/><path d="M9.8 9.4a2.3 2.3 0 1 1 3 2.2v1.3"/><circle cx="12.8" cy="15.2" r=".9" fill="currentColor" stroke="none"/></svg>
-        </button>
         <button class="iconbtn" id="searchBtn" type="button" data-act="search-open" aria-label="Search" aria-controls="searchPanel" aria-expanded="false">
           <span class="lbl" aria-hidden="true">Search</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5" stroke-linecap="round"/></svg>
@@ -181,6 +177,11 @@
     <ul class="sp-results" id="searchResults"></ul>
   </div>
 </div>
+
+<button class="assistbubble" id="assistBtn" type="button" data-act="assist-open" aria-label="Ask us a question" aria-controls="assistPanel" aria-expanded="false" hidden>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 15.1a2.6 2.6 0 0 1-2.6 2.6H9.1L4 21.4V6.5a2.6 2.6 0 0 1 2.6-2.6h11.2a2.6 2.6 0 0 1 2.6 2.6v8.6Z"/><path d="M9.8 9.4a2.3 2.3 0 1 1 3 2.2v1.3"/><circle cx="12.8" cy="15.2" r=".9" fill="currentColor" stroke="none"/></svg>
+  <span class="assistbubble-txt">Ask us</span>
+</button>
 
 <div class="assistpanel" id="assistPanel" role="dialog" aria-modal="true" aria-label="Ask Home Weavers" hidden>
   <div class="as-inner">
