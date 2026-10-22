@@ -73,6 +73,7 @@
       snipcart: { enabled: false, apiKey: '', currency: 'usd', version: '3.7.1', mode: 'side', feedUrl: '', tic: '00000' },
       videoBanner: { enabled: false, eyebrow: '', heading: '', body: '', ctaText: '', ctaLink: '', videoUrl: '', bg: '#2A2622' },
       features: [],
+      faq: [],                        // questions the assistant and the FAQ page both answer from
       socialGallery: { enabled: false, heading: 'Find us on social', tiles: [] },
       pages: []
     };
@@ -274,6 +275,13 @@
 
     (d.socialGallery.tiles || []).forEach(function (t) { t.image = fixImageUrl(t.image); t.url = str(t.url); });
     (d.features || []).forEach(function (f) { f.image = str(f.image); f.icon = str(f.icon); });
+
+    if (!Array.isArray(d.faq)) d.faq = [];
+    d.faq.forEach(function (f) {
+      if (!f.id) f.id = uid('faq');
+      f.q = str(f.q); f.a = str(f.a); f.tags = str(f.tags);
+      if (typeof f.show !== 'boolean') f.show = true;
+    });
 
     if (!isObj(d.inventory)) d.inventory = {};
     d.schemaVersion = SCHEMA_VERSION;
