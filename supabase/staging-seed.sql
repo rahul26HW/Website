@@ -10,14 +10,12 @@
 -- @example.com, which is reserved by RFC 2606 and reaches nobody.
 -- =====================================================================
 
-do $
+do $$
 begin
   if exists (select 1 from public.orders where email not like '%@example.com') then
     raise exception 'This database already holds real orders, so it is not a staging project. Stopping.';
   end if;
-end $;
-
-
+end $$;
 -- ---------------------------------------------------------------------
 -- 1. Who can get into the staging admin
 --    Replace the address with the one you will sign in with, then create
