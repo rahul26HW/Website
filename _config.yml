@@ -3,6 +3,8 @@ exclude:
   - README.md
   - CHANGELOG.md
   - supabase-setup.sql
+  - STAGING.md
+  - staging.config.example.json
   - ai-proxy.worker.js
   - supabase
   - tools

@@ -254,7 +254,25 @@
       '<p>' + u.esc(text) + '</p><button class="btn" type="button" data-act="reload">Try again</button></div></div></div>';
   }
 
+  /* A staging copy is a full working shop filled with throwaway data. Say so on every page, and keep
+     search engines out of it, so it can never be mistaken for the real store. */
+  function stagingNotice() {
+    if (!(window.HW_CONFIG || {}).staging) return;
+    // One robots tag only: seo.js keeps it at noindex on every later page.
+    var meta = document.querySelector('meta[name="robots"]');
+    if (!meta) { meta = document.createElement('meta'); meta.name = 'robots'; document.head.appendChild(meta); }
+    meta.content = 'noindex, nofollow';
+    if (document.querySelector('.stagingbar')) return;
+    var bar = document.createElement('div');
+    bar.className = 'stagingbar';
+    bar.setAttribute('role', 'status');
+    bar.textContent = 'STAGING — test data and test payments only. Nothing ordered here is real.';
+    document.body.insertBefore(bar, document.body.firstChild);
+    document.body.classList.add('is-staging');
+  }
+
   async function boot() {
+    stagingNotice();
     wireEvents();
     if (!HW.api.configured()) { showFatal('The store isn’t connected yet. Add your Supabase details to js/config.js.'); return; }
 

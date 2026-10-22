@@ -29,7 +29,9 @@
       var desc = clip(o.description || (brand + ' — bath rugs, towels and home textiles. ' + tagline + '.'), 160);
       document.title = title;
       meta('name', 'description', desc);
-      meta('name', 'robots', o.noindex ? 'noindex, follow' : 'index, follow');
+      // A staging copy must never be indexed, whatever the page itself asks for.
+      var stage = !!(window.HW_CONFIG || {}).staging;
+      meta('name', 'robots', stage || o.noindex ? (stage ? 'noindex, nofollow' : 'noindex, follow') : 'index, follow');
       var canonical = o.noindex ? '' : HW.absUrl(o.path != null ? o.path : location.pathname.slice(HW.router.base.length - 1));
       linkRel('canonical', canonical);
       meta('property', 'og:site_name', brand);

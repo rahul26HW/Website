@@ -3,3 +3,6 @@ node_modules/
 *.log
 .env
 .claude/
+staging.config.json
+staging-store.json
+staging-bootstrap.sql

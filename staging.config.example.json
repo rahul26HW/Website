@@ -1,0 +1,8 @@
+{
+  "_comment": "Copy to staging.config.json and fill in. No secrets belong here — a publishable key is public, and staging.config.json is git-ignored anyway.",
+  "supabaseUrl": "https://YOUR-STAGING-REF.supabase.co",
+  "supabasePublishableKey": "sb_publishable_REPLACE_ME",
+  "siteUrl": "https://rahul26HW.github.io/homeweavers-staging/",
+  "workerUrl": "https://YOUR-STAGING-REF.supabase.co/functions/v1/hw",
+  "out": "F:/HW WEBSITE/staging"
+}
