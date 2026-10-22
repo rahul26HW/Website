@@ -36,8 +36,8 @@ async function main() {
   s.settings = s.settings || {};
   s.settings.siteUrl = String(c.siteUrl || '').replace(/\/?$/, '/');
 
-  // Both pay methods on, so card and cash on delivery can each be walked through.
-  s.payments = Object.assign({}, s.payments, { stripe: true, cod: true, workerUrl: String(c.workerUrl || '') });
+  // Card only, matching the live shop: orders are prepaid and cash on delivery is not offered.
+  s.payments = Object.assign({}, s.payments, { stripe: true, cod: false, workerUrl: String(c.workerUrl || '') });
 
   // Nothing on staging should be able to email a real person.
   s.newsletter = Object.assign({}, s.newsletter, { emailEndpoint: '' });

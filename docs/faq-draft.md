@@ -152,10 +152,9 @@ the piece sets on each towel collection.
 ## Ordering and payment
 
 **Q: What payment methods do you accept?**
-A: NEEDS YOUR ANSWER — confirm whether cash on delivery is offered to customers right now. Card
-payment runs through Stripe.
-*Source: payments settings show stripe on; cod is currently off in the live store.*
-*Keywords: payment, card, cash on delivery, COD, PayPal*
+A: We take card payments online — all orders are prepaid. We don't offer cash on delivery.
+*Source: payments settings (stripe on, cod off). **Confirmed by Rahul 2026-10-22.***
+*Keywords: payment, card, cash on delivery, cod, prepaid, paypal, pay*
 
 **Q: Do you charge sales tax?**
 A: We collect 6.625% sales tax on orders shipped to New Jersey, including on shipping. Orders
@@ -210,6 +209,5 @@ These are worth adding once you've answered them — they're the ones most likel
 that I have no source for:
 
 2. A size guide for rugs: vanity, double vanity, in front of the tub, cloakroom.
-3. Is cash on delivery available to customers right now?
 4. How much do towels shrink, in practice?
 5. Do you restock sold-out colours, and how long does that take?
