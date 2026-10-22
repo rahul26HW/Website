@@ -74,14 +74,45 @@
 
   function shownFaq() { return (HW.DB.faq || []).filter(function (f) { return f.show !== false && (f.q || f.a); }); }
 
-  /* Scores an entry against what was typed. The question counts for more than the keywords,
-     and the keywords exist precisely for the words a customer uses that the question doesn't. */
-  function faqScore(entry, ws) {
+  /* Whole words, give or take a plural. Substring matching looked clever until "do you ship
+     to Mars" matched "How much is shipping?" and answered it. */
+  function hasWord(haystack, w) {
+    return haystack.split(' ').some(function (t) {
+      if (t === w) return true;
+      if (t.length > w.length && t.indexOf(w) === 0) return t.length - w.length <= 2;   // towel → towels
+      if (w.length > t.length && w.indexOf(t) === 0) return w.length - t.length <= 2;   // towels → towel
+      return false;
+    });
+  }
+
+  /* Every word the owner has written as a keyword, anywhere. Those are the words that name a
+     topic in this shop; "long" and "much" are not, however often a customer types them. */
+  function topicWords() {
+    if (A._topics && A._topicsDb === HW.DB) return A._topics;
+    var set = {};
+    shownFaq().forEach(function (f) {
+      norm(f.tags).split(' ').forEach(function (w) { if (w.length > 2) set[w] = true; });
+    });
+    A._topicsDb = HW.DB;
+    A._topics = set;
+    return set;
+  }
+
+  /* Scaffolding, not subject. "How long do I have to return something" is about returning,
+     not about length, and "how long" being a sensible keyword on another entry must not make
+     it one here. These never carry topic weight and never outrank a noun. */
+  var FRAME = ['long', 'much', 'many', 'soon', 'often', 'time', 'take', 'cost'];
+
+  /* Scores an entry against what was typed. A word the owner curated as a keyword counts for
+     more than a word that merely appears: "return" decides a question, "long" does not. */
+  function faqScore(entry, ws, topics) {
     var q = norm(entry.q), tags = norm(entry.tags), body = norm(entry.a), hits = 0;
     ws.forEach(function (w) {
-      if (q.indexOf(w) >= 0) hits += 3;
-      else if (tags.indexOf(w) >= 0) hits += 2;
-      else if (body.indexOf(w) >= 0) hits += 1;
+      if (FRAME.indexOf(w) >= 0) { if (hasWord(q, w) || hasWord(tags, w)) hits += 1; return; }
+      var weight = topics[w] ? 2 : 1;
+      if (hasWord(q, w)) hits += 3 * weight;
+      else if (hasWord(tags, w)) hits += 2 * weight;
+      else if (hasWord(body, w)) hits += 1 * weight;
     });
     return hits;
   }
@@ -89,9 +120,10 @@
   function bestFaq(text) {
     var ws = words(text);
     if (!ws.length) return null;
+    var topics = topicWords();
     var best = null, bestScore = 0;
     shownFaq().forEach(function (f) {
-      var s = faqScore(f, ws);
+      var s = faqScore(f, ws, topics);
       if (s > bestScore) { bestScore = s; best = f; }
     });
     // One word landing in the question itself is enough — "return" in "how long do I have to

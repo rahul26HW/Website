@@ -241,6 +241,53 @@ test('the router falls back to the finder for a product-shaped question', functi
 });
 
 /* ================================================================ *
+ * Matching against a real-sized FAQ, where common words collide
+ * ================================================================ */
+const REAL_FAQ = [
+  { id: 'q1', q: 'How much is shipping?', a: 'Free over $75, otherwise $9.99.', tags: 'delivery cost postage free shipping how much', show: true },
+  { id: 'q2', q: 'How long will my order take?', a: 'Orders ship within 2 to 4 business days.', tags: 'how long when arrive dispatch delivery time', show: true },
+  { id: 'q3', q: 'What is your return window?', a: 'Thirty days from delivery, unused and unwashed.', tags: 'refund exchange money back send back 30 days', show: true },
+  { id: 'q4', q: 'How do I start a return?', a: 'Contact us with your order number.', tags: 'return process send back rma', show: true },
+  { id: 'q5', q: 'How should I wash my towels?', a: 'Cold wash, tumble dry low.', tags: 'washing laundry care dryer softener bleach', show: true },
+  { id: 'q6', q: 'Where are your products made?', a: 'Mostly India.', tags: 'made in origin country india', show: true }
+];
+
+function askReal(text) {
+  asstCtx.HW.DB = asstCtx.HW.schema.normalizeStore({ faq: REAL_FAQ, products: PRODUCTS,
+    categories: [{ id: 'c1', name: 'Rugs', slug: 'rugs', show: true }] });
+  asstCtx.HW._searchIndex = null;
+  asstCtx.HW.assistant._vocab = null;
+  return asstCtx.HW.assistant.handlers.faq(text);
+}
+
+test('a return question finds the return entry, not the one that also says "how long"', function () {
+  const html = askReal('how long do I have to return something');
+  assert(html.indexOf('return window') >= 0, 'got the wrong entry: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
+});
+
+test('"ship" does not match "shipping" by substring', function () {
+  asstCtx.HW.DB = asstCtx.HW.schema.normalizeStore({ faq: REAL_FAQ, products: [], categories: [] });
+  asstCtx.HW._searchIndex = null;
+  asstCtx.HW.assistant._vocab = null;
+  assert(asstCtx.HW.assistant.route('do you ship to Mars') === 'handoff',
+    'routed to ' + asstCtx.HW.assistant.route('do you ship to Mars'));
+});
+
+test('a plural still finds the singular entry', function () {
+  assert(askReal('how do I wash my towels').indexOf('wash my towels') >= 0, 'should find the care entry');
+});
+
+test('a genuine "how long" question still finds the delivery-time entry', function () {
+  const html = askReal('how long will my order take');
+  assert(html.indexOf('How long will my order take') >= 0, 'got: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
+});
+
+test('a shipping-cost question still finds the shipping entry', function () {
+  const html = askReal('how much is delivery');
+  assert(html.indexOf('How much is shipping') >= 0, 'got: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
+});
+
+/* ================================================================ *
  * Task 6 — the readiness guard
  * ================================================================ */
 test('the assistant is not ready before the catalog has loaded', function () {
