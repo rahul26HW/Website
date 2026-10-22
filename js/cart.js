@@ -233,6 +233,9 @@
       var d = document.getElementById('cartDrawer');
       if (d.classList.contains('open')) return;
       HW.menu.close(false);
+      // The assistant sits above the drawer, so Add to cart from inside it would open the
+      // drawer out of sight, with two focus traps fighting over the keyboard.
+      if (HW.assistantPanel) HW.assistantPanel.close(false);
       cart.render();
       d.classList.add('open');
       d.removeAttribute('aria-hidden');

@@ -25,6 +25,7 @@
     HW.menu.close(false);
     HW.cart.close(false);
     if (HW.searchPanel) HW.searchPanel.close(false);
+    if (HW.assistantPanel) HW.assistantPanel.close(false);
     if (HW.lightbox) HW.lightbox.close();
     if (HW.hero) HW.hero.stop();
 

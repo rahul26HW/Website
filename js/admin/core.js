@@ -671,7 +671,11 @@
       return '';
     }
     if (parts[0] === 'product') return (d.products || []).some(function (p) { return p.slug === parts[1] && !p.hidden; }) ? '' : 'No product at "' + l + '". The button will be hidden.';
-    if (parts[0] === 'page') return (d.pages || []).some(function (p) { return p.slug === parts[1]; }) ? '' : 'No page at "' + l + '". The button will be hidden.';
+    if (parts[0] === 'page') {
+      // The FAQ page exists when questions do, not when a page record does.
+      if (parts[1] === 'faq') return (d.faq || []).some(function (f) { return f.show !== false; }) ? '' : 'No questions written yet, so /page/faq would be hidden. Add one under Pages.';
+      return (d.pages || []).some(function (p) { return p.slug === parts[1]; }) ? '' : 'No page at "' + l + '". The button will be hidden.';
+    }
     if (['checkout'].indexOf(parts[0]) >= 0) return '';
     return 'Unknown link "' + l + '". The button will be hidden.';
   };

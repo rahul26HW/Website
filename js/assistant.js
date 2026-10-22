@@ -5,8 +5,10 @@
    places: the FAQ you wrote, the catalog everyone can see, and one customer's own orders.
 
    Only `order` touches anything personal, and it does so the way the account page does:
-   through the customer's own session, over the route that already exists. It stores
-   nothing, logs nothing, and puts nothing in a URL. */
+   through the customer's own session, over the route that already exists. It adds no store
+   of its own, logs nothing, and puts nothing in a URL. (The account page already keeps the
+   signed-in customer's details on their own device; the assistant reuses that rather than
+   writing more.) */
 (function (HW) {
   'use strict';
 
@@ -42,9 +44,10 @@
         return p('You haven’t placed an order with us yet.') +
           '<div class="as-actions">' + btn(HW.link('/'), 'Start shopping') + '</div>';
       }
-      var o = orders.slice().sort(function (a, b) {
-        return (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0);
-      })[0];
+      // A date that did not come through must not push a brand-new order below a delivered
+      // one from January: being wrong about someone's money is worse than being unsorted.
+      var when = function (x) { var t = Date.parse(x && x.created_at); return isNaN(t) ? Infinity : t; };
+      var o = orders.slice().sort(function (a, b) { return when(b) - when(a); })[0];
       var link = HW.trackingUrl ? HW.trackingUrl(o.carrier, o.tracking_number) : '';
       var when = o.created_at && u.fmtDate ? u.fmtDate(o.created_at) : '';
       return p('Your most recent order is <b>' + esc(o.order_number) + '</b>' + (when ? ', placed ' + esc(when) : '') +
@@ -174,15 +177,23 @@
     hits = HW.search.run(cw.join(' ')).filter(listable);
     if (hits.length) return hits;
 
-    var score = {}, byId = {};
-    cw.forEach(function (w) {
-      HW.search.run(w).filter(listable).forEach(function (prod) {
-        score[prod.id] = (score[prod.id] || 0) + 1;
-        byId[prod.id] = prod;
-      });
-    });
-    return Object.keys(score).sort(function (a, b) { return score[b] - score[a]; })
-      .map(function (id) { return byId[id]; });
+    // Round-robin, so every word that matched something contributes a card. Counting hits
+    // alone ordered by whichever word came first in the sentence, which answered "a soft
+    // cotton rug" with four cotton towels and no rug at all.
+    var lists = cw.map(function (w) { return HW.search.run(w).filter(listable); })
+      .filter(function (l) { return l.length; });
+    var out = [], seen = {}, i = 0, more = true;
+    while (more) {
+      more = false;
+      for (var j = 0; j < lists.length; j++) {
+        var prod = lists[j][i];
+        if (!prod) continue;
+        more = true;
+        if (!seen[prod.id]) { seen[prod.id] = true; out.push(prod); }
+      }
+      i++;
+    }
+    return out;
   }
 
   /* Asked as a question, or just named? "how do I wash these" wants an answer; "navy bath
@@ -204,9 +215,14 @@
    * finder — only things we actually sell and can actually send
    * ---------------------------------------------------------------- */
   A.handlers.finder = function (text) {
-    var hits = catalogHits(text).filter(function (prod) { return !HW.m.productOut(prod); }).slice(0, 4);
+    var matched = catalogHits(text);
+    var hits = matched.filter(function (prod) { return !HW.m.productOut(prod); }).slice(0, 4);
     if (!hits.length) {
-      return p('I couldn’t find anything matching that.') + contactBlock(text);
+      // "We don't sell that" and "that is sold out" are different answers, and only one of
+      // them is true when the catalog matched but every size has gone.
+      return p(matched.length
+        ? 'We do make those — they’re all sold out at the moment.'
+        : 'I couldn’t find anything matching that.') + contactBlock(text);
     }
     return p('These look closest:') +
       '<div class="p-grid asst-grid">' + hits.map(function (prod) { return HW.productCard(prod); }).join('') + '</div>';
@@ -231,17 +247,24 @@
   /* ---------------------------------------------------------------- *
    * route — which handler gets it
    * ---------------------------------------------------------------- */
-  var ORDER_RE = /\b(my|the)\s+(order|parcel|package|delivery|shipment)\b|\border\s+(status|number)\b|\b(track|tracking|dispatched|shipped|arrive|arriving|delivered)\b|\bwhere\s+is\b/i;
+  /* Only a question about THEIR order. "When will my towels arrive" and "where is your
+     warehouse" are not lookups, and answering those with "sign in to track your order" is the
+     rudest thing this can do to someone who has not bought anything yet. */
+  var ORDER_RE = /\b(my|the)\s+(order|parcel|package|delivery|shipment)\b|\border\s+(status|number)\b|\b(track|tracking|dispatched)\b|\bwhere\s+is\s+(my|the)\b/i;
 
   A.route = function (text) {
     var t = String(text || '');
-    var answer = bestFaq(t), products = catalogHits(t).length;
+    // The order test comes first and the catalog search second, so an order question never
+    // runs through the retrieval step — which is where a model gets wired in later.
+    var answer = bestFaq(t);
     if (ORDER_RE.test(t)) {
       // "How long will my order take" names an order but asks about our dispatch time, not
       // about theirs. The question frame tells them apart: a lookup has no "how long" in it.
       var framed = words(t).some(function (w) { return FRAME.indexOf(w) >= 0; });
       if (!(framed && answer)) return 'order';
     }
+    // Something we cannot actually sell them should not outrank an answer we can give.
+    var products = catalogHits(t).filter(function (prod) { return !HW.m.productOut(prod); }).length;
     // When both could answer, the phrasing decides. A question gets an answer; a list of
     // things gets things. Without that, "navy bath towels" lands on "how do I wash towels".
     if (answer && products) return isQuestion(t) ? 'faq' : 'finder';
@@ -266,12 +289,13 @@
 
   function say(who, html) {
     var box = log();
-    if (!box) return;
+    if (!box) return null;
     var row = document.createElement('div');
     row.className = 'as-row as-' + who;
     row.innerHTML = html;
     box.appendChild(row);
     box.scrollTop = box.scrollHeight;
+    return row;
   }
 
   function greet() {
@@ -312,22 +336,27 @@
       text = String(text || '').trim().slice(0, 200);
       if (!text) return Promise.resolve();
       say('you', '<p>' + esc(text) + '</p>');
-      var where = A.route(text);
-      say('bot', '<p class="as-wait">…</p>');
-      return Promise.resolve(A.handlers[where](text)).then(function (html) {
+      // Hold the row this question owns. Writing into whichever row was last meant that two
+      // questions in flight could put an order number under a laundry question.
+      var row = say('bot', '<p class="as-wait" aria-label="Thinking">…</p>');
+      var done = function (html) {
+        if (row) row.innerHTML = html;
         var box = log();
-        if (box && box.lastChild) box.lastChild.innerHTML = html;
         if (box) box.scrollTop = box.scrollHeight;
-      }, function () {
-        var box = log();
-        if (box && box.lastChild) box.lastChild.innerHTML = p('Something went wrong on our side. Try again in a moment.');
+      };
+      // Routing and the handler both run inside the chain, so a synchronous fault lands in the
+      // message below rather than escaping and leaving the bubble stuck on an ellipsis.
+      return Promise.resolve().then(function () {
+        return A.handlers[A.route(text)](text);
+      }).then(done, function () {
+        done(p('Something went wrong on our side. Try again in a moment.'));
       });
     }
   };
 
   function statusWord(s) {
     return { 'new': 'being prepared', accepted: 'being prepared', packed: 'packed and waiting for the courier',
-      shipped: 'on its way', delivered: 'delivered', refunded: 'refunded', cancelled: 'cancelled' }[s] || String(s || 'being prepared');
+      shipped: 'on its way', delivered: 'delivered', refunded: 'refunded', cancelled: 'cancelled' }[s] || 'being looked after';
   }
 
 })(window.HW = window.HW || {});

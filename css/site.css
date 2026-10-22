@@ -1158,7 +1158,7 @@ main#view.booting ~ footer.site{visibility:hidden}
 .faqitem summary{cursor:pointer;list-style:none;padding:16px 28px 16px 0;position:relative;font-family:var(--ui);font-size:15px;font-weight:600;line-height:1.45}
 .faqitem summary::-webkit-details-marker{display:none}
 .faqitem summary::after{content:"+";position:absolute;right:4px;top:14px;font-size:20px;font-weight:400;color:var(--loom)}
-.faqitem[open] summary::after{content:"3"}
+.faqitem[open] summary::after{content:"\2212"}
 .faqitem summary:hover{color:var(--loom-dk)}
 .faqans{padding:0 28px 18px 0;color:var(--ink-soft);font-size:14.5px;line-height:1.7}
 .faqans p:first-child{margin-top:0}
@@ -1202,3 +1202,6 @@ main#view.booting ~ footer.site{visibility:hidden}
   .assistbubble-txt{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   body.has-stickybuy .assistbubble{bottom:calc(84px + env(safe-area-inset-bottom))}
 }
+
+/* The admin has no storefront to ask about, and the click is swallowed there anyway. */
+body.admin-mode .assistbubble,body.admin-mode .assistpanel{display:none}

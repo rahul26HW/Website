@@ -4,6 +4,9 @@
 
   var u = HW.u, esc = u.esc, m = HW.m;
 
+  /* Where a question handed over by the assistant waits, in this tab only. */
+  var ASKED = 'hw:asked';
+
   /* Minimal, safe formatter for admin-written page text.
      ## heading, # heading, - bullet, 1. numbered, **bold**, *italic*, [text](link) */
   HW.richText = function (md, underH2) {
@@ -26,6 +29,9 @@
       var rows = table.filter(function (r) { return !/^\|?\s*:?-{2,}/.test(r); }).map(function (r) {
         return r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(function (c) { return c.trim(); });
       });
+      // A pasted table that lost its header row is all separator and nothing else. Drop it
+      // rather than reading row zero of an empty list, which took the whole page down.
+      if (!rows.length) { table = null; return; }
       html += '<div class="tablescroll"><table class="cmstable"><thead><tr>' + rows[0].map(function (c) { return '<th scope="col">' + inline(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
         rows.slice(1).map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + inline(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
       table = null;
@@ -298,6 +304,9 @@
         '<article class="cms"><h1>' + esc(title) + '</h1><div class="cms-body">' + body + contactBlock() + '</div></article>' +
         '<div style="height:60px"></div></div>',
       seo: { title: title, description: 'Answers about shipping, returns, sizing and care for Home Weavers rugs and towels.', path: '/page/faq',
+        // Nothing written yet means nothing worth indexing; the page still answers if someone
+        // has the link, it just doesn't invite Google to an empty room.
+        noindex: !list.length,
         jsonld: HW.ld && HW.ld.breadcrumb([['Home', '/'], [title, '/page/faq']]) }
     };
   };
@@ -309,6 +318,16 @@
     var body = m.pageText(pg.body);
     var extra = pg.slug === 'contact-us' ? contactBlock() : pg.slug === 'track-your-order' ? trackBlock() : '';
     return {
+      /* If the assistant couldn't answer and sent them here, their question is waiting — put it
+         in the box so they don't have to type it twice. It travels in this tab's own storage,
+         never in the address bar, and is cleared the moment it's used. */
+      after: pg.slug === 'contact-us' ? function () {
+        var asked = HW.u.session.get(ASKED, '');
+        if (!asked) return;
+        HW.u.session.set(ASKED, '');
+        var box = document.getElementById('ct_message');
+        if (box && !box.value) box.value = asked;
+      } : undefined,
       html: '<div class="wrap">' +
         '<nav class="crumb" aria-label="Breadcrumb"><a href="' + HW.link('/') + '">Home</a> &nbsp;/&nbsp; <span aria-current="page">' + esc(pg.title) + '</span></nav>' +
         '<article class="cms"><h1>' + esc(pg.title) + '</h1><div class="cms-body">' + HW.richText(HW.tokens(body)) + extra + '</div></article>' +

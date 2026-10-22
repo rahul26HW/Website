@@ -337,6 +337,8 @@
       return p && !p.hidden ? { href: '/product/' + p.slug } : null;
     }
     if (parts[0] === 'page') {
+      // The FAQ is a page because questions exist, not because a page record does.
+      if (parts[1] === 'faq') return (DB().faq || []).some(function (x) { return x.show !== false; }) ? { href: l } : null;
       var pg = (DB().pages || []).find(function (x) { return x.slug === parts[1]; });
       return pg ? { href: l } : null;
     }

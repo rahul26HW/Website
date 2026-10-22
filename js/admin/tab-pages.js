@@ -83,6 +83,9 @@
     p.slug = u.slugify(p.slug || p.title);
     var clash = A.draft.pages.some(function (x, i) { return x.slug === p.slug && String(i) !== String(A.editKey); });
     if (clash) { u.toast('Another page already uses /page/' + p.slug); return false; }
+    // /page/faq is built from the questions below, so a page claiming that address would save,
+    // appear in the footer and never render.
+    if (p.slug === 'faq') { u.toast('/page/faq is built from your questions — use the Frequently asked questions panel instead'); return false; }
     if (A.editKey === 'new') A.draft.pages.push(Object.assign({ id: u.uid('pg') }, p));
     else A.draft.pages[+A.editKey] = p;
     A.edit = null; A.editKey = null; A.editDirty = null; A.commitEdit = null;

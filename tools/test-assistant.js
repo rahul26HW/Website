@@ -301,6 +301,109 @@ test('a shipping-cost question still finds the shipping entry', function () {
 });
 
 /* ================================================================ *
+ * Review findings — each of these was a real misbehaviour
+ * ================================================================ */
+
+test('an order with no date is not demoted below an old delivered one', function () {
+  return withAccount({
+    get: function () { return { email: 'a@example.com' }; },
+    load: function () {
+      return Promise.resolve({ orders: [
+        { order_number: 'HW-OLD', status: 'delivered', created_at: '2026-01-01T00:00:00Z' },
+        { order_number: 'HW-NEW', status: 'new' }   // date missing in the feed
+      ] });
+    }
+  }).then(function (html) {
+    assert(html.indexOf('HW-NEW') >= 0, 'the undated order should win, not an old delivered one');
+    assert(html.indexOf('HW-OLD') < 0, 'should not lead with the January order');
+  });
+});
+
+test('a pre-purchase delivery question is not an order lookup', function () {
+  askReal('x');
+  const R = asstCtx.HW.assistant.route;
+  ['when will my towels arrive', 'when do towels get delivered', 'where is your warehouse',
+   'has it been delivered yet'].forEach(function (q) {
+    assert(R(q) !== 'order', JSON.stringify(q) + ' routed to order');
+  });
+});
+
+test('a real order lookup still routes to the order handler', function () {
+  askReal('x');
+  const R = asstCtx.HW.assistant.route;
+  ['where is my order', 'track my parcel', 'has my delivery been dispatched',
+   'where is my parcel', 'order status'].forEach(function (q) {
+    assert(R(q) === 'order', JSON.stringify(q) + ' routed to ' + R(q));
+  });
+});
+
+test('when everything matching is sold out, say so rather than "I couldn\'t find anything"', function () {
+  asstCtx.HW.DB = asstCtx.HW.schema.normalizeStore({ faq: [], categories: [{ id: 'c1', name: 'Rugs', slug: 'rugs', show: true }],
+    products: [{ id: 'p1', name: 'Cloud Bath Rug', slug: 'cloud-bath-rug', categoryId: 'c1', material: 'cotton', basePrice: 29, images: ['x.jpg'], inStock: false }] });
+  asstCtx.HW._searchIndex = null; asstCtx.HW.assistant._vocab = null; asstCtx.HW.assistant._topics = null;
+  const html = asstCtx.HW.assistant.handlers.finder('cotton bath rug');
+  assert(html.indexOf('couldn’t find') < 0 && html.indexOf("couldn't find") < 0,
+    'told the customer we do not sell it: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
+  assert(/sold out|out of stock/i.test(html), 'should say it is sold out');
+});
+
+test('a sold-out-only match does not rob a matching FAQ answer', function () {
+  asstCtx.HW.DB = asstCtx.HW.schema.normalizeStore({
+    faq: [{ id: 'f', q: 'How should I wash a cotton rug?', a: 'Cold, gentle.', tags: 'washing care rug', show: true }],
+    categories: [{ id: 'c1', name: 'Rugs', slug: 'rugs', show: true }],
+    products: [{ id: 'p1', name: 'Cloud Bath Rug', slug: 'cloud-bath-rug', categoryId: 'c1', material: 'cotton', basePrice: 29, images: ['x.jpg'], inStock: false }] });
+  asstCtx.HW._searchIndex = null; asstCtx.HW.assistant._vocab = null; asstCtx.HW.assistant._topics = null;
+  assert(asstCtx.HW.assistant.route('cotton rug washing') === 'faq',
+    'routed to ' + asstCtx.HW.assistant.route('cotton rug washing'));
+});
+
+test('the finder offers the thing that was actually asked for', function () {
+  const towels = [0, 1, 2, 3, 4, 5].map(function (i) {
+    return { id: 't' + i, name: 'Cotton Towel ' + i, slug: 'cotton-towel-' + i, categoryId: 'c2', material: 'cotton', basePrice: 19, images: ['x.jpg'], inStock: true };
+  });
+  const rugs = [0, 1, 2].map(function (i) {
+    return { id: 'r' + i, name: 'Micro Bath Rug ' + i, slug: 'micro-bath-rug-' + i, categoryId: 'c1', material: 'polyester', basePrice: 29, images: ['x.jpg'], inStock: true };
+  });
+  asstCtx.HW.DB = asstCtx.HW.schema.normalizeStore({ faq: [], products: towels.concat(rugs),
+    categories: [{ id: 'c1', name: 'Rugs', slug: 'rugs', show: true }, { id: 'c2', name: 'Towels', slug: 'towels', show: true }] });
+  asstCtx.HW._searchIndex = null; asstCtx.HW.assistant._vocab = null; asstCtx.HW.assistant._topics = null;
+  const html = asstCtx.HW.assistant.handlers.finder('a soft cotton rug');
+  assert(/Rug/.test(html), 'asked for a rug and got none: ' + (html.match(/Cotton Towel \d|Micro Bath Rug \d/g) || []).join(', '));
+});
+
+test('a malformed table in an answer does not take the page down', function () {
+  assert(typeof pagesCtx.HW.richText('|---|---|') === 'string', 'richText threw on a header-less table');
+  pagesCtx.HW.DB = pagesCtx.HW.schema.normalizeStore({ faq: [{ id: 'a', q: 'Sizes?', a: '|---|---|', show: true }], pages: [] });
+  assert(typeof pagesCtx.HW.views.faq().html === 'string', 'the faq page threw');
+});
+
+test('the faq page is a 404 when nothing has been written', function () {
+  pagesCtx.HW.DB = pagesCtx.HW.schema.normalizeStore({ faq: [], pages: [], products: [], categories: [] });
+  const v = pagesCtx.HW.views.faq();
+  assert(v.seo && v.seo.noindex === true, 'an empty faq page must not invite indexing');
+});
+
+test('the handoff hands the question to the contact form, not just to a variable', function () {
+  asstCtx.HW.DB = asstCtx.HW.schema.normalizeStore({ faq: [], products: [], categories: [] });
+  asstCtx.HW.assistant.handlers.handoff('do you ship to Mars');
+  assert(asstCtx.HW.u.session.get('hw:asked', '') === 'do you ship to Mars', 'question was not handed over');
+  // and the contact page must actually put it in the box
+  pagesCtx.HW.u.session.set('hw:asked', 'do you ship to Mars');
+  pagesCtx.HW.DB = pagesCtx.HW.schema.normalizeStore({ faq: [], pages: [{ id: 'p', slug: 'contact-us', title: 'Contact us', body: '', group: 'service', show: true }], products: [], categories: [] });
+  const v = pagesCtx.HW.views.page({ slug: 'contact-us' });
+  assert(typeof v.after === 'function', 'the contact page needs an after hook to fill the box');
+});
+
+test('a status the database adds later is not shown raw to a customer', function () {
+  return withAccount({
+    get: function () { return { email: 'a@example.com' }; },
+    load: function () { return Promise.resolve({ orders: [{ order_number: 'HW-1', status: 'awaiting_payment', created_at: '2026-10-01T00:00:00Z' }] }); }
+  }).then(function (html) {
+    assert(html.indexOf('awaiting_payment') < 0, 'leaked the raw database status');
+  });
+});
+
+/* ================================================================ *
  * Task 6 — the readiness guard
  * ================================================================ */
 test('the assistant is not ready before the catalog has loaded', function () {
