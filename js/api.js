@@ -4,7 +4,9 @@
   'use strict';
 
   var cfg = window.HW_CONFIG || {};
-  var CACHE_KEY = 'hw:store:v2';
+  // Keyed to the project, because a staging copy and the live shop can share a github.io origin,
+  // and therefore browser storage. Without this the two hand each other the wrong catalog.
+  var CACHE_KEY = 'hw:store:v2:' + String(cfg.supabaseUrl || '').split('//').pop().split('.')[0];
 
   function configured() { return !!(cfg.supabaseUrl && cfg.supabasePublishableKey); }
 
