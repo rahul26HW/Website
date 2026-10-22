@@ -25,7 +25,10 @@
           }).join('') || '<span class="muted" style="font-size:13px">No subcategories</span>') +
           '<span class="subpill addsub"><label class="sr-only" for="newsub_' + i + '">Add subcategory to ' + esc(c.name) + '</label><input id="newsub_' + i + '" placeholder="Add subcategory" data-enter="sub-add" data-i="' + i + '">' +
           '<button type="button" data-a="sub-add" data-i="' + i + '" aria-label="Add subcategory" style="color:var(--loom)">+</button></span></div></div>' +
-          '<div class="rowbtns"><button class="txtbtn" type="button" data-a="cat-edit" data-i="' + i + '">Edit</button>' +
+          '<div class="rowbtns">' +
+          '<button class="txtbtn" type="button" data-a="cat-move" data-i="' + i + '" data-d="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move ' + esc(c.name) + ' earlier in the menu">↑</button>' +
+          '<button class="txtbtn" type="button" data-a="cat-move" data-i="' + i + '" data-d="1"' + (i === cats.length - 1 ? ' disabled' : '') + ' aria-label="Move ' + esc(c.name) + ' later in the menu">↓</button>' +
+          '<button class="txtbtn" type="button" data-a="cat-edit" data-i="' + i + '">Edit</button>' +
           '<button class="txtbtn" type="button" data-a="cat-toggle" data-i="' + i + '">' + (c.hidden ? 'Show' : 'Hide') + '</button>' +
           '<button class="txtbtn danger" type="button" data-a="cat-delete" data-i="' + i + '">Delete</button></div></div></section>';
       }).join('') : '<p class="muted">No categories yet.</p>') + A.ui.saveBtn();
@@ -97,6 +100,17 @@
   A.actions['cat-cancel'] = function () { if (A.editDirty && A.editDirty() && !confirm('Discard changes to this category?')) return; close(); A.render(); };
   A.actions['cat-save'] = async function () { if (!commit()) return; await A.saveStore('Category saved'); A.render(); };
   A.actions['cat-toggle'] = function (el) { var c = A.draft.categories[+el.dataset.i]; c.hidden = !c.hidden; A.render(); };
+  /* The order here is the order of the main menu, so this is how you decide what shoppers
+     see first. Saved straight away: a half-reordered menu is not a state worth keeping. */
+  A.actions['cat-move'] = async function (el) {
+    var a = A.draft.categories, i = +el.dataset.i, j = i + (+el.dataset.d);
+    if (j < 0 || j >= a.length) return;
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+    var y = window.scrollY;
+    await A.saveStore('Menu order saved');
+    A.render();
+    window.scrollTo(0, y);
+  };
   A.actions['cat-delete'] = async function (el) {
     var c = A.draft.categories[+el.dataset.i], n = count(c);
     if (n) {
