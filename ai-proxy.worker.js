@@ -233,12 +233,26 @@ async function readJson(request) {
   try { return JSON.parse(text || "{}"); } catch { throw new Error("Invalid JSON"); }
 }
 
+/* The project’s publishable key, whichever way this project hands it over.
+   A project created before the new API keys has it as a single secret we set ourselves;
+   a newer one reserves the SUPABASE_ prefix and injects a dictionary instead, so there
+   the key can only be read, never typed in. */
+function publishableKey(env) {
+  if (env.SUPABASE_PUBLISHABLE_KEY) return env.SUPABASE_PUBLISHABLE_KEY;
+  try {
+    const dict = JSON.parse(env.SUPABASE_PUBLISHABLE_KEYS || "{}");
+    const first = Object.values(dict).filter(Boolean)[0];
+    if (first) return String(first);
+  } catch { /* not a dictionary on this project */ }
+  return env.SUPABASE_ANON_KEY || "";
+}
+
 /* Confirms the caller is a signed-in Home Weavers admin. */
 async function requireAdmin(request, env) {
-  if (!env.SUPABASE_URL || !env.SUPABASE_PUBLISHABLE_KEY) return "Worker is missing SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY";
+  if (!env.SUPABASE_URL || !publishableKey(env)) return "Worker is missing SUPABASE_URL or a publishable key";
   const auth = request.headers.get("Authorization") || "";
   if (!/^Bearer\s+\S+/.test(auth)) return "Sign in to the admin first";
-  const headers = { apikey: env.SUPABASE_PUBLISHABLE_KEY, Authorization: auth, "Content-Type": "application/json" };
+  const headers = { apikey: publishableKey(env), Authorization: auth, "Content-Type": "application/json" };
   const user = await fetch(env.SUPABASE_URL + "/auth/v1/user", { headers });
   if (!user.ok) return "Your admin session expired — sign in again";
   const check = await fetch(env.SUPABASE_URL + "/rest/v1/rpc/is_admin", { method: "POST", headers, body: "{}" });
@@ -252,7 +266,7 @@ async function requireAdmin(request, env) {
    has to hold a key that could read them all. */
 async function dbAsCaller(request, env, path, init = {}) {
   const headers = {
-    apikey: env.SUPABASE_PUBLISHABLE_KEY,
+    apikey: publishableKey(env),
     Authorization: request.headers.get("Authorization") || "",
     "Content-Type": "application/json",
     ...(init.headers || {}),
@@ -469,7 +483,7 @@ function features(env) {
   return {
     database: db,
     email: !!env.RESEND_API_KEY,
-    ai: !!(env.ANTHROPIC_API_KEY && env.SUPABASE_URL && env.SUPABASE_PUBLISHABLE_KEY),
+    ai: !!(env.ANTHROPIC_API_KEY && env.SUPABASE_URL && publishableKey(env)),
     stripe: !!(db && env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET),
     stripeMode: env.STRIPE_SECRET_KEY ? (/^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY) ? "live" : "test") : null,
     shipstation: ss,
@@ -2140,7 +2154,7 @@ async function handleEmailTest(request, env, cors) {
   const denied = await requireAdmin(request, env);
   if (denied) return json({ error: denied }, 401, cors);
   if (!env.RESEND_API_KEY) return json({ error: "Add the secret RESEND_API_KEY first." }, 501, cors);
-  const who = await fetch(env.SUPABASE_URL + "/auth/v1/user", { headers: { apikey: env.SUPABASE_PUBLISHABLE_KEY, Authorization: request.headers.get("Authorization") } }).then((r) => r.json()).catch(() => ({}));
+  const who = await fetch(env.SUPABASE_URL + "/auth/v1/user", { headers: { apikey: publishableKey(env), Authorization: request.headers.get("Authorization") } }).then((r) => r.json()).catch(() => ({}));
   if (!who || !who.email) return json({ error: "Couldn’t read your admin email." }, 400, cors);
   const body = await readJson(request);
   const kind = ["received", "accepted", "shipped", "cancelled", "refunded"].includes(body.kind) ? body.kind : "received";
