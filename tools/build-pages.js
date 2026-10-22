@@ -93,6 +93,13 @@ async function main() {
     pages.push({ route: 'page/' + p.slug, title: p.seoTitle || p.title,
       description: p.seoDescription || text(m.pageText(p.body)).replace(/[#*\[\]()|-]/g, ' ') });
   });
+  // The FAQ is a page because there are questions, not because someone remembered to create a
+  // page record for it. Without this it would answer only after a 404 and never be indexed.
+  const shownFaq = (data.faq || []).filter(function (f) { return f.show !== false && (f.q || f.a); });
+  if (shownFaq.length && !pages.some(function (p) { return p.route === 'page/faq'; })) {
+    pages.push({ route: 'page/faq', title: 'Frequently asked questions',
+      description: text(shownFaq.slice(0, 3).map(function (f) { return f.q; }).join(' ')) });
+  }
 
   const crypto = require('crypto');
   const stampFrom = ['css/site.css'].concat(
