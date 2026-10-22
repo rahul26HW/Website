@@ -280,7 +280,30 @@
 
   HW.views = HW.views || {};
 
+  /* The questions customers actually ask, in the owner's own words. Each one is a <details>
+     so the page still works with the scripts blocked, and so a long list stays skimmable.
+     The assistant answers from the same entries — this page is where they live and get read. */
+  HW.views.faq = function () {
+    var list = (HW.DB.faq || []).filter(function (f) { return f.show !== false && (f.q || f.a); });
+    var body = list.length
+      ? '<div class="faqlist">' + list.map(function (f) {
+          return '<details class="faqitem" id="' + esc(f.id) + '"><summary>' + esc(f.q) + '</summary>' +
+            '<div class="faqans">' + HW.richText(HW.tokens(m.pageText(f.a))) + '</div></details>';
+        }).join('') + '</div>'
+      : '<p class="muted">We haven’t written these up yet. Ask us anything and we’ll answer.</p>';
+    var title = 'Frequently asked questions';
+    return {
+      html: '<div class="wrap">' +
+        '<nav class="crumb" aria-label="Breadcrumb"><a href="' + HW.link('/') + '">Home</a> &nbsp;/&nbsp; <span aria-current="page">' + esc(title) + '</span></nav>' +
+        '<article class="cms"><h1>' + esc(title) + '</h1><div class="cms-body">' + body + contactBlock() + '</div></article>' +
+        '<div style="height:60px"></div></div>',
+      seo: { title: title, description: 'Answers about shipping, returns, sizing and care for Home Weavers rugs and towels.', path: '/page/faq',
+        jsonld: HW.ld && HW.ld.breadcrumb([['Home', '/'], [title, '/page/faq']]) }
+    };
+  };
+
   HW.views.page = function (params) {
+    if (params.slug === 'faq') return HW.views.faq();
     var pg = (HW.DB.pages || []).find(function (p) { return p.slug === params.slug; });
     if (!pg) return HW.views.notfound();
     var body = m.pageText(pg.body);

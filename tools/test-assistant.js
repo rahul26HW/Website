@@ -81,6 +81,33 @@ test('normalizeStore keeps an explicit show:false', function () {
 });
 
 /* ================================================================ *
+ * Task 2 — the FAQ page
+ * ================================================================ */
+const pagesCtx = load(['util', 'sanitize', 'schema', 'model', 'seo', 'router', 'chrome', 'catalog', 'pages']);
+
+function faqHtml(faq) {
+  pagesCtx.HW.DB = pagesCtx.HW.schema.normalizeStore({ faq: faq });
+  return pagesCtx.HW.views.faq().html;
+}
+
+test('the faq page lists only shown entries', function () {
+  const html = faqHtml([{ id: 'a', q: 'Shown?', a: 'Yes.', show: true }, { id: 'b', q: 'Hidden?', a: 'No.', show: false }]);
+  assert(html.indexOf('Shown?') >= 0, 'the shown question should appear');
+  assert(html.indexOf('Hidden?') < 0, 'the hidden question should not appear');
+});
+
+test('an faq answer containing a script tag is rendered inert', function () {
+  const html = faqHtml([{ id: 'a', q: 'X?', a: '<script>alert(1)</script>', show: true }]);
+  assert(html.indexOf('<script>') < 0, 'a script tag must not survive into the page');
+});
+
+test('the faq page says so when there are no entries', function () {
+  const html = faqHtml([]);
+  assert(html.length > 0, 'an empty faq should still render a page');
+  assert(html.indexOf('<details') < 0, 'no entries means no details elements');
+});
+
+/* ================================================================ *
  * Results
  * ================================================================ */
 Promise.resolve().then(function () {
