@@ -470,6 +470,8 @@
     get: get,
     /* Reviews are written from inside an order, so they go out over the same session. */
     call: call,
+    /* The assistant answers "where is my order" from the same cached fetch this page uses. */
+    load: load,
     /* Forget the loaded data (after a cancel or request elsewhere), so the next view reloads it. */
     invalidate: function () { state.data = null; },
 

@@ -40,14 +40,17 @@ function load(files) {
 
 let passed = 0;
 const failures = [];
+const pending = [];
 const only = process.argv[2];
 
 function test(name, fn) {
   if (only && name.indexOf(only) < 0) return;
   try {
     const r = fn();
+    // An async case has to be waited for, or a failure in it is never seen.
     if (r && typeof r.then === 'function') {
-      return r.then(function () { passed++; }, function (e) { failures.push([name, e]); });
+      pending.push(r.then(function () { passed++; }, function (e) { failures.push([name, e]); }));
+      return;
     }
     passed++;
   } catch (e) {
@@ -108,9 +111,61 @@ test('the faq page says so when there are no entries', function () {
 });
 
 /* ================================================================ *
+ * Task 4 — the order handler
+ * ================================================================ */
+const asstCtx = load(['util', 'sanitize', 'schema', 'model', 'seo', 'router', 'chrome', 'catalog', 'pages', 'features', 'assistant']);
+
+function withAccount(stub) {
+  asstCtx.HW.account = stub;
+  return asstCtx.HW.assistant.handlers.order('where is my order');
+}
+
+test('signed out, the order handler offers sign-in and makes no network call', function () {
+  let calls = 0;
+  return withAccount({ get: function () { return null; }, load: function () { calls++; return Promise.resolve(null); } })
+    .then(function (html) {
+      assert(html.indexOf('/account') >= 0, 'should link to the account page');
+      assert(calls === 0, 'it must not call out when signed out, but called ' + calls + ' time(s)');
+    });
+});
+
+test('signed in, the order handler shows the latest order and its tracking link', function () {
+  return withAccount({
+    get: function () { return { email: 'a@example.com' }; },
+    load: function () {
+      return Promise.resolve({ orders: [
+        { order_number: 'HW-OLD', status: 'delivered', created_at: '2026-01-01T00:00:00Z' },
+        { order_number: 'HW-1', status: 'shipped', carrier: 'usps', tracking_number: '94001', created_at: '2026-10-01T00:00:00Z' }
+      ] });
+    }
+  }).then(function (html) {
+    assert(html.indexOf('HW-1') >= 0, 'should name the most recent order');
+    assert(html.indexOf('HW-OLD') < 0, 'should not lead with an older order');
+    assert(html.indexOf('94001') >= 0, 'should show the tracking number');
+  });
+});
+
+test('an expired session surfaces the sign-in prompt rather than a raw error', function () {
+  return withAccount({
+    get: function () { return { email: 'a@example.com' }; },
+    load: function () { const e = new Error('nope'); e.status = 401; return Promise.reject(e); }
+  }).then(function (html) {
+    assert(/[Ss]ign in/.test(html), 'should ask them to sign in again');
+  });
+});
+
+test('signed in with no orders yet, the handler says so without erroring', function () {
+  return withAccount({ get: function () { return { email: 'a@example.com' }; }, load: function () { return Promise.resolve({ orders: [] }); } })
+    .then(function (html) {
+      assert(html.length > 0, 'should still answer');
+      assert(html.indexOf('undefined') < 0, 'should not leak undefined into the answer');
+    });
+});
+
+/* ================================================================ *
  * Results
  * ================================================================ */
-Promise.resolve().then(function () {
+Promise.all(pending).then(function () {
   failures.forEach(function (f) {
     console.error('FAIL  ' + f[0]);
     console.error('      ' + (f[1] && f[1].message));
