@@ -137,9 +137,18 @@ with its exact dimensions.
 *Keywords: set of, how many, pieces, bulk, size*
 
 **Q: What size bath rug should I get?**
-A: NEEDS YOUR ANSWER — a short guide would help here: which size suits a standard vanity, a
-double vanity, in front of a tub, and a small cloakroom.
-*Keywords: what size, dimensions, fit, vanity, tub*
+A: It depends where it's going:
+
+- **In front of a single sink or a small shower stall** — 17" x 24", or 17" x 30" for an
+  individual washbasin or a compact shower enclosure.
+- **In front of a double sink, or a slender single one** — 21" x 34" or 24" x 40".
+- **In front of the bath tub** — 22" x 60".
+- **Around the toilet** — 20" x 20" for a U-shaped base, 18" x 18" for a standard lid cover,
+  and 10" x 22" for the tank lid.
+- **Round, for small sinks or compact showers** — 22" or 30".
+
+*Source: owner-supplied size reference chart. **Confirmed by Rahul 2026-10-22.***
+*Keywords: size, dimensions, fit, vanity, sink, tub, toilet, shower, round, measure*
 
 **Q: Do you sell matching sets?**
 A: Yes — several ranges come as bath, hand and wash towel sets so everything matches. Look for
@@ -208,6 +217,5 @@ account under notifications.
 These are worth adding once you've answered them — they're the ones most likely to be asked
 that I have no source for:
 
-2. A size guide for rugs: vanity, double vanity, in front of the tub, cloakroom.
 4. How much do towels shrink, in practice?
 5. Do you restock sold-out colours, and how long does that take?
