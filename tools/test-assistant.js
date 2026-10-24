@@ -221,6 +221,25 @@ test('the finder never offers a hidden or out-of-stock product', function () {
   assert(html.indexOf('Sold Out Rug') < 0, 'out-of-stock product leaked');
 });
 
+test('a one-word topic goes to the answer, a one-word product goes to products', function () {
+  setStore({ faq: [{ id: 'f', q: 'How should I wash my towels?', a: 'Cold wash.', tags: 'washing care laundry', show: true }] });
+  assert(asstCtx.HW.assistant.route('care') === 'faq', '"care" routed to ' + asstCtx.HW.assistant.route('care'));
+  assert(asstCtx.HW.assistant.route('rug') === 'finder', '"rug" routed to ' + asstCtx.HW.assistant.route('rug'));
+});
+
+test('the finder result carries no buttons that act on the shop', function () {
+  setStore();
+  const html = asstCtx.HW.assistant.handlers.finder('cotton rug');
+  assert(html.indexOf('data-act="add"') < 0, 'an add-to-cart control reached an answer-only surface');
+  assert(html.indexOf('data-act="wish"') < 0, 'a wishlist control reached an answer-only surface');
+});
+
+test('finder images are not lazy, because the panel scrolls on its own', function () {
+  setStore();
+  const html = asstCtx.HW.assistant.handlers.finder('cotton rug');
+  assert(html.indexOf('loading="lazy"') < 0, 'a lazy image inside the panel never loads');
+});
+
 test('the finder says so when nothing matches, and offers the contact form', function () {
   setStore({ products: [], categories: [] });
   const html = asstCtx.HW.assistant.handlers.finder('purple velvet hammock');
@@ -437,7 +456,8 @@ if (SNAPSHOT && fs.existsSync(SNAPSHOT)) {
   [['where is my order', 'order'], ['track my parcel', 'order'],
    ['how long do I have to return something', 'faq'], ['how do I wash these', 'faq'],
    ['a soft cotton rug for a cold bathroom', 'finder'], ['navy bath towels', 'finder'],
-   ['what is the meaning of life', 'handoff']
+   ['what is the meaning of life', 'handoff'],
+   ['care', 'faq'], ['rug', 'finder'], ['washing', 'faq'], ['towels', 'finder']
   ].forEach(function (c) {
     test('real catalog: ' + JSON.stringify(c[0]) + ' routes to ' + c[1], function () {
       const got = realCtx.HW.assistant.route(c[0]);

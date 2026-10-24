@@ -156,8 +156,11 @@
 
   function catalogWords(text) {
     var vocab = Object.keys(catalogVocab());
+    // Whole words, give or take a plural — the same tolerance the FAQ matching uses. An open
+    // prefix made "washing" a catalog word because we sell wash cloths, which sent a question
+    // about laundry to the product list.
     return words(text).filter(function (w) {
-      return vocab.some(function (v) { return v === w || (w.length > 2 && (v.indexOf(w) === 0 || w.indexOf(v) === 0)); });
+      return vocab.some(function (v) { return hasWord(v, w); });
     });
   }
 
@@ -224,8 +227,18 @@
         ? 'We do make those — they’re all sold out at the moment.'
         : 'I couldn’t find anything matching that.') + contactBlock(text);
     }
+    // A compact row rather than a product card. A card is 300px of mostly picture, four of
+    // them fill the panel with scrolling, and its Add to cart opened the drawer *behind* the
+    // panel — an action control on a surface that is only supposed to answer. The image is
+    // eager because a lazy one inside this scrolling panel never loads at all.
     return p('These look closest:') +
-      '<div class="p-grid asst-grid">' + hits.map(function (prod) { return HW.productCard(prod); }).join('') + '</div>';
+      '<ul class="as-results">' + hits.map(function (prod) {
+        var r = HW.m.priceRange(prod);
+        return '<li><a class="sres" href="' + esc(HW.link('/product/' + prod.slug)) + '">' +
+          '<img src="' + esc(HW.asset(HW.m.thumb(HW.m.imageOrSwatch(prod)))) + '" alt="" width="56" height="56">' +
+          '<span class="snm">' + esc(HW.seo.clip(prod.name, 70)) +
+          '<span class="spr">' + (r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min)) + '</span></span></a></li>';
+      }).join('') + '</ul>';
   };
 
   /* ---------------------------------------------------------------- *
@@ -265,9 +278,14 @@
     }
     // Something we cannot actually sell them should not outrank an answer we can give.
     var products = catalogHits(t).filter(function (prod) { return !HW.m.productOut(prod); }).length;
-    // When both could answer, the phrasing decides. A question gets an answer; a list of
-    // things gets things. Without that, "navy bath towels" lands on "how do I wash towels".
-    if (answer && products) return isQuestion(t) ? 'faq' : 'finder';
+    // When both could answer: a question gets an answer, and so does a word that names a
+    // subject rather than a thing. "Navy bath towels" wants towels; "care" and "washing" want
+    // the care answer, even though the catalog mentions those words too. The test is whether
+    // what they typed names something we sell.
+    if (answer && products) {
+      var namesAThing = catalogWords(t).length > 0;
+      return (isQuestion(t) || !namesAThing) ? 'faq' : 'finder';
+    }
     if (answer) return 'faq';
     if (products) return 'finder';
     return 'handoff';

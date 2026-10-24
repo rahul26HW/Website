@@ -146,6 +146,9 @@
   A.actions['order-slip'] = function (el) {
     var o = (A.orderById && A.orderById(el.dataset.id)) || null;
     if (!o) { u.toast('Open the order first.'); return; }
+    // The button is hidden for a cancelled order; this is the second lock, because a slip
+    // printed by mistake is how a cancelled order ends up in a box.
+    if (o.status === 'cancelled') { u.toast('This order was cancelled — there is nothing to pack.'); return; }
     var root = document.getElementById('slipRoot');
     if (!root) {
       root = document.createElement('div');

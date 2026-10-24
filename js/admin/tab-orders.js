@@ -158,7 +158,10 @@
         (o.tracking_number ? 'It has shipped' + (o.carrier ? ' with ' + o.carrier : '') + '. Tracking number: ' + o.tracking_number + '\n\n' : '') + 'Best,\n' + (A.draft.brand.name || 'Home Weavers'));
     return '<p><button class="txtbtn" type="button" data-a="order-back">← All orders</button></p>' +
       '<p class="btnrow"><button class="btn ghost sm" type="button" data-a="order-invoice" data-id="' + o.id + '" data-num="' + esc(o.order_number) + '">⬇ Download invoice</button>' +
-      '<button class="btn ghost sm" type="button" data-a="order-slip" data-id="' + o.id + '">🖶 Print packing slip</button>' +
+      // A packing slip tells someone to pack a box. A cancelled order has no box, and
+      // printing one is how a cancelled order gets shipped by mistake.
+      (o.status === 'cancelled'        ? '<span class="hint" style="align-self:center">Cancelled — no packing slip</span>'
+        : '<button class="btn ghost sm" type="button" data-a="order-slip" data-id="' + o.id + '">🖶 Print packing slip</button>') +
       (o.is_gift ? ' <span class="tag">Gift — no prices on the slip</span>' : '') + '</p>' +
       '<h1 class="h1row">Order ' + esc(o.order_number) + ' <span>' + payTag(o.payment_status) + ' ' + statusTag(o.status) + '</span></h1>' +
       '<p class="sub">Placed ' + esc(u.fmtDateTime(o.created_at)) + ' · ' + esc(o.source === 'snipcart' ? 'Snipcart' : 'Site checkout') + (o.external_id ? ' · ' + esc(o.external_id) : '') + '</p>' +

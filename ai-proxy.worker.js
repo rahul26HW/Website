@@ -1669,8 +1669,17 @@ function invoicePdf(order, store) {
   text(X_AMT, y, invMoney(order.total), { size: 12, bold: true, align: "right" });
   y -= 26;
 
-  /* --- how it was paid, and the closing line --- */
-  const paid = order.payment_status === "paid"
+  /* --- how it was paid, and the closing line ---
+     What happened to the order comes first. An order that was cancelled or refunded is not
+     waiting for anything, and saying "Awaiting payment" on it reads as a demand for money
+     nobody owes. */
+  const cancelled = order.status === "cancelled";
+  const refunded = order.status === "refunded" || order.payment_status === "refunded";
+  const paid = cancelled
+    ? "This order was cancelled" + (order.cancelled_at ? " on " + invDate(order.cancelled_at) : "") + ". Nothing is owed."
+    : refunded
+    ? "Refunded in full" + (order.paid_at ? ", originally paid on " + invDate(order.paid_at) : "") + "."
+    : order.payment_status === "paid"
     ? "Paid in full" + (order.paid_at ? " on " + invDate(order.paid_at) : "") + "."
     : order.payment_status === "authorized"
     ? "Card authorised. You are charged when we begin preparing your order."
@@ -1679,7 +1688,8 @@ function invoicePdf(order, store) {
     : "Awaiting payment.";
   text(L, y, paid, { size: 9.5, grey: 0.25 });
   y -= 30;
-  text(L, y, "Thank you for your order.", { size: 10, grey: 0.25 });
+  text(L, y, cancelled ? "Kept for your records." : refunded ? "Sorry it was not right for you." : "Thank you for your order.",
+    { size: 10, grey: 0.25 });
 
   /* --- assemble --- */
   const stream = ops.join("\n");
