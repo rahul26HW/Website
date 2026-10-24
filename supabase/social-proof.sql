@@ -9,12 +9,13 @@
 -- and a state, and nothing else: no name, no city, no email, no order
 -- number, no exact timestamp.
 --
--- The anonymity floor matters more than it looks. "Someone in New Jersey
--- bought this two hours ago" is anonymous in a shop with many orders and
--- is close to naming a person in a shop with three. So the recent line is
--- withheld unless enough other people in that state bought the same thing
--- in the window — below that only the plain count goes out, and below the
--- count floor, nothing does.
+-- There were floors here: five buyers before a count was shown, three in
+-- one state before the state line was. The shop owner removed them on
+-- 2026-10-24 so the badges speak from the first sale onward. What is said
+-- is still true and still unnamed — no name, city, email, order number or
+-- exact time — but a single purchase is now reported as one, and a state
+-- with one buyer in it is a smaller crowd to hide in than three. The
+-- floors are the two "count(*) >= 1" tests below; raise them to restore.
 -- =====================================================================
 
 create or replace function public.product_social_proof(p_product_id text)
@@ -34,20 +35,19 @@ as $$
       and o.status <> 'cancelled'
       and o.payment_status in ('paid', 'refunded')
   ),
-  -- A state only earns a mention when it is not a single identifiable person.
+  -- The most recent state to have bought this, and roughly when.
   by_state as (
     select state, count(*) as n, max(created_at) as latest
     from recent
     where state <> ''
     group by state
-    having count(*) >= 3
+    having count(*) >= 1
     order by max(created_at) desc
     limit 1
   )
   select jsonb_build_object(
-    -- Withheld below five, because "2 bought this week" is not social proof,
-    -- it is a quiet shop advertising that it is quiet.
-    'bought_week', case when (select count(*) from recent) >= 5
+    -- Floor of one: every real sale counts, the first one included.
+    'bought_week', case when (select count(*) from recent) >= 1
                         then (select count(*) from recent) else null end,
     'recent_state', (select state from by_state),
     -- Coarse on purpose: an exact time plus a state narrows the field.
