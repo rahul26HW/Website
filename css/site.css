@@ -1014,11 +1014,17 @@ main#view.booting ~ footer.site{visibility:hidden}
 /* Says what the chosen size actually is, so the buttons can stay short. */
 .sizenote{margin:9px 0 0;font-size:13.5px;color:var(--ink-soft)}
 /* "Deliver to …" — the real carrier price and an estimated arrival window. */
-.shipest{margin:14px 0 18px;padding:13px 14px;border:1px solid var(--line);border-radius:var(--r);background:#fff}
-.shipest .t{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin:0 0 8px}
-.shipest-row{display:flex;gap:9px}
-.shipest-row input{flex:0 1 150px;min-width:0;border:1px solid var(--line);border-radius:var(--r);padding:9px 11px;font:inherit;font-size:14.5px;background:#fff}
-.shipest-out{margin:9px 0 0;font-size:13.5px;color:var(--ink-soft);min-height:1.2em}
+/* No card. A white panel on unbleached paper is a patch, and this row is not more important
+   than the colour and size rows above it — it is the same kind of thing, so it is built the
+   same way: a hairline, a small capital label, and a rule under what you type. */
+.shipest{margin:18px 0;padding:16px 0 0;border:0;border-top:1px solid var(--line);border-radius:0;background:none}
+.shipest .t{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin:0 0 10px}
+.shipest-row{display:flex;align-items:center;gap:16px;max-width:300px}
+.shipest-row input{flex:1 1 auto;min-width:0;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:5px 1px;font:inherit;font-size:15px;background:transparent;transition:border-color .15s}
+.shipest-row input:focus{outline:none;border-bottom-color:var(--loom)}
+.shipest-row button.btn.ghost.sm{flex:0 0 auto;border:0;background:none;padding:5px 0;color:var(--ink);font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;text-decoration:underline;text-underline-offset:4px;text-decoration-thickness:1px}
+.shipest-row button.btn.ghost.sm:hover{background:none;color:var(--loom)}
+.shipest-out{margin:10px 0 0;font-size:13.5px;color:var(--ink-soft);min-height:1.2em}
 .shipest-out.ok{color:var(--ink)}
 .shipest-out.bad{color:var(--clay)}
 
