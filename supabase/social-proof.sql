@@ -55,7 +55,7 @@ as $$
                               when latest > now() - interval '6 hours'  then 'in the last few hours'
                               when latest > now() - interval '24 hours' then 'today'
                               when latest > now() - interval '48 hours' then 'yesterday'
-                              else 'this week'
+                              else 'earlier this week'
                             end from by_state)
   );
 $$;

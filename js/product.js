@@ -610,6 +610,16 @@
   var spCache = { id: null, lines: null };
   var spTimer = null;
 
+  /* The database stores a two-letter code, which is what a form needs and not what a
+     sentence wants: "Someone in NJ" reads like a database row. The checkout already keeps
+     the full list, so borrow it; an unknown code is printed as it came. */
+  function stateName(code) {
+    var list = (HW.checkout && HW.checkout.states && HW.checkout.states()) || [];
+    var up = String(code || '').toUpperCase();
+    for (var i = 0; i < list.length; i++) if (list[i][0] === up) return list[i][1];
+    return code;
+  }
+
   function socialProof(productId, cachedOnly) {
     var mount = document.getElementById('socialProof');
     if (!mount) return;
@@ -618,8 +628,14 @@
     HW.api.rpc('product_social_proof', { p_product_id: productId }).then(function (d) {
       var lines = [];
       if (d) {
-        if (d.bought_week) lines.push(u.plural(d.bought_week, 'person', 'people') + ' bought this in the last week');
-        if (d.recent_state && d.recent_when) lines.push('Someone in ' + esc(d.recent_state) + ' bought this ' + esc(d.recent_when));
+        var named = !!(d.recent_state && d.recent_when);
+        // One sale and a state line are the same sale. Alternating '1 person bought this'
+        // with 'someone in New Jersey bought this' reads as two people, so the weaker of
+        // the two true lines steps aside.
+        if (d.bought_week && !(named && d.bought_week === 1)) {
+          lines.push(u.plural(d.bought_week, 'person', 'people') + ' bought this in the last week');
+        }
+        if (named) lines.push('Someone in ' + esc(stateName(d.recent_state)) + ' bought this ' + esc(d.recent_when));
       }
       spCache = { id: productId, lines: lines };
       paintSocialProof(document.getElementById('socialProof'), lines);
