@@ -206,13 +206,117 @@
     return /\?/.test(String(text)) || /^(how|what|when|where|why|who|can|could|do|does|did|is|are|will|would|should|may|must)\b/.test(t);
   }
 
+  /* ---------------------------------------------------------------- *
+   * voice — the difference between answering and being a lookup table
+   * ---------------------------------------------------------------- */
+  /* Nothing below understands anything. The answers are still exactly the ones written in
+     Admin → FAQ, word for word. What changes is the shape of a turn: it opens by saying what
+     it took the question to mean, closes by offering the next move, and carries the last turn
+     forward so a follow-up fragment still lands somewhere. That is most of what separates an
+     assistant from a search box — but it is manner, not comprehension, and it should not be
+     mistaken for the model layer the design note describes. */
+
+  A.turn = 0;
+
+  /* Rotating, not random: random repeats, and the same opener twice running is the one thing
+     that makes a script audibly a script. */
+  function pick(list) { return list[A.turn % list.length]; }
+
+  var SURE = ['Sure.', 'Of course.', 'Yes — here you go.', 'Happy to help.'];
+
+  /* Suggested replies. A chip is a question the customer can ask without typing it, which is
+     how a chat UI tells someone what it is actually good at. */
+  function chips(list) {
+    if (!list || !list.length) return '';
+    return '<div class="as-chips">' + list.map(function (t) {
+      return '<button class="as-chip" type="button" data-act="assist-ask" data-q="' + esc(t) + '">' + esc(t) + '</button>';
+    }).join('') + '</div>';
+  }
+
+  function topQuestions(n) {
+    return shownFaq().slice(0, n).map(function (f) { return f.q; });
+  }
+
+  /* Other entries the owner tagged the same way. Offered after an answer, because the next
+     question is usually next door to the last one. */
+  function related(entry, n) {
+    var tags = norm(entry.tags).split(' ').filter(function (w) { return w.length > 2; });
+    if (!tags.length) return [];
+    return shownFaq().filter(function (f) { return f.id !== entry.id; })
+      .map(function (f) {
+        var hay = norm(f.q) + ' ' + norm(f.tags), hits = 0;
+        tags.forEach(function (w) { if (hasWord(hay, w)) hits += 1; });
+        return { f: f, hits: hits };
+      })
+      .filter(function (r) { return r.hits > 0; })
+      .sort(function (a, b) { return b.hits - a.hits; })
+      .slice(0, n)
+      .map(function (r) { return r.f.q; });
+  }
+
+  /* What the conversation is carrying. Reset when the panel opens. */
+  A.ctx = { terms: [], misses: 0 };
+
+  /* A follow-up is a fragment — "in navy", "what about round ones", "anything cheaper". On
+     its own it matches nothing, which is exactly where a lookup table ends a conversation.
+     Carrying the previous search's words forward is the smallest thing that makes the second
+     question work at all. */
+  /* The words that name a kind of thing rather than a quality of one. "What about rugs"
+     starts a new search; "in navy" refines the last one. */
+  function namesAType(text) {
+    var t = norm(text);
+    return (HW.DB.categories || []).some(function (c) {
+      var names = [c.name, String(c.slug || '').replace(/-/g, ' ')]
+        .concat((c.subcategories || []).map(function (sub) { return sub && (sub.name || sub); }));
+      return names.filter(Boolean).some(function (n) {
+        return norm(n).split(' ').some(function (w) { return w.length > 2 && hasWord(t, w); });
+      });
+    });
+  }
+
+  A.expand = function (text) {
+    var t = String(text || '');
+    if (!A.ctx.terms.length) return t;
+    if (bestFaq(t)) return t;               // a real question, not a fragment
+    if (words(t).length > 6) return t;      // a sentence, not a fragment
+    if (namesAType(t)) return t;            // "what about rugs" is a fresh search
+    var own = catalogWords(t);
+    // Nothing in it names anything we sell, so there is no refinement here to carry — and
+    // gluing the last search onto "still about Mars" would answer it with towels.
+    if (!own.length) return t;
+    var carry = A.ctx.terms.filter(function (w) { return own.indexOf(w) < 0; });
+    return carry.length ? t + ' ' + carry.join(' ') : t;
+  };
+
   A.handlers.faq = function (text) {
     var f = bestFaq(text);
     if (!f) return A.handlers.handoff(text);
-    return '<p class="asst-q">' + esc(f.q) + '</p>' +
-      HW.richText(HW.tokens(HW.m.pageText(f.a))) +
+    A.ctx.misses = 0;
+    var answer = HW.richText(HW.tokens(HW.m.pageText(f.a)));
+    var more = chips(related(f, 2));
+    // Confident: just answer, the way a person would. Unsure: say which question it is
+    // answering, so a wrong guess is visible and correctable rather than silently wrong.
+    var lead = confident(text, f)
+      ? p(pick(SURE))
+      : p('I’ll take that as <b>' + esc(f.q) + '</b>.');
+    var tail = confident(text, f) ? '' : p('If you meant something else, tell me a bit more.');
+    return lead + answer + tail + more +
       '<div class="as-actions">' + btn(HW.link('/page/faq'), 'All questions') + '</div>';
   };
+
+  /* Not "did it beat the runner-up" — on a real FAQ two entries about shipping are always
+     neck and neck — but "how much of this entry’s own question did they actually say".
+     "How much is shipping" covers every word of the shipping entry and one word of the
+     return-shipping one, which is the distinction the raw score cannot see. */
+  function confident(text, entry) {
+    var ws = words(text);
+    var own = words(entry.q);
+    if (!ws.length || !own.length) return false;
+    var covered = own.filter(function (w) {
+      return ws.some(function (q) { return hasWord(w, q); });
+    }).length;
+    return covered / own.length >= 0.6 && faqScore(entry, ws, topicWords()) >= 5;
+  }
 
   /* ---------------------------------------------------------------- *
    * finder — only things we actually sell and can actually send
@@ -231,14 +335,17 @@
     // them fill the panel with scrolling, and its Add to cart opened the drawer *behind* the
     // panel — an action control on a surface that is only supposed to answer. The image is
     // eager because a lazy one inside this scrolling panel never loads at all.
-    return p('These look closest:') +
+    A.ctx.terms = catalogWords(text);
+    A.ctx.misses = 0;
+    return p(pick(['Here’s what fits that:', 'These look right:', 'Closest I have:', 'Try these:'])) +
       '<ul class="as-results">' + hits.map(function (prod) {
         var r = HW.m.priceRange(prod);
         return '<li><a class="sres" href="' + esc(HW.link('/product/' + prod.slug)) + '">' +
           '<img src="' + esc(HW.asset(HW.m.thumb(HW.m.imageOrSwatch(prod)))) + '" alt="" width="56" height="56">' +
           '<span class="snm">' + esc(HW.seo.clip(prod.name, 70)) +
           '<span class="spr">' + (r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min)) + '</span></span></a></li>';
-      }).join('') + '</ul>';
+      }).join('') + '</ul>' +
+      p('Tell me a size, a colour or a shape and I’ll narrow it down.');
   };
 
   /* ---------------------------------------------------------------- *
@@ -246,15 +353,34 @@
    * ---------------------------------------------------------------- */
   /* The question is carried in this tab's own storage, never in the address bar: whatever a
      customer typed is theirs, and a URL gets copied, logged and shared. */
-  function contactBlock(text) {
+  function remember(text) {
     A.lastQuestion = String(text || '');
     try { u.session.set('hw:asked', A.lastQuestion); } catch (e) { /* private mode */ }
-    return p('Send it to us and we’ll answer properly — usually the same day.') +
-      '<div class="as-actions">' + btn(HW.link('/page/contact-us'), 'Contact us') + '</div>';
   }
 
+  function contactAction() {
+    return '<div class="as-actions">' + btn(HW.link('/page/contact-us'), 'Contact us') + '</div>';
+  }
+
+  function contactBlock(text) {
+    remember(text);
+    return p('Send it to us and we’ll answer properly — usually the same day.') + contactAction();
+  }
+
+  /* A first miss asks rather than surrenders — half of them are a word away from an answer,
+     and "I don't know, here is a form" is how a customer decides the whole thing is useless.
+     The contact link is on both replies regardless: asking again must never be the only way
+     out. */
   A.handlers.handoff = function (text) {
-    return p('I don’t have an answer for that one.') + contactBlock(text);
+    A.ctx.misses = (A.ctx.misses || 0) + 1;
+    remember(text);
+    if (A.ctx.misses === 1) {
+      return p('I’m not sure I follow. I know our towels, rugs, shower curtains and accessories, and I can answer on sizes, care, delivery and returns.') +
+        p('Say it another way and I’ll try again — or ask us directly.') +
+        chips(topQuestions(3)) + contactAction();
+    }
+    return p('Still not getting there, sorry. A person will do better than me with this one.') +
+      contactBlock(text);
   };
 
   /* ---------------------------------------------------------------- *
@@ -319,8 +445,13 @@
   function greet() {
     var box = log();
     if (!box || box.childNodes.length) return;
-    say('bot', p('Ask me about sizes, materials, care, delivery or returns — or tell me what you’re looking for.' +
-      (HW.account && HW.account.get() ? ' You’re signed in, so I can also tell you where your order is.' : '')));
+    var who = (HW.account && HW.account.get()) || null;
+    var first = who && who.name ? String(who.name).split(' ')[0] : '';
+    say('bot', p('Hi' + (first ? ' ' + esc(first) : '') + ' — I’m Ada, the ' +
+        esc((HW.DB.brand || {}).name || 'Home Weavers') + ' assistant.') +
+      p('Tell me what you’re after and I’ll find it, or ask me about sizes, care, delivery and returns' +
+        (who ? '. You’re signed in, so I can also tell you where your order is' : '') + '.') +
+      chips(topQuestions(3)));
   }
 
   HW.assistantPanel = {
@@ -334,6 +465,7 @@
       var btn = document.getElementById('assistBtn');
       if (btn) btn.setAttribute('aria-expanded', 'true');
       release = u.trapFocus(panel, HW.assistantPanel.close);
+      A.ctx = { terms: [], misses: 0 };
       greet();
       setTimeout(function () {
         var input = document.getElementById('assistInput');
@@ -356,16 +488,22 @@
       say('you', '<p>' + esc(text) + '</p>');
       // Hold the row this question owns. Writing into whichever row was last meant that two
       // questions in flight could put an order number under a laundry question.
-      var row = say('bot', '<p class="as-wait" aria-label="Thinking">…</p>');
+      var row = say('bot', '<p class="as-wait" aria-label="Typing">' +
+        '<span class="as-dot"></span><span class="as-dot"></span><span class="as-dot"></span></p>');
       var done = function (html) {
         if (row) row.innerHTML = html;
         var box = log();
         if (box) box.scrollTop = box.scrollHeight;
       };
+      // A beat before the answer. The reply is ready immediately, and arriving immediately is
+      // what makes it read as a form submission rather than someone replying.
+      A.turn += 1;
+      var beat = Math.min(900, 260 + String(text).length * 10);
       // Routing and the handler both run inside the chain, so a synchronous fault lands in the
       // message below rather than escaping and leaving the bubble stuck on an ellipsis.
-      return Promise.resolve().then(function () {
-        return A.handlers[A.route(text)](text);
+      return new Promise(function (go) { setTimeout(go, beat); }).then(function () {
+        var q = A.expand(text);
+        return A.handlers[A.route(q)](q);
       }).then(done, function () {
         done(p('Something went wrong on our side. Try again in a moment.'));
       });

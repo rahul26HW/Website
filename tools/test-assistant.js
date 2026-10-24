@@ -281,7 +281,7 @@ function askReal(text) {
 
 test('a return question finds the return entry, not the one that also says "how long"', function () {
   const html = askReal('how long do I have to return something');
-  assert(html.indexOf('return window') >= 0, 'got the wrong entry: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
+  assert(html.indexOf('Thirty days from delivery') >= 0, 'got the wrong entry: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
 });
 
 test('"ship" does not match "shipping" by substring', function () {
@@ -293,12 +293,12 @@ test('"ship" does not match "shipping" by substring', function () {
 });
 
 test('a plural still finds the singular entry', function () {
-  assert(askReal('how do I wash my towels').indexOf('wash my towels') >= 0, 'should find the care entry');
+  assert(askReal('how do I wash my towels').indexOf('Cold wash, tumble dry low.') >= 0, 'should find the care entry');
 });
 
 test('a genuine "how long" question still finds the delivery-time entry', function () {
   const html = askReal('how long will my order take');
-  assert(html.indexOf('How long will my order take') >= 0, 'got: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
+  assert(html.indexOf('Orders ship within 2 to 4 business days.') >= 0, 'got: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
 });
 
 test('"how long will my order take" is a delivery question, not a lookup', function () {
@@ -316,7 +316,7 @@ test('"where is my order" is still a lookup', function () {
 
 test('a shipping-cost question still finds the shipping entry', function () {
   const html = askReal('how much is delivery');
-  assert(html.indexOf('How much is shipping') >= 0, 'got: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
+  assert(html.indexOf('Free over $75, otherwise $9.99.') >= 0, 'got: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 70));
 });
 
 /* ================================================================ *
@@ -465,6 +465,54 @@ if (SNAPSHOT && fs.existsSync(SNAPSHOT)) {
     });
   });
 }
+
+
+/* ================================================================ *
+ * Talking like an assistant rather than a lookup table
+ * ================================================================ */
+test('a confident answer does not repeat the question back', function () {
+  const html = askReal('how should I wash my towels');
+  assert(html.indexOf('Cold wash, tumble dry low.') >= 0, 'should still answer');
+  assert(html.indexOf('I\u2019ll take that as') < 0, 'a sure answer should not hedge: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 80));
+});
+
+test('an unsure answer shows which question it answered', function () {
+  const html = askReal('delivery');
+  assert(html.indexOf('I\u2019ll take that as') >= 0, 'a guess should be visible: ' + html.replace(/<[^>]*>/g, ' ').slice(0, 80));
+});
+
+test('an answer offers the questions next door to it', function () {
+  const html = askReal('how do I start a return');
+  assert(html.indexOf('as-chip') >= 0, 'should suggest a related question');
+  assert(html.indexOf('data-q="How do I start a return?"') < 0, 'must not suggest the question it just answered');
+});
+
+test('a first miss asks again instead of giving up, and still offers the form', function () {
+  asstCtx.HW.DB = asstCtx.HW.schema.normalizeStore({ faq: REAL_FAQ, products: [], categories: [] });
+  asstCtx.HW._searchIndex = null;
+  asstCtx.HW.assistant._vocab = null;
+  asstCtx.HW.assistant.ctx = { terms: [], misses: 0 };
+  const first = asstCtx.HW.assistant.handlers.handoff('do you ship to Mars');
+  assert(/[Cc]ontact/.test(first), 'the form must be on offer from the first miss');
+  assert(first.indexOf('another way') >= 0, 'should ask rather than surrender');
+  const second = asstCtx.HW.assistant.handlers.handoff('still Mars');
+  assert(second.indexOf('another way') < 0, 'should not ask twice');
+  assert(/[Cc]ontact/.test(second), 'and should hand over');
+});
+
+test('a follow-up fragment is answered against the last search, not alone', function () {
+  setStore({ products: PRODUCTS.concat([{ id: 'p4', name: 'Linen Bath Rug', slug: 'linen-bath-rug',
+    categoryId: 'c1', material: 'linen', basePrice: 39, images: ['x.jpg'], inStock: true }]) });
+  asstCtx.HW.assistant._vocab = null;
+  const A = asstCtx.HW.assistant;
+  A.ctx = { terms: [], misses: 0 };
+  A.handlers.finder('cotton rug');
+  assert(A.ctx.terms.length > 0, 'the finder should remember what it searched for');
+  assert(A.expand('any in linen').indexOf('cotton') >= 0, 'a refinement should carry the last search forward');
+  assert(A.expand('how do I wash these towels').indexOf('cotton') < 0, 'a real question should not be polluted');
+  assert(A.expand('still about Mars') === 'still about Mars', 'a fragment that names nothing we sell must not be answered with the last search');
+  assert(A.expand('what about rugs') === 'what about rugs', 'naming a kind of thing starts a new search');
+});
 
 /* ================================================================ *
  * Results

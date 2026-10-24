@@ -64,7 +64,7 @@
 <link rel="preconnect" href="https://soydgxrrwozmiqzutypr.supabase.co" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/inter-latin.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/fraunces-latin.woff2" crossorigin>
-<link rel="stylesheet" href="../css/site.css?v=bb4025f7">
+<link rel="stylesheet" href="../css/site.css?v=8b1b4095">
 <script>
   /* Scripts load right after the first paint, so the header shows while they download.
      Order is kept (async=false). A background tab may never paint, so it loads at once there. */
@@ -180,22 +180,25 @@
   </div>
 </div>
 
-<button class="assistbubble" id="assistBtn" type="button" data-act="assist-open" aria-label="Ask us a question" aria-controls="assistPanel" aria-expanded="false" hidden>
+<button class="assistbubble" id="assistBtn" type="button" data-act="assist-open" aria-label="Chat with Ada, the Home Weavers assistant" aria-controls="assistPanel" aria-expanded="false" hidden>
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 15.1a2.6 2.6 0 0 1-2.6 2.6H9.1L4 21.4V6.5a2.6 2.6 0 0 1 2.6-2.6h11.2a2.6 2.6 0 0 1 2.6 2.6v8.6Z"/><path d="M9.8 9.4a2.3 2.3 0 1 1 3 2.2v1.3"/><circle cx="12.8" cy="15.2" r=".9" fill="currentColor" stroke="none"/></svg>
-  <span class="assistbubble-txt">Ask us</span>
+  <span class="assistbubble-txt">Ask Ada</span>
 </button>
 
-<div class="assistpanel" id="assistPanel" role="dialog" aria-modal="true" aria-label="Ask Home Weavers" hidden>
+<div class="assistpanel" id="assistPanel" role="dialog" aria-modal="true" aria-label="Chat with Ada" hidden>
   <div class="as-inner">
     <header class="as-head">
-      <h2 class="as-title">Ask us</h2>
+      <div class="as-ident">
+        <span class="as-ava" aria-hidden="true">A</span>
+        <span><h2 class="as-name">Ada</h2><span class="as-status">Home Weavers assistant</span></span>
+      </div>
       <button class="iconbtn" type="button" data-act="assist-close" aria-label="Close">✕</button>
     </header>
     <div class="as-log" id="assistLog" role="log" aria-live="polite" aria-atomic="false"></div>
     <form class="as-form" data-form="assist">
       <label class="sr-only" for="assistInput">Your question</label>
-      <input id="assistInput" name="q" type="text" maxlength="200" placeholder="Ask about sizes, care, delivery…" autocomplete="off">
-      <button class="btn sm" type="submit">Ask</button>
+      <input id="assistInput" name="q" type="text" maxlength="200" placeholder="Message Ada…" autocomplete="off">
+      <button class="btn sm" type="submit">Send</button>
     </form>
   </div>
 </div>
