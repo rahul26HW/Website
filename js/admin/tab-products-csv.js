@@ -6,7 +6,7 @@
 
   var A = HW.A, u = HW.u, esc = u.esc;
   var COLS = ['handle', 'name', 'type', 'category', 'subcategory', 'sku', 'upc', 'color', 'size', 'price', 'sale_price', 'stock',
-    'images', 'description', 'features', 'care', 'material', 'origin', 'badge', 'featured', 'hidden',
+    'images', 'description', 'features', 'care', 'material', 'collection', 'origin', 'badge', 'featured', 'hidden',
     'seo_title', 'seo_description', 'image_alt'];
   var OLD_COLS = ['color_hex', 'color_images', 'weight']; // older exports: still understood, no longer written
   var SEP = ' | ';
@@ -168,7 +168,7 @@
     }
 
     // ---- product fields (blank = keep) ----
-    var text = { name: 'name', description: 'description', care: 'care', material: 'material', origin: 'origin', seo_title: 'seoTitle', seo_description: 'seoDescription', image_alt: 'imageAlt' };
+    var text = { name: 'name', description: 'description', care: 'care', material: 'material', collection: 'collection', origin: 'origin', seo_title: 'seoTitle', seo_description: 'seoDescription', image_alt: 'imageAlt' };
     if (first('badge')) {
       var bv = first('badge'), known = HW.m.BADGES.find(function (b) { return same(b, bv); });
       if (CLEAR.test(bv)) p.badge = '';

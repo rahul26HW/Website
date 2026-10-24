@@ -219,6 +219,71 @@ test('a shortcut can name sizes that themselves contain commas', function () {
   assert(html.indexOf('Complete sets') >= 0, 'the shortcut was hidden, so the commas broke the match');
 });
 
+/* ================================================================ *
+ * Collection — the range a product belongs to
+ * ================================================================ */
+function collStore(colls) {
+  return HW.schema.normalizeStore({
+    categories: [{ id: 'c_t', name: 'Towels', slug: 'towels', show: true, subcategories: [] }],
+    products: colls.map(function (c, i) {
+      const p = collection('p_' + i, c.name, 'c_t', [SZ('Set of 2'), SZ('Set of 4')], [CL('Blue', '#7A9CC0')]);
+      p.collection = c.collection;
+      return p;
+    })
+  });
+}
+
+test('a collection filter keeps only that range', function () {
+  HW.DB = collStore([
+    { name: 'Willow Bath Towels', collection: 'Willow' },
+    { name: 'Willow Hand Towels', collection: 'Willow' },
+    { name: 'Hazel Bath Towels', collection: 'Hazel' }
+  ]);
+  const html = HW.views.category({ slug: 'towels', collection: 'Hazel' }).html;
+  assert(html.indexOf('Hazel Bath Towels') >= 0, 'Hazel is missing');
+  assert(html.indexOf('Willow Bath Towels') < 0, 'Willow leaked through');
+});
+
+test('the collection facet is offered when it actually groups products', function () {
+  HW.DB = collStore([
+    { name: 'Willow Bath Towels', collection: 'Willow' },
+    { name: 'Willow Hand Towels', collection: 'Willow' },
+    { name: 'Hazel Bath Towels', collection: 'Hazel' }
+  ]);
+  const html = HW.views.category({ slug: 'towels' }).html;
+  assert(/Collection/.test(html), 'no Collection group in the sidebar');
+});
+
+test('a collection facet where every product is its own range is not offered', function () {
+  HW.DB = collStore([
+    { name: 'Waterford Rug', collection: 'Waterford' },
+    { name: 'Bell Flower Rug', collection: 'Bell Flower' },
+    { name: 'Radiant Rug', collection: 'Radiant' }
+  ]);
+  const html = HW.views.category({ slug: 'towels' }).html;
+  assert(!/Collection<\/legend>/.test(html), 'offered a filter that groups nothing');
+});
+
+test('products with no collection do not create a blank choice', function () {
+  HW.DB = collStore([
+    { name: 'Willow Bath Towels', collection: 'Willow' },
+    { name: 'Willow Hand Towels', collection: 'Willow' },
+    { name: 'Odd One Out', collection: '' }
+  ]);
+  const html = HW.views.category({ slug: 'towels' }).html;
+  const group = html.slice(html.indexOf('Collection</legend>'));
+  assert(group.indexOf('cf-clabel"></span>') < 0, 'an empty collection was offered as a choice');
+});
+
+test('the router carries ?collection= through', function () {
+  C.location.pathname = '/category/towels';
+  C.location.search = '?collection=Willow';
+  C.location.href = 'https://example.test/category/towels?collection=Willow';
+  const route = HW.router.parse();
+  assert(route.params.collection === 'Willow', 'collection was dropped: ' + JSON.stringify(route.params));
+  C.location.search = ''; C.location.href = 'https://example.test/'; C.location.pathname = '/';
+});
+
 test('the router carries ?size= through to the category view', function () {
   C.location.pathname = '/category/rugs';
   C.location.search = '?size=21x34';

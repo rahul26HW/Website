@@ -263,6 +263,7 @@
       '<button class="' + (coll ? 'active' : '') + '" type="button" data-a="p-type" data-type="collection" aria-pressed="' + coll + '"><b>Collection with variations</b><span>Color &amp; size options, each its own SKU.</span></button></div></section>' +
       (coll ? collectionPanels(p) : simplePanels(p)) +
       ui.panel('Details',
+        ui.field('Collection', '@collection', p.collection, { maxlength: 60, placeholder: 'Willow', hint: 'The range this belongs to. Shoppers can filter by it once two or more products share a name here.' }) +
         '<div class="grid3">' + ui.field('Material', '@material', p.material) + ui.field('Origin', '@origin', p.origin) +
         ui.field('Shipping weight (g)', '@weight', p.weight, { type: 'number', min: 0, hint: 'Only needed if Snipcart calculates live shipping.' }) + '</div>' +
         ui.field('Features — one per line', '@features', (p.features || []).join('\n'), { textarea: true, rows: 5, type: 'lines' }) +

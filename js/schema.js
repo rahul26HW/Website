@@ -224,6 +224,8 @@
       if (!p.id) p.id = uid('p');
       if (!p.slug) p.slug = slugify(p.name);
       if (!Array.isArray(p.features)) p.features = [];
+      // The range a product belongs to — Willow, Hazel — so a shopper can see one range at a time.
+      p.collection = str(p.collection);
       if (!Array.isArray(p.oldSlugs)) p.oldSlugs = [];
       ['seoTitle', 'seoDescription', 'imageAlt', 'description', 'material', 'care', 'origin', 'badge'].forEach(function (k) { p[k] = str(p[k]); });
       p.cardImage = fixImageUrl(p.cardImage);   // the photo chosen for the grid; blank = the first one

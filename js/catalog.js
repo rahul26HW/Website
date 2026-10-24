@@ -57,13 +57,14 @@
   /* ---------- category ---------- */
   var ctx = null;
 
-  function emptyFilter() { return { subs: new Set(), colors: new Set(), sizes: new Set(), materials: new Set(), min: null, max: null }; }
+  function emptyFilter() { return { subs: new Set(), colors: new Set(), sizes: new Set(), collections: new Set(), materials: new Set(), min: null, max: null }; }
   function colorsOf(p) { return m.isCollection(p) ? m.offeredColors(p).map(function (v) { return { label: v.label, hex: v.hex }; }) : []; }
   function sizesOf(p) { return m.offeredSizes(p).map(function (v) { return m.sizeKey(v.label); }); }
 
   function matches(p, f, skip) {
     if (skip !== 'subs' && f.subs.size && !f.subs.has(p.subcategoryId)) return false;
     if (skip !== 'materials' && f.materials.size && !f.materials.has(p.material)) return false;
+    if (skip !== 'collections' && f.collections.size && !f.collections.has(p.collection)) return false;
     if (skip !== 'colors' && f.colors.size && !colorsOf(p).some(function (c) { return f.colors.has(c.label); })) return false;
     if (skip !== 'sizes' && f.sizes.size && !sizesOf(p).some(function (l) { return f.sizes.has(l); })) return false;
     if (skip !== 'price') {
@@ -97,6 +98,7 @@
         if (group === 'subs') return p.subcategoryId === v;
         if (group === 'materials') return p.material === v;
         if (group === 'sizes') return sizesOf(p).indexOf(v) >= 0;
+        if (group === 'collections') return p.collection === v;
         return colorsOf(p).some(function (c) { return c.label === v; });
       }).length;
       return { v: v, n: n, on: f[group].has(v) };
@@ -148,6 +150,15 @@
       if (keys.length < 2) return '';
       inner = facet('sizes', keys, function (k) { return best[k]; });
       return inner ? '<fieldset class="cf-group"><legend class="h4">Size</legend>' + inner + '</fieldset>' : '';
+    }
+    if (key === 'collections' && fcfg.collection) {
+      var names = Array.from(new Set(all.map(function (p) { return p.collection; }).filter(Boolean)));
+      // A range that holds one product is not a range, it is the product. Offering eighteen
+      // of those is a filter that groups nothing and narrows to what you already see.
+      var groups = names.filter(function (n) { return all.filter(function (p) { return p.collection === n; }).length > 1; });
+      if (names.length < 2 || !groups.length) return '';
+      inner = facet('collections', names.sort(), function (x) { return x; });
+      return inner ? '<fieldset class="cf-group"><legend class="h4">Collection</legend>' + inner + '</fieldset>' : '';
     }
     if (key === 'materials' && fcfg.material) {
       var mats = Array.from(new Set(all.map(function (p) { return p.material; }).filter(Boolean))).sort();
@@ -209,7 +220,7 @@
   }
 
   function sidebarHTML() {
-    return headHTML() + ['subs', 'sizes', 'colors', 'materials', 'price'].map(function (k) {
+    return headHTML() + ['subs', 'collections', 'sizes', 'colors', 'materials', 'price'].map(function (k) {
       return '<div data-group="' + k + '">' + groupHTML(k) + '</div>';
     }).join('');
   }
@@ -233,6 +244,7 @@
       set('color', Array.from(f.colors).join(','));
       set('size', Array.from(f.sizes).join('|'));
       set('material', Array.from(f.materials).join(','));
+      set('collection', Array.from(f.collections).join('|'));
       set('min', f.min != null ? String(f.min) : '');
       set('max', f.max != null ? String(f.max) : '');
       history.replaceState(history.state, '', url.pathname + url.search);
@@ -311,7 +323,7 @@
       ctx.f = emptyFilter();
       refresh('clear');
       var sb = document.getElementById('catFilters');
-      if (sb) ['subs', 'sizes', 'colors', 'materials'].forEach(function (k) { var b = sb.querySelector('[data-group="' + k + '"]'); if (b) b.innerHTML = groupHTML(k); });
+      if (sb) ['subs', 'collections', 'sizes', 'colors', 'materials'].forEach(function (k) { var b = sb.querySelector('[data-group="' + k + '"]'); if (b) b.innerHTML = groupHTML(k); });
     },
     sort: function (el) {
       ctx.sort = el.value;
@@ -334,7 +346,7 @@
     var cat = m.categoryBySlug(params.slug);
     if (!cat || cat.hidden) return HW.views.notfound();
     var all = m.productsIn(cat);
-    var fcfg = Object.assign({ type: true, size: true, color: true, material: true, price: true }, cat.filters || {});
+    var fcfg = Object.assign({ type: true, collection: true, size: true, color: true, material: true, price: true }, cat.filters || {});
     ctx = { cat: cat, all: all, fcfg: fcfg, f: emptyFilter(), sort: params.sort || 'featured', lo: 0, hi: 0 };
     String(params.sub || '').split(',').forEach(function (slug) {
       var sub = cat.subcategories.find(function (s) { return s.slug === slug; });
@@ -345,6 +357,7 @@
     // Sizes come through the same reader the shortcuts use, so a label with commas survives.
     m.sizeList(params.size).slice(0, 30).forEach(function (x) { ctx.f.sizes.add(m.sizeKey(x)); });
     list(params.material).forEach(function (x) { ctx.f.materials.add(x); });
+    m.sizeList(params.collection).slice(0, 30).forEach(function (x) { ctx.f.collections.add(x); });
     if (isFinite(parseFloat(params.min))) ctx.f.min = parseFloat(params.min);
     if (isFinite(parseFloat(params.max))) ctx.f.max = parseFloat(params.max);
     var items = results();

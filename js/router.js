@@ -51,7 +51,7 @@
     if (!parts.length) return { name: 'home', params: q };
     switch (parts[0]) {
       case 'admin': return { name: 'admin', params: q };
-      case 'category': return parts[1] ? { name: 'category', params: { slug: parts[1], sub: q.sub, sort: q.sort, size: q.size, color: q.color, material: q.material, min: q.min, max: q.max } } : { name: 'notfound', params: {} };
+      case 'category': return parts[1] ? { name: 'category', params: { slug: parts[1], sub: q.sub, sort: q.sort, size: q.size, collection: q.collection, color: q.color, material: q.material, min: q.min, max: q.max } } : { name: 'notfound', params: {} };
       case 'product': return parts[1] ? { name: 'product', params: { slug: parts[1], color: q.color, size: q.size } } : { name: 'notfound', params: {} };
       case 'page': return parts[1] ? { name: 'page', params: { slug: parts[1] } } : { name: 'notfound', params: {} };
       case 'checkout': return { name: 'checkout', params: q };
