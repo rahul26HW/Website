@@ -102,7 +102,7 @@
       (uses.length ? uses.map(function (b, j) {
         return '<div class="subpill shopbypill">' +
           '<input aria-label="Label" placeholder="In front of the bath" value="' + esc(b.label || '') + '" data-bind=' + '"categories.' + i + '.shopBy.' + j + '.label"' + '>' +
-          '<input aria-label="Sizes" placeholder="22x60" value="' + esc(b.sizes || '') + '" data-bind=' + '"categories.' + i + '.shopBy.' + j + '.sizes"' + '>' +
+          '<input aria-label="Sizes" placeholder="22x60 or 17x24|17x30" title="Separate several sizes with a comma, or a pipe when a size label itself has commas" value="' + esc(b.sizes || '') + '" data-bind=' + '"categories.' + i + '.shopBy.' + j + '.sizes"' + '>' +
           '<button type="button" data-a="use-delete" data-i="' + i + '" data-j="' + j + '" aria-label="Remove ' + esc(b.label || 'this shortcut') + '">✕</button></div>';
       }).join('') : '<span class="muted" style="font-size:13px">No shortcuts yet.</span>') +
       ' <button class="txtbtn" type="button" data-a="use-add" data-i="' + i + '">+ Add shortcut</button></div>';

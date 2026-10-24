@@ -192,7 +192,9 @@
      not offered at all — a dead end is worse than no shortcut. */
   function shopByHTML(cat, all) {
     var uses = (cat.shopBy || []).filter(function (b) { return b.label && b.sizes; }).map(function (b) {
-      var keys = String(b.sizes).split(',').map(function (x) { return m.sizeKey(x); }).filter(Boolean);
+      // A pipe separates the list when a size label has commas of its own, which the towel
+      // sets do: "3 Pieces (1 Bath, 1 Hand, 1 Wash)" is one size, not four.
+      var keys = m.sizeList(b.sizes).map(function (x) { return m.sizeKey(x); }).filter(Boolean);
       var n = all.filter(function (p) {
         return m.offeredSizes(p).some(function (v) { return keys.indexOf(m.sizeKey(v.label)) >= 0; });
       }).length;
@@ -229,7 +231,7 @@
       var set = function (k, v) { if (v) url.searchParams.set(k, v); else url.searchParams.delete(k); };
       set('sub', subSlugs.join(','));
       set('color', Array.from(f.colors).join(','));
-      set('size', Array.from(f.sizes).join(','));
+      set('size', Array.from(f.sizes).join('|'));
       set('material', Array.from(f.materials).join(','));
       set('min', f.min != null ? String(f.min) : '');
       set('max', f.max != null ? String(f.max) : '');
@@ -340,7 +342,8 @@
     });
     var list = function (v) { return String(v || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 30); };
     list(params.color).forEach(function (c) { ctx.f.colors.add(c); });
-    list(params.size).forEach(function (x) { ctx.f.sizes.add(m.sizeKey(x)); });
+    // Sizes come through the same reader the shortcuts use, so a label with commas survives.
+    m.sizeList(params.size).slice(0, 30).forEach(function (x) { ctx.f.sizes.add(m.sizeKey(x)); });
     list(params.material).forEach(function (x) { ctx.f.materials.add(x); });
     if (isFinite(parseFloat(params.min))) ctx.f.min = parseFloat(params.min);
     if (isFinite(parseFloat(params.max))) ctx.f.max = parseFloat(params.max);

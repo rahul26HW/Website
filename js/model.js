@@ -114,6 +114,14 @@
 
   /* One size, however it was typed. The catalog holds both 17x24 and 17"X24" for the same
      thing, and a shopper should see one choice, not two — and picking it should find both. */
+  /* A written list of sizes. Comma is the natural separator until a size label contains one
+     — the towel sets do — so a pipe wins when it is present. */
+  m.sizeList = function (text) {
+    var s = String(text || '');
+    return (s.indexOf('|') >= 0 ? s.split('|') : s.split(','))
+      .map(function (x) { return x.trim(); }).filter(Boolean);
+  };
+
   m.sizeKey = function (label) {
     return String(label || '')
       .toLowerCase()

@@ -206,6 +206,19 @@ test('shop-by matches however the size was typed', function () {
     'the entry was hidden because the catalog spells the size differently');
 });
 
+test('a shortcut can name sizes that themselves contain commas', function () {
+  HW.DB = HW.schema.normalizeStore({
+    categories: [{ id: 'c_t', name: 'Towels', slug: 'towels', show: true, subcategories: [],
+      // The separator is a pipe, because "3 Pieces (1 Bath, 1 Hand)" has commas of its own.
+      shopBy: [{ label: 'Complete sets', sizes: '3 Pieces (1 Bath, 1 Hand, 1 Wash)|6 Pieces (2 Bath, 2 Hand, 2 Wash)' }] }],
+    products: [collection('p_set', 'Willow Set', 'c_t',
+      [{ id: 'a', label: '3 Pieces (1 Bath, 1 Hand, 1 Wash)' }, { id: 'b', label: 'Set of 2' }],
+      [CL('Blue', '#7A9CC0')])]
+  });
+  const html = HW.views.category({ slug: 'towels' }).html;
+  assert(html.indexOf('Complete sets') >= 0, 'the shortcut was hidden, so the commas broke the match');
+});
+
 test('the router carries ?size= through to the category view', function () {
   C.location.pathname = '/category/rugs';
   C.location.search = '?size=21x34';
