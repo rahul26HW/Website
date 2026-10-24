@@ -325,7 +325,7 @@
       inStock: v.inStock,
       specs: [{ label: 'SKU', value: v.sku }, { label: 'UPC', value: v.upc }, { label: cOpt.name || 'Color', value: v.color.label },
         { label: sOpt.name || 'Size', value: v.size.label }, { label: 'Dimensions', value: v.size.dims || p.dims }, { label: 'Pile height', value: p.pileHeight },
-        { label: 'Backing', value: p.backing }, { label: 'Shape', value: p.shape }, { label: 'Material', value: p.material }, { label: 'Origin', value: p.origin }]
+        { label: 'Backing', value: p.backing }, { label: 'Shape', value: m.shapeFor(v.size.label) || p.shape }, { label: 'Material', value: p.material }, { label: 'Origin', value: p.origin }]
     };
   }
 

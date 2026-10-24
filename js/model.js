@@ -116,6 +116,19 @@
      thing, and a shopper should see one choice, not two — and picking it should find both. */
   /* A written list of sizes. Comma is the natural separator until a size label contains one
      — the towel sets do — so a pipe wins when it is present. */
+  /* The shape of a size. Returns nothing when a size is not mapped, because no shape at all
+     beats a confident wrong one — a 17x24 is not a half circle. */
+  m.shapeFor = function (label) {
+    var k = m.sizeKey(label);
+    if (!k) return '';
+    var rows = ((DB() || {}).settings || {}).sizeShapes || [];
+    for (var i = 0; i < rows.length; i++) {
+      var hit = m.sizeList(rows[i].sizes).some(function (x) { return m.sizeKey(x) === k; });
+      if (hit) return rows[i].shape || '';
+    }
+    return '';
+  };
+
   m.sizeList = function (text) {
     var s = String(text || '');
     return (s.indexOf('|') >= 0 ? s.split('|') : s.split(','))

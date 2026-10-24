@@ -63,6 +63,32 @@
       '<div class="btnrow" style="margin-top:10px"><button class="btn ghost sm" type="button" data-a="tax-add">+ Add a state</button></div>' + ui.saveBtn());
   }
 
+  /* Shape belongs to the size. One rug is sold round, as a runner and as a contour piece, so
+     a single value on the product is wrong for most of its sizes. Map it once here and every
+     product page shows the shape of the size the shopper has actually chosen. */
+  function shapeRows() {
+    var rows = (A.draft.settings.sizeShapes || []);
+    return A.ui.panel('Shape by size',
+      '<p class="hint">Each row is a shape and the sizes that have it. Separate sizes with a comma, or a pipe when a size name has commas in it. A size you do not list simply shows no shape.</p>' +
+      (rows.length ? rows.map(function (r, j) {
+        return '<div class="colorcard"><div class="slidehead" style="margin-bottom:8px"><strong style="font-size:13px">' + esc(r.shape || 'New shape') +
+          '</strong><button class="txtbtn danger" type="button" data-a="shape-remove" data-i="' + j + '">Remove</button></div>' +
+          '<div class="grid2">' + A.ui.field('Shape', 'settings.sizeShapes.' + j + '.shape', r.shape, { placeholder: 'Runner' }) +
+          A.ui.field('Sizes with this shape', 'settings.sizeShapes.' + j + '.sizes', r.sizes, { placeholder: '21x54, 22x60' }) + '</div></div>';
+      }).join('') : '<p class="muted" style="font-size:14px">No shapes mapped yet.</p>') +
+      '<button class="btn loom sm" type="button" data-a="shape-add">+ Add shape</button>' + A.ui.saveBtn());
+  }
+
+  A.actions['shape-add'] = function () {
+    if (!Array.isArray(A.draft.settings.sizeShapes)) A.draft.settings.sizeShapes = [];
+    A.draft.settings.sizeShapes.push({ shape: '', sizes: '' });
+    var y = window.scrollY; A.render(); window.scrollTo(0, y); A.refreshDirtyBar();
+  };
+  A.actions['shape-remove'] = function (el) {
+    A.draft.settings.sizeShapes.splice(+el.dataset.i, 1);
+    var y = window.scrollY; A.render(); window.scrollTo(0, y); A.refreshDirtyBar();
+  };
+
   A.tabs.storefront = {
     render: function () {
       ui = A.ui;
@@ -102,6 +128,7 @@
           ui.field('Counting orders from', 'settings.liveFrom', st.liveFrom, { type: 'date',
             hint: 'The day the shop opened for real customers. Orders before it stay in the list but are left out of the dashboard and analytics totals, so test orders don’t flatter the figures. Leave blank to count everything.' }) +
           ui.check('Show empty categories to shoppers', 'settings.showEmptyCategories', st.showEmptyCategories) +
+          shapeRows() +
           ui.field('Size guide', 'settings.sizeGuide', st.sizeGuide, { textarea: true, rows: 10, hint: 'Opens from “Size guide” on product pages with sizes. Tables: one row per line, columns separated by | (first row = headings). Leave blank to hide the link.' }) +
           ui.saveBtn()) +
 

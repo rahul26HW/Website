@@ -51,6 +51,9 @@
         lowStockThreshold: 5,
         siteUrl: '',                  // e.g. https://nitish463.github.io/Website/ (used for canonical + sitemap)
         googleClientId: '',           // public OAuth client ID for "Continue with Google" (blank hides the button)
+        // Shape belongs to the size, not the product: one rug is sold round, runner and
+        // contour, so a single value per product is wrong for most of its sizes.
+        sizeShapes: [],
         sizeGuide: DEFAULT_SIZE_GUIDE // shown from product pages with sizes; blank hides the link
       },
       hero: { autoplay: true, interval: 5000, slides: [] },

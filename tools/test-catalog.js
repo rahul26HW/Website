@@ -275,6 +275,43 @@ test('products with no collection do not create a blank choice', function () {
   assert(group.indexOf('cf-clabel"></span>') < 0, 'an empty collection was offered as a choice');
 });
 
+/* ================================================================ *
+ * Shape — a property of the size, not of the product
+ * ================================================================ */
+const SHAPES = [
+  { shape: 'Rectangular', sizes: '17x24|21x34|24x40|20x32|10x22|24x36' },
+  { shape: 'Runner', sizes: '21x54|22x60|20x54' },
+  { shape: 'Round', sizes: '22" Round|28" Round|30" Round|30"' },
+  { shape: 'Slice / Half circle', sizes: '17x30' },
+  { shape: 'Oval', sizes: '18x18' },
+  { shape: 'Contour / D-shaped', sizes: '20x20' },
+  { shape: 'Heart', sizes: '25x25' }
+];
+
+test('a size knows its own shape', function () {
+  HW.DB = HW.schema.normalizeStore({ settings: { sizeShapes: SHAPES } });
+  assert(HW.m.shapeFor('17x24') === 'Rectangular', 'got ' + HW.m.shapeFor('17x24'));
+  assert(HW.m.shapeFor('22x60') === 'Runner', 'got ' + HW.m.shapeFor('22x60'));
+  assert(HW.m.shapeFor('25x25') === 'Heart', 'got ' + HW.m.shapeFor('25x25'));
+});
+
+test('shape matches however the size was typed', function () {
+  HW.DB = HW.schema.normalizeStore({ settings: { sizeShapes: SHAPES } });
+  assert(HW.m.shapeFor('17"X24"') === 'Rectangular', 'the other spelling lost its shape');
+  assert(HW.m.shapeFor('30" ROUND') === 'Round', 'case and quotes should not matter');
+});
+
+test('an unmapped size has no shape rather than a wrong one', function () {
+  HW.DB = HW.schema.normalizeStore({ settings: { sizeShapes: SHAPES } });
+  assert(!HW.m.shapeFor('One size'), 'invented a shape for a size with no mapping');
+  assert(!HW.m.shapeFor(''), 'invented a shape for nothing');
+});
+
+test('with no mapping configured, nothing claims a shape', function () {
+  HW.DB = HW.schema.normalizeStore({ settings: {} });
+  assert(!HW.m.shapeFor('17x24'), 'claimed a shape with no mapping set');
+});
+
 test('the router carries ?collection= through', function () {
   C.location.pathname = '/category/towels';
   C.location.search = '?collection=Willow';
