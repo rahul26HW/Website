@@ -463,3 +463,7 @@ body.printing-slip #slipRoot{display:block}
 .nlpick input{margin:0;flex:0 0 auto}
 .featprev{display:flex;align-items:center;justify-content:center;height:54px;margin-top:8px;border:1px solid var(--line,#E4DED3);border-radius:6px;background:#fff;color:#3A5A52}
 .featprev svg{width:30px;height:30px}
+.shopbyedit{width:100%;margin-top:4px}
+.shopbypill{display:inline-flex;align-items:center;gap:6px;margin:0 6px 6px 0}
+.shopbypill input{width:170px;font-size:13px;padding:5px 8px;margin:0}
+.shopbypill input:last-of-type{width:110px}

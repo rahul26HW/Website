@@ -13,7 +13,7 @@ const vm = require('vm');
 const ROOT = path.resolve(__dirname, '..');
 
 function load(files) {
-  const ctx = { console, setTimeout, clearTimeout, Promise, JSON, Date, Math, RegExp, URL, Set, Infinity,
+  const ctx = { console, setTimeout, clearTimeout, Promise, JSON, Date, Math, RegExp, URL, URLSearchParams, Set, Infinity,
     CSS: { escape: (s) => String(s) } };
   ctx.window = ctx;
   ctx.globalThis = ctx;
@@ -159,6 +159,63 @@ test('size and colour together narrow, not widen', function () {
   const view = HW.views.category({ slug: 'rugs', size: '21x34', color: 'Grey' });
   assert(view.html.indexOf('Big Rug') >= 0, 'Big Rug is grey and 21x34');
   assert(view.html.indexOf('Small Rug') < 0, 'Small Rug is 21x34 but not grey');
+});
+
+/* ================================================================ *
+ * Shop by — named uses that map onto sizes
+ * ================================================================ */
+function shopByStore(shopBy) {
+  return HW.schema.normalizeStore({
+    categories: [{ id: 'c_rugs', name: 'Rugs', slug: 'rugs', show: true, subcategories: [], shopBy: shopBy }],
+    products: [
+      collection('p_small', 'Small Rug', 'c_rugs', [SZ('17x24'), SZ('21x34')], [CL('Blue', '#7A9CC0')]),
+      collection('p_round', 'Round Rug', 'c_rugs', [SZ('22" Round')], [CL('Blue', '#7A9CC0')])
+    ]
+  });
+}
+
+test('a shop-by entry becomes a link to that size', function () {
+  HW.DB = shopByStore([{ label: 'In front of a single sink', sizes: '17x24,17x30' }]);
+  const html = HW.views.category({ slug: 'rugs' }).html;
+  assert(html.indexOf('In front of a single sink') >= 0, 'the label is missing');
+  assert(/size=17x24/.test(html), 'the link does not carry the size');
+});
+
+test('a shop-by entry nobody can buy is not offered', function () {
+  HW.DB = shopByStore([
+    { label: 'In front of a single sink', sizes: '17x24' },
+    { label: 'Tank lid cover', sizes: '10x22' }        // nothing in this fixture is 10x22
+  ]);
+  const html = HW.views.category({ slug: 'rugs' }).html;
+  assert(html.indexOf('In front of a single sink') >= 0, 'the real one should show');
+  assert(html.indexOf('Tank lid cover') < 0, 'a link to an empty page was offered');
+});
+
+test('a category with no shop-by entries shows no block', function () {
+  HW.DB = shopByStore([]);
+  assert(HW.views.category({ slug: 'rugs' }).html.indexOf('shopby') < 0, 'an empty block was rendered');
+});
+
+test('shop-by matches however the size was typed', function () {
+  HW.DB = HW.schema.normalizeStore({
+    categories: [{ id: 'c_rugs', name: 'Rugs', slug: 'rugs', show: true, subcategories: [],
+      shopBy: [{ label: 'Single sink', sizes: '17x24' }] }],
+    products: [collection('p_b', 'Rug B', 'c_rugs', [{ id: 'q', label: '17"X24"' }, SZ('30x40')], [CL('Grey', '#999999')])]
+  });
+  assert(HW.views.category({ slug: 'rugs' }).html.indexOf('Single sink') >= 0,
+    'the entry was hidden because the catalog spells the size differently');
+});
+
+test('the router carries ?size= through to the category view', function () {
+  C.location.pathname = '/category/rugs';
+  C.location.search = '?size=21x34';
+  C.location.href = 'https://example.test/category/rugs?size=21x34';
+  const route = HW.router.parse();
+  assert(route.name === 'category', 'routed to ' + route.name);
+  assert(route.params.size === '21x34', 'size was dropped: ' + JSON.stringify(route.params));
+  C.location.search = '';
+  C.location.href = 'https://example.test/';
+  C.location.pathname = '/';
 });
 
 Promise.resolve().then(function () {

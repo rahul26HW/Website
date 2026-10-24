@@ -25,6 +25,7 @@
           }).join('') || '<span class="muted" style="font-size:13px">No subcategories</span>') +
           '<span class="subpill addsub"><label class="sr-only" for="newsub_' + i + '">Add subcategory to ' + esc(c.name) + '</label><input id="newsub_' + i + '" placeholder="Add subcategory" data-enter="sub-add" data-i="' + i + '">' +
           '<button type="button" data-a="sub-add" data-i="' + i + '" aria-label="Add subcategory" style="color:var(--loom)">+</button></span></div></div>' +
+          shopByRow(c, i) +
           '<div class="rowbtns">' +
           '<button class="txtbtn" type="button" data-a="cat-move" data-i="' + i + '" data-d="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move ' + esc(c.name) + ' earlier in the menu">↑</button>' +
           '<button class="txtbtn" type="button" data-a="cat-move" data-i="' + i + '" data-d="1"' + (i === cats.length - 1 ? ' disabled' : '') + ' aria-label="Move ' + esc(c.name) + ' later in the menu">↓</button>' +
@@ -92,6 +93,32 @@
     close();
     return true;
   }
+
+  /* Named uses a shopper can click instead of guessing dimensions. Each one is a label and
+     the sizes it stands for; the storefront hides any whose sizes nobody sells. */
+  function shopByRow(c, i) {
+    var uses = c.shopBy || [];
+    return '<div class="shopbyedit"><div class="muted" style="font-size:12px;margin:10px 0 6px">Shop by — shortcuts shown above the products</div>' +
+      (uses.length ? uses.map(function (b, j) {
+        return '<div class="subpill shopbypill">' +
+          '<input aria-label="Label" placeholder="In front of the bath" value="' + esc(b.label || '') + '" data-bind=' + '"categories.' + i + '.shopBy.' + j + '.label"' + '>' +
+          '<input aria-label="Sizes" placeholder="22x60" value="' + esc(b.sizes || '') + '" data-bind=' + '"categories.' + i + '.shopBy.' + j + '.sizes"' + '>' +
+          '<button type="button" data-a="use-delete" data-i="' + i + '" data-j="' + j + '" aria-label="Remove ' + esc(b.label || 'this shortcut') + '">✕</button></div>';
+      }).join('') : '<span class="muted" style="font-size:13px">No shortcuts yet.</span>') +
+      ' <button class="txtbtn" type="button" data-a="use-add" data-i="' + i + '">+ Add shortcut</button></div>';
+  }
+
+  A.actions['use-add'] = function (el) {
+    var c = A.draft.categories[+el.dataset.i];
+    if (!Array.isArray(c.shopBy)) c.shopBy = [];
+    c.shopBy.push({ id: 'use_' + Math.random().toString(36).slice(2, 8), label: '', sizes: '' });
+    var y = window.scrollY; A.render(); window.scrollTo(0, y); A.refreshDirtyBar();
+  };
+  A.actions['use-delete'] = function (el) {
+    var c = A.draft.categories[+el.dataset.i];
+    c.shopBy.splice(+el.dataset.j, 1);
+    var y = window.scrollY; A.render(); window.scrollTo(0, y); A.refreshDirtyBar();
+  };
 
   A.actions['cat-new'] = function () {
     open('new', { id: u.uid('c'), name: '', slug: '', image: '', hidden: false, seoTitle: '', seoDescription: '', subcategories: [], filters: { type: true, color: true, material: true, price: true } });

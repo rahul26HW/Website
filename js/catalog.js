@@ -187,6 +187,25 @@
       ' <button class="cf-clear cf-toggle" type="button" data-act="cf-toggle" aria-expanded="false" aria-controls="catFilters">Show filters</button></span></div>';
   }
 
+  /* Named uses, each standing for a set of sizes: someone knows the rug is going in front of
+     the bath long before they know it is 22x60. An entry that would lead to an empty page is
+     not offered at all — a dead end is worse than no shortcut. */
+  function shopByHTML(cat, all) {
+    var uses = (cat.shopBy || []).filter(function (b) { return b.label && b.sizes; }).map(function (b) {
+      var keys = String(b.sizes).split(',').map(function (x) { return m.sizeKey(x); }).filter(Boolean);
+      var n = all.filter(function (p) {
+        return m.offeredSizes(p).some(function (v) { return keys.indexOf(m.sizeKey(v.label)) >= 0; });
+      }).length;
+      return { label: b.label, sizes: b.sizes, n: n };
+    }).filter(function (b) { return b.n > 0; });
+    if (!uses.length) return '';
+    return '<nav class="shopby" aria-label="Shop by use"><h2 class="shopby-h">Shop by</h2><div class="shopby-row">' +
+      uses.map(function (b) {
+        return '<a class="shopby-chip" href="' + HW.link('/category/' + cat.slug) + '?size=' + encodeURIComponent(b.sizes) + '">' +
+          esc(b.label) + '<span class="shopby-n">' + b.n + '</span></a>';
+      }).join('') + '</div></nav>';
+  }
+
   function sidebarHTML() {
     return headHTML() + ['subs', 'sizes', 'colors', 'materials', 'price'].map(function (k) {
       return '<div data-group="' + k + '">' + groupHTML(k) + '</div>';
@@ -353,6 +372,7 @@
         '<nav class="crumb" aria-label="Breadcrumb"><a href="' + HW.link('/') + '">Home</a> &nbsp;/&nbsp; <span aria-current="page">' + esc(cat.name) + '</span></nav>' +
         '<div class="listing-head"><div><div class="eyebrow" id="catCount" style="margin-bottom:8px" aria-live="polite">' + u.plural(items.length, 'product') + '</div>' +
         '<h1>' + esc(cat.name) + '</h1></div>' + (all.length > 1 ? sortSel : '') + '</div>' +
+        shopByHTML(cat, all) +
         body + '<div style="height:70px"></div></div>',
       seo: {
         title: cat.seoTitle || cat.name,

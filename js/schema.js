@@ -209,6 +209,10 @@
       if (!c.slug) c.slug = slugify(c.name);
       if (!Array.isArray(c.subcategories)) c.subcategories = [];
       c.subcategories.forEach(function (s) { if (!s.id) s.id = uid('s'); if (!s.slug) s.slug = slugify(s.name); });
+      // Named uses — "in front of the bath", "toilet lid cover" — each standing for a set of
+      // sizes. A shopper knows where the rug is going long before they know its dimensions.
+      if (!Array.isArray(c.shopBy)) c.shopBy = [];
+      c.shopBy.forEach(function (b) { if (!b.id) b.id = uid('use'); b.label = str(b.label); b.sizes = str(b.sizes); });
       if (!isObj(c.filters)) c.filters = { type: true, color: true, material: true, price: true };
       c.tagline = str(c.tagline).slice(0, 60);
       if (typeof c.hidden !== 'boolean') c.hidden = false;
