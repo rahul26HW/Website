@@ -104,6 +104,33 @@
     return m.optColor(p).values.filter(function (c) { return sizes.some(function (s) { return m.isOffered(p, c.id, s.id); }); });
   };
 
+  /* The sizes this product is actually sold in — a size listed with no colour behind it is
+     not a size a shopper can buy, and filtering by it would promise an empty page. */
+  m.offeredSizes = function (p) {
+    if (!m.isCollection(p)) return [];
+    var colors = m.optColor(p).values;
+    return m.optSize(p).values.filter(function (s) { return colors.some(function (c) { return m.isOffered(p, c.id, s.id); }); });
+  };
+
+  /* One size, however it was typed. The catalog holds both 17x24 and 17"X24" for the same
+     thing, and a shopper should see one choice, not two — and picking it should find both. */
+  m.sizeKey = function (label) {
+    return String(label || '')
+      .toLowerCase()
+      .replace(/["”″′']/g, '')
+      .replace(/\binches?\b|\bin\b/g, '')
+      .replace(/\s*[x×]\s*/g, 'x')
+      .replace(/[^a-z0-9x.]+/g, ' ')
+      .trim();
+  };
+
+  /* Sizes read as numbers to a person: 17x24 before 21x34, Set of 2 before Set of 10.
+     Plain alphabetical puts "Set of 10" before "Set of 2", which looks like a bug. */
+  m.sizeOrder = function (label) {
+    var n = String(label).match(/\d+(\.\d+)?/g);
+    return n ? Number(n[0]) * 1000 + (n[1] ? Number(n[1]) : 0) : Infinity;
+  };
+
   /* ---------- timed sale ----------
      An extra percentage off while the sale window is open. It stops by itself at the end time: the price,
      the band on the product page and the ribbons on the cards all come from this one setting. */

@@ -57,13 +57,15 @@
   /* ---------- category ---------- */
   var ctx = null;
 
-  function emptyFilter() { return { subs: new Set(), colors: new Set(), materials: new Set(), min: null, max: null }; }
+  function emptyFilter() { return { subs: new Set(), colors: new Set(), sizes: new Set(), materials: new Set(), min: null, max: null }; }
   function colorsOf(p) { return m.isCollection(p) ? m.offeredColors(p).map(function (v) { return { label: v.label, hex: v.hex }; }) : []; }
+  function sizesOf(p) { return m.offeredSizes(p).map(function (v) { return m.sizeKey(v.label); }); }
 
   function matches(p, f, skip) {
     if (skip !== 'subs' && f.subs.size && !f.subs.has(p.subcategoryId)) return false;
     if (skip !== 'materials' && f.materials.size && !f.materials.has(p.material)) return false;
     if (skip !== 'colors' && f.colors.size && !colorsOf(p).some(function (c) { return f.colors.has(c.label); })) return false;
+    if (skip !== 'sizes' && f.sizes.size && !sizesOf(p).some(function (l) { return f.sizes.has(l); })) return false;
     if (skip !== 'price') {
       var r = m.priceRange(p);
       if (f.min != null && r.max < f.min) return false;
@@ -94,6 +96,7 @@
       var n = base.filter(function (p) {
         if (group === 'subs') return p.subcategoryId === v;
         if (group === 'materials') return p.material === v;
+        if (group === 'sizes') return sizesOf(p).indexOf(v) >= 0;
         return colorsOf(p).some(function (c) { return c.label === v; });
       }).length;
       return { v: v, n: n, on: f[group].has(v) };
@@ -126,6 +129,25 @@
         return '<span class="cf-dot" style="background:' + esc(cmap[l]) + '" aria-hidden="true"></span>';
       });
       return inner ? '<fieldset class="cf-group"><legend class="h4">Color</legend><div class="cf-colors">' + inner + '</div></fieldset>' : '';
+    }
+    if (key === 'sizes' && fcfg.size) {
+      // Group by what the size IS, and label it with the cleanest spelling anyone used:
+      // a shopper should never be offered 17x24 and 17\"X24\" as two different things.
+      var best = {};
+      all.forEach(function (p) {
+        m.offeredSizes(p).forEach(function (v) {
+          var k = m.sizeKey(v.label);
+          if (!best[k] || v.label.length < best[k].length) best[k] = v.label;
+        });
+      });
+      var keys = Object.keys(best).sort(function (a, b) {
+        var d = m.sizeOrder(a) - m.sizeOrder(b);
+        return d || a.localeCompare(b);
+      });
+      // One size is not a choice, it is a fact about the category.
+      if (keys.length < 2) return '';
+      inner = facet('sizes', keys, function (k) { return best[k]; });
+      return inner ? '<fieldset class="cf-group"><legend class="h4">Size</legend>' + inner + '</fieldset>' : '';
     }
     if (key === 'materials' && fcfg.material) {
       var mats = Array.from(new Set(all.map(function (p) { return p.material; }).filter(Boolean))).sort();
@@ -166,7 +188,7 @@
   }
 
   function sidebarHTML() {
-    return headHTML() + ['subs', 'colors', 'materials', 'price'].map(function (k) {
+    return headHTML() + ['subs', 'sizes', 'colors', 'materials', 'price'].map(function (k) {
       return '<div data-group="' + k + '">' + groupHTML(k) + '</div>';
     }).join('');
   }
@@ -188,6 +210,7 @@
       var set = function (k, v) { if (v) url.searchParams.set(k, v); else url.searchParams.delete(k); };
       set('sub', subSlugs.join(','));
       set('color', Array.from(f.colors).join(','));
+      set('size', Array.from(f.sizes).join(','));
       set('material', Array.from(f.materials).join(','));
       set('min', f.min != null ? String(f.min) : '');
       set('max', f.max != null ? String(f.max) : '');
@@ -267,7 +290,7 @@
       ctx.f = emptyFilter();
       refresh('clear');
       var sb = document.getElementById('catFilters');
-      if (sb) ['subs', 'colors', 'materials'].forEach(function (k) { var b = sb.querySelector('[data-group="' + k + '"]'); if (b) b.innerHTML = groupHTML(k); });
+      if (sb) ['subs', 'sizes', 'colors', 'materials'].forEach(function (k) { var b = sb.querySelector('[data-group="' + k + '"]'); if (b) b.innerHTML = groupHTML(k); });
     },
     sort: function (el) {
       ctx.sort = el.value;
@@ -290,7 +313,7 @@
     var cat = m.categoryBySlug(params.slug);
     if (!cat || cat.hidden) return HW.views.notfound();
     var all = m.productsIn(cat);
-    var fcfg = Object.assign({ type: true, color: true, material: true, price: true }, cat.filters || {});
+    var fcfg = Object.assign({ type: true, size: true, color: true, material: true, price: true }, cat.filters || {});
     ctx = { cat: cat, all: all, fcfg: fcfg, f: emptyFilter(), sort: params.sort || 'featured', lo: 0, hi: 0 };
     String(params.sub || '').split(',').forEach(function (slug) {
       var sub = cat.subcategories.find(function (s) { return s.slug === slug; });
@@ -298,6 +321,7 @@
     });
     var list = function (v) { return String(v || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 30); };
     list(params.color).forEach(function (c) { ctx.f.colors.add(c); });
+    list(params.size).forEach(function (x) { ctx.f.sizes.add(m.sizeKey(x)); });
     list(params.material).forEach(function (x) { ctx.f.materials.add(x); });
     if (isFinite(parseFloat(params.min))) ctx.f.min = parseFloat(params.min);
     if (isFinite(parseFloat(params.max))) ctx.f.max = parseFloat(params.max);
