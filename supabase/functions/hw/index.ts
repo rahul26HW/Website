@@ -310,7 +310,15 @@ function serviceHeaders(env) {
    It is public on purpose: a shopper asking a question is not signed in.
    It cannot read orders, write anything, or reach any other table.
    --------------------------------------------------------------------- */
-const ASK_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+/* An allowlist, not a free parameter: the caller picks by short name and anything else
+   falls back to the default, so this route can never be pointed at an arbitrary model.
+   It exists so two models can be compared on the same shop without a deploy between each. */
+const ASK_MODELS = {
+  "8b": "@cf/meta/llama-3.1-8b-instruct",
+  "70b": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "scout": "@cf/meta/llama-4-scout-17b-16e-instruct",
+};
+const ASK_MODEL = ASK_MODELS["8b"];
 
 /* Written adversarially, because the first version was not. Given only a note about
    shipping cost and asked what colour the towels are, the model answered "white, gray,
@@ -383,7 +391,8 @@ async function handleAsk(request, env, cors) {
   });
   if (!notes.length) return json({ error: "no-context" }, 422, cors);
 
-  const endpoint = "https://api.cloudflare.com/client/v4/accounts/" + env.CF_ACCOUNT_ID + "/ai/run/" + ASK_MODEL;
+  const model = ASK_MODELS[String(body.model || "")] || env.ASK_MODEL_DEFAULT && ASK_MODELS[env.ASK_MODEL_DEFAULT] || ASK_MODEL;
+  const endpoint = "https://api.cloudflare.com/client/v4/accounts/" + env.CF_ACCOUNT_ID + "/ai/run/" + model;
   let upstream, data;
   try {
     upstream = await fetch(endpoint, {
@@ -410,7 +419,7 @@ async function handleAsk(request, env, cors) {
   if (!text) return json({ error: "empty" }, 502, cors);
   // Belt and braces: the prompt forbids markdown, but a model is not a parser.
   const clean = text.replace(/[*_#`]+/g, "").replace(/\s*\n\s*/g, " ").trim().slice(0, 700);
-  return json({ text: clean, model: ASK_MODEL }, 200, cors);
+  return json({ text: clean, model: model }, 200, cors);
 }
 
 async function handleAI(request, env, cors) {
