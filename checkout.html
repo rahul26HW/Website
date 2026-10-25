@@ -61,7 +61,7 @@
 <link rel="preconnect" href="https://soydgxrrwozmiqzutypr.supabase.co" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="assets/fonts/inter-latin.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="assets/fonts/fraunces-latin.woff2" crossorigin>
-<link rel="stylesheet" href="css/site.css?v=d0365761">
+<link rel="stylesheet" href="css/site.css?v=3efb6b33">
 <script>
   /* Scripts load right after the first paint, so the header shows while they download.
      Order is kept (async=false). A background tab may never paint, so it loads at once there. */
@@ -177,10 +177,17 @@
   </div>
 </div>
 
-<button class="assistbubble" id="assistBtn" type="button" data-act="assist-open" aria-label="Chat with Ada, the Home Weavers assistant" aria-controls="assistPanel" aria-expanded="false" hidden>
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 15.1a2.6 2.6 0 0 1-2.6 2.6H9.1L4 21.4V6.5a2.6 2.6 0 0 1 2.6-2.6h11.2a2.6 2.6 0 0 1 2.6 2.6v8.6Z"/><path d="M9.8 9.4a2.3 2.3 0 1 1 3 2.2v1.3"/><circle cx="12.8" cy="15.2" r=".9" fill="currentColor" stroke="none"/></svg>
-  <span class="assistbubble-txt">Ask Ada</span>
-</button>
+<!-- Both ways of reaching us, stacked in one corner. WhatsApp only appears once a number
+     is set in Admin → Storefront → Contact. -->
+<div class="chatdock" id="chatDock">
+  <a class="dockbtn wa" id="waBtn" href="#" target="_blank" rel="noopener" aria-label="Message us on WhatsApp" hidden>
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1a8 8 0 0 1-2.4-1.5 9 9 0 0 1-1.6-2c-.2-.3 0-.5.1-.6l.5-.5.3-.5v-.5l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.2.2 2.1 3.3 5.1 4.5 1.9.8 2.6.9 3.5.7.6-.1 1.7-.7 2-1.4.2-.7.2-1.2.2-1.4l-.6-.4Z"/><path d="M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.6 0-3.2-.4-4.5-1.3l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Z"/></svg>
+  </a>
+  <button class="dockbtn assistbubble" id="assistBtn" type="button" data-act="assist-open" aria-label="Chat with Ada, the Home Weavers assistant" aria-controls="assistPanel" aria-expanded="false" hidden>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 15.1a2.6 2.6 0 0 1-2.6 2.6H9.1L4 21.4V6.5a2.6 2.6 0 0 1 2.6-2.6h11.2a2.6 2.6 0 0 1 2.6 2.6v8.6Z"/><path d="M9.8 9.4a2.3 2.3 0 1 1 3 2.2v1.3"/><circle cx="12.8" cy="15.2" r=".9" fill="currentColor" stroke="none"/></svg>
+    <span class="sr-only">Ask Ada</span>
+  </button>
+</div>
 
 <div class="assistpanel" id="assistPanel" role="dialog" aria-modal="true" aria-label="Chat with Ada" hidden>
   <div class="as-inner">

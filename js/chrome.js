@@ -124,6 +124,25 @@
     // answer "we don't sell that" to someone who arrived before the store finished loading.
     var assistBtn = document.getElementById('assistBtn');
     if (assistBtn) assistBtn.hidden = !(HW.assistant && HW.assistant.ready());
+    /* WhatsApp appears only once a number is set, because a chat button that opens on
+       nobody is worse than no chat button. Digits only: wa.me rejects anything else. */
+    var waBtn = document.getElementById('waBtn');
+    if (waBtn) {
+      var wa = String((DB.contact || {}).whatsapp || '').replace(/[^0-9]/g, '');
+      waBtn.hidden = wa.length < 8;
+      if (!waBtn.hidden) {
+        waBtn.href = 'https://wa.me/' + wa + '?text=' +
+          encodeURIComponent('Hi ' + ((DB.brand || {}).name || 'Home Weavers') + ', I have a question.');
+      }
+    }
+    /* The corner card has to clear whatever the dock currently is: one button, two, or
+       none at all. Measuring beats assuming, because the answer changes with the settings. */
+    var dock = document.getElementById('chatDock');
+    if (dock) {
+      document.documentElement.style.setProperty('--dock-h',
+        Math.round(dock.getBoundingClientRect().height) + 'px');
+    }
+
     var ann = HW.tokens(DB.announcement || '').trim();
     var annBar = document.getElementById('announce');
     var annText = document.getElementById('announceText');

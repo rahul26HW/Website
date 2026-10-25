@@ -1218,24 +1218,31 @@ main#view.booting ~ footer.site{visibility:hidden}
   .assistpanel{inset:0;right:0;bottom:0}
   .as-inner{width:100%;height:100%;border:0;border-radius:0}
   }
-/* The ask button: bottom right, where people look for help, and out of the way of the
-   sticky buy bar on a product page. */
-.assistbubble{position:fixed;right:20px;bottom:20px;z-index:60;display:inline-flex;align-items:center;gap:9px;
-  background:var(--loom,#3A5A52);color:#fff;border:none;border-radius:999px;cursor:pointer;
-  padding:13px 20px 13px 17px;font-family:var(--ui);font-size:13px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;
-  box-shadow:0 8px 26px rgba(32,28,24,.26);transition:transform .18s ease,box-shadow .18s ease,background .18s ease}
-.assistbubble[hidden]{display:none}
-.assistbubble:hover{background:var(--loom-dk,#2C463F);transform:translateY(-2px);box-shadow:0 12px 32px rgba(32,28,24,.32)}
-.assistbubble:focus-visible{outline:2px solid var(--loom-dk,#2C463F);outline-offset:3px}
-.assistbubble svg{flex:0 0 auto}
+/* Both ways of reaching us, stacked in the bottom-right corner. Circles rather than a
+   pill with a label: two buttons of different widths sitting above one another looked
+   like a mistake, and WhatsApp has no useful text to put on it anyway. */
+.chatdock{position:fixed;right:20px;bottom:20px;z-index:60;display:flex;flex-direction:column;gap:11px;align-items:center}
+.dockbtn{width:54px;height:54px;border-radius:50%;border:0;cursor:pointer;display:grid;place-items:center;
+  color:#fff;background:var(--loom);box-shadow:0 8px 24px -6px rgba(32,28,24,.34);
+  transition:transform .16s ease,box-shadow .16s ease,background .16s ease;text-decoration:none}
+.dockbtn[hidden]{display:none}
+.dockbtn:hover{transform:translateY(-2px);box-shadow:0 12px 30px -8px rgba(32,28,24,.4)}
+.dockbtn:focus-visible{outline:2px solid var(--loom-dk);outline-offset:3px}
+.dockbtn.assistbubble:hover{background:var(--loom-dk)}
+/* WhatsApp brand green, because a WhatsApp button in any other colour is not recognised
+   as one and simply reads as a second mystery circle. */
+.dockbtn.wa{background:#25D366}
+.dockbtn.wa:hover{background:#1EBE5A}
+.dockbtn.wa:focus-visible{outline-color:#1EBE5A}
+.dockbtn svg{flex:0 0 auto}
 @media(max-width:720px){
-  .assistbubble{right:14px;bottom:14px;padding:13px;border-radius:50%}
-  .assistbubble-txt{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-  body.has-stickybuy .assistbubble{bottom:calc(84px + env(safe-area-inset-bottom))}
+  .chatdock{right:14px;bottom:14px;gap:10px}
+  .dockbtn{width:50px;height:50px}
+  body.has-stickybuy .chatdock{bottom:calc(84px + env(safe-area-inset-bottom))}
 }
+@media(prefers-reduced-motion:reduce){.dockbtn{transition:none}.dockbtn:hover{transform:none}}
 
-/* The admin has no storefront to ask about, and the click is swallowed there anyway. */
-body.admin-mode .assistbubble,body.admin-mode .assistpanel{display:none}
+body.admin-mode .chatdock,body.admin-mode .assistpanel{display:none}
 /* What other shoppers did, said quietly. One line at a time, because two stacked claims
    read as a sales pitch and one reads as a fact. */
 /* Sits directly under the price, where a shopper is already looking at a number.
@@ -1281,8 +1288,8 @@ body.admin-mode .assistbubble,body.admin-mode .assistpanel{display:none}
   /* Full width, but stacked ABOVE the assistant bubble rather than beside it. Both are
      pinned bottom-right and both get pushed up by the sticky Add to cart bar, so side by
      side they land on top of each other. */
-  .buzz{left:10px;right:10px;bottom:74px;max-width:none}
-  body.has-stickybuy .buzz{bottom:calc(144px + env(safe-area-inset-bottom))}
+  .buzz{left:10px;right:10px;bottom:calc(var(--dock-h, 54px) + 24px);max-width:none}
+  body.has-stickybuy .buzz{bottom:calc(var(--dock-h, 54px) + 94px + env(safe-area-inset-bottom))}
   .buzz-in{padding:12px}
   .buzz-in img{width:60px;height:60px}
   .buzz-who{font-size:12.5px}

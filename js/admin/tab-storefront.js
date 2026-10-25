@@ -126,6 +126,8 @@
           '<p class="hint" style="margin:-6px 0 12px">Shown on the Contact us page next to the contact form. Blank fields are hidden.</p>' +
           '<div class="grid2">' + ui.field('Email', 'contact.email', c.email, { type: 'trim', inputType: 'email', placeholder: 'hello@yourdomain.com' }) +
           ui.field('Phone', 'contact.phone', c.phone, { type: 'trim', inputType: 'tel' }) + '</div>' +
+          ui.field('WhatsApp number', 'contact.whatsapp', c.whatsapp, { type: 'trim', inputType: 'tel',
+            hint: 'With the country code, digits only — 15551234567 for a US number. A green WhatsApp button appears beside the chat bubble once this is filled in, and disappears if you clear it.' }) +
           '<div class="grid2">' + ui.field('Hours', 'contact.hours', c.hours) +
           ui.field('Address', 'contact.address', c.address, { textarea: true, rows: 3 }) + '</div>' + ui.saveBtn()) +
 
