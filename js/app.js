@@ -120,6 +120,7 @@
     'assist-close': function () { HW.assistantPanel.close(); },
     'assist-ask': function (el) { HW.assistantPanel.ask(el.dataset.q); },
     'cf-more': function (el) { HW.catalog.more(el); },
+    'assist-nope': function () { HW.assistantPanel.reject(); },
     'search-close': function () { HW.searchPanel.close(); },
     wish: function (el) { HW.wishlist.toggle(el.dataset.id, el); },
     zoom: function (el) { HW.pdp.zoom(el); },

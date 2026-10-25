@@ -120,12 +120,16 @@
     return hits;
   }
 
-  function bestFaq(text) {
+  /* 'skip' holds the entries this question has already been answered with and had
+     rejected. Without it, "that wasn't it" and asking again both hand back the same
+     paragraph, which is the most infuriating thing a help widget does. */
+  function bestFaq(text, skip) {
     var ws = words(text);
     if (!ws.length) return null;
     var topics = topicWords();
     var best = null, bestScore = 0;
     shownFaq().forEach(function (f) {
+      if (skip && skip[f.id]) return;
       var s = faqScore(f, ws, topics);
       if (s > bestScore) { bestScore = s; best = f; }
     });
@@ -264,7 +268,7 @@
   }
 
   /* What the conversation is carrying. Reset when the panel opens. */
-  A.ctx = { terms: [], misses: 0 };
+  A.ctx = { terms: [], misses: 0, lastQ: '', gave: '', rejected: {} };
 
   /* A follow-up is a fragment — "in navy", "what about round ones", "anything cheaper". On
      its own it matches nothing, which is exactly where a lookup table ends a conversation.
@@ -298,9 +302,10 @@
   };
 
   A.handlers.faq = function (text) {
-    var f = bestFaq(text);
+    var f = bestFaq(text, A.ctx.rejected);
     if (!f) return A.handlers.handoff(text);
     A.ctx.misses = 0;
+    A.ctx.gave = f.id;
     var answer = HW.richText(HW.tokens(HW.m.pageText(f.a)));
     var more = chips(related(f, 2));
     // Confident: just answer, the way a person would. Unsure: say which question it is
@@ -310,7 +315,34 @@
       : p('I’ll take that as <b>' + esc(f.q) + '</b>.');
     var tail = confident(text, f) ? '' : p('If you meant something else, tell me a bit more.');
     return lead + answer + tail + more +
-      '<div class="as-actions">' + btn(HW.link('/page/faq'), 'All questions') + '</div>';
+      '<div class="as-actions">' + btn(HW.link('/page/faq'), 'All questions') +
+      '<button class="as-nope" type="button" data-act="assist-nope">That wasn\u2019t it</button></div>';
+  };
+
+  /* ---------------------------------------------------------------- *
+   * "that wasn't it"
+   * ---------------------------------------------------------------- */
+  /* A rejection is information, not a complaint: it rules one entry out and asks for the
+     next best. Only when nothing else scores does it give up and offer a person. */
+  A.reject = function () {
+    var q = A.ctx.lastQ;
+    if (A.ctx.gave) A.ctx.rejected[A.ctx.gave] = true;
+    A.ctx.gave = '';
+    if (!q) return p('Ask me again and I\u2019ll have another go.');
+    var next = bestFaq(q, A.ctx.rejected);
+    if (next) {
+      A.ctx.gave = next.id;
+      A.ctx.misses = 0;
+      return p('Sorry \u2014 trying again:') +
+        p('<b>' + esc(next.q) + '</b>') +
+        HW.richText(HW.tokens(HW.m.pageText(next.a))) +
+        '<div class="as-actions">' + btn(HW.link('/page/faq'), 'All questions') +
+        '<button class="as-nope" type="button" data-act="assist-nope">Still not it</button></div>';
+    }
+    // Nothing written covers it. The catalogue might.
+    var prods = catalogHits(q).filter(function (prod) { return !HW.m.productOut(prod); });
+    if (prods.length) return p('Then you may have meant one of these:') + A.handlers.finder(q);
+    return p('That\u2019s everything I have written down on it, sorry.') + contactBlock(q);
   };
 
   /* Not "did it beat the runner-up" — on a real FAQ two entries about shipping are always
@@ -474,7 +506,7 @@
       var btn = document.getElementById('assistBtn');
       if (btn) btn.setAttribute('aria-expanded', 'true');
       release = u.trapFocus(panel, HW.assistantPanel.close);
-      A.ctx = { terms: [], misses: 0 };
+      A.ctx = { terms: [], misses: 0, lastQ: '', gave: '', rejected: {} };
       greet();
       setTimeout(function () {
         var input = document.getElementById('assistInput');
@@ -490,6 +522,21 @@
       if (release) { release(restore); release = null; }
       var a = document.activeElement;
       if (restore !== false && btn && (!a || a === document.body || panel.contains(a))) btn.focus();
+    },
+    /* Its own turn, so the thread reads as a reply to something the customer said
+       rather than an answer quietly rewriting itself in place. */
+    reject: function () {
+      say('you', '<p>That wasn\u2019t it</p>');
+      var row = say('bot', '<p class="as-wait" aria-label="Typing">' +
+        '<span class="as-dot"></span><span class="as-dot"></span><span class="as-dot"></span></p>');
+      return new Promise(function (go) { setTimeout(go, 420); }).then(function () {
+        return A.reject();
+      }).then(function (html) {
+        if (row) row.innerHTML = html;
+        var box = log(); if (box) box.scrollTop = box.scrollHeight;
+      }, function () {
+        if (row) row.innerHTML = p('Something went wrong on our side. Try again in a moment.');
+      });
     },
     ask: function (text) {
       text = String(text || '').trim().slice(0, 200);
@@ -507,6 +554,11 @@
       // A beat before the answer. The reply is ready immediately, and arriving immediately is
       // what makes it read as a form submission rather than someone replying.
       A.turn += 1;
+      // A repeated question is a rejection said politely. Rule out what was given last
+      // time rather than saying it again word for word.
+      var key = norm(text);
+      if (key === A.ctx.lastQ) { if (A.ctx.gave) A.ctx.rejected[A.ctx.gave] = true; }
+      else { A.ctx.lastQ = key; A.ctx.rejected = {}; A.ctx.gave = ''; }
       var beat = Math.min(900, 260 + String(text).length * 10);
       // Routing and the handler both run inside the chain, so a synchronous fault lands in the
       // message below rather than escaping and leaving the bubble stuck on an ellipsis.
