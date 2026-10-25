@@ -491,6 +491,10 @@
   var BYE = ['bye', 'goodbye', 'good bye', 'see you', 'see ya', 'later', 'good night', 'cya'];
   var NODS = ['ok', 'okay', 'oki', 'k', 'kk', 'cool', 'nice', 'great', 'fine', 'sure',
   'got it', 'alright', 'perfect', 'lovely'];
+  var CHAT = ['how are you', 'how are u', 'how r u', 'how are you doing', 'hows it going',
+  'how is it going', 'how do you do', 'you ok', 'are you ok', 'whats up', 'what is up',
+  ];
+  var WHO = ['who are you', 'what are you', 'are you a robot', 'are you real', 'are you human', 'are you a bot'];
 
   function inList(t, list) { return list.indexOf(t) >= 0; }
 
@@ -504,6 +508,8 @@
     if (inList(t, THANKS)) return 'thanks';
     if (inList(t, BYE)) return 'bye';
     if (inList(t, NODS)) return 'nod';
+    if (inList(t, CHAT)) return 'chat';
+    if (inList(t, WHO)) return 'who';
     return '';
   }
 
@@ -523,6 +529,17 @@
     if (kind === 'thanks') return p(pick(['Any time.', 'You\u2019re very welcome.', 'Glad to help.']));
     if (kind === 'bye') return p(pick(['Thanks for stopping by.', 'See you soon.', 'Take care.']));
     if (kind === 'nod') return p(pick(['Anything else I can look up?', 'Happy to keep going if there\u2019s more.']));
+    // Asked straight out, say so straight out. A shop assistant that dodges the question
+    // is a worse look than a shop assistant that is software.
+    if (kind === 'who') {
+      return p('I’m Ada, the ' + esc((HW.DB.brand || {}).name || 'Home Weavers') +
+        ' assistant — software, not a person. I can answer from what the shop has written down, and find things in the catalogue.') + chips(topQuestions(3));
+    }
+    if (kind === 'chat') {
+      return p(pick(['Very well, thank you — what can I help you find?',
+        'All good here. What are you after?',
+        'Doing well, thanks. What are you looking for?'])) + chips(topQuestions(3));
+    }
     var who = (HW.account && HW.account.get()) || null;
     var first = who && who.name ? String(who.name).split(' ')[0] : '';
     return p(pick(['Hello' + (first ? ' ' + esc(first) : '') + '.', 'Hi there.', 'Hello.']) +
@@ -555,6 +572,12 @@
     // subject rather than a thing. "Navy bath towels" wants towels; "care" and "washing" want
     // the care answer, even though the catalog mentions those words too. The test is whether
     // what they typed names something we sell.
+    /* Nothing but stop words left, so there is nothing to look anything up by. The product
+       search matches a term anywhere inside a name, which is right for "towel" in "towels"
+       and wrong for "how" inside "shower" — which is how "how are you" came back with a
+       shower curtain. */
+    if (!words(t).length) return 'handoff';
+
     // A size is the most concrete thing a shopper can type, and typing one is asking to
     // be shown things. "What size is 17x24" is about a rug, not about our sizing policy,
     // however much it opens like a question.
