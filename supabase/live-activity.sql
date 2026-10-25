@@ -53,26 +53,37 @@ stable
 security definer
 set search_path = ''
 as $$
-  select coalesce(jsonb_agg(row), '[]'::jsonb)
-  from (
-    select jsonb_build_object(
-             'product_id', i.product_id,
-             'state', nullif(upper(coalesce(o.shipping_address ->> 'state', '')), ''),
-             -- Coarse on purpose. An exact minute plus a state narrows the field.
-             'when', case
-                       when o.created_at > now() - interval '1 hour'  then 'just now'
-                       when o.created_at > now() - interval '6 hours' then 'in the last few hours'
-                       when o.created_at > now() - interval '24 hours' then 'today'
-                       when o.created_at > now() - interval '48 hours' then 'yesterday'
-                       else 'earlier this week'
-                     end
-           ) as row
+  -- One row per product, its most recent sale. Four orders of the same rug would
+  -- otherwise fill the whole rotation with that rug, and the card is meant to show
+  -- the shop, not one shelf of it.
+  with latest as (
+    select distinct on (i.product_id)
+           i.product_id,
+           nullif(upper(coalesce(o.shipping_address ->> 'state', '')), '') as state,
+           o.created_at
     from public.order_items i
     join public.orders o on o.id = i.order_id
     where o.created_at > now() - interval '7 days'
       and o.status <> 'cancelled'
       and o.payment_status in ('paid', 'refunded')
-    order by o.created_at desc, i.id desc
+    order by i.product_id, o.created_at desc
+  )
+  select coalesce(jsonb_agg(
+           jsonb_build_object(
+             'product_id', product_id,
+             'state', state,
+             -- Coarse on purpose. An exact minute plus a state narrows the field.
+             'when', case
+                       when created_at > now() - interval '1 hour'   then 'just now'
+                       when created_at > now() - interval '6 hours'  then 'in the last few hours'
+                       when created_at > now() - interval '24 hours' then 'today'
+                       when created_at > now() - interval '48 hours' then 'yesterday'
+                       else 'earlier this week'
+                     end
+           ) order by created_at desc
+         ), '[]'::jsonb)
+  from (
+    select * from latest order by created_at desc
     limit least(greatest(coalesce(p_limit, 8), 1), 20)
   ) t;
 $$;
