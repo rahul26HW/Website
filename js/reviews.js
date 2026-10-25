@@ -126,7 +126,11 @@
            not what the shop wants, and it is not needed for the claim to be honest. The
            line under the heading covers it once, quietly, for the whole section. */
         (r.source ? '' : '<span class="rv-badge" title="Bought from us">Verified buyer</span>') +
-        '<time class="rv-when">' + esc(u.fmtDate(r.createdAt)) + '</time></header>' +
+        // No date beats a wrong one: an imported review whose source published no date
+        // would otherwise be stamped with the day it was loaded.
+        (r.writtenAt || !r.source
+          ? '<time class="rv-when">' + esc(u.fmtDate(r.writtenAt || r.createdAt)) + '</time>'
+          : '') + '</header>' +
         (r.title ? '<h3 class="rv-title">' + esc(r.title) + '</h3>' : '') +
         (r.body ? '<p class="rv-body">' + esc(r.body).replace(/\n+/g, '<br>') + '</p>' : '') +
         (photos ? '<div class="rv-photos">' + photos + '</div>' : '') +

@@ -214,7 +214,10 @@
         body: r.body.slice(0, 4000),
         source: imp.source.slice(0, 60),
         status: imp.status,
+        // created_at orders the list; written_at is the date we show. A portal that
+        // publishes no date leaves written_at null and the page shows none.
         created_at: r.createdAt || new Date().toISOString(),
+        written_at: r.createdAt || null,
         published_at: imp.status === 'published' ? new Date().toISOString() : null,
       };
     });
