@@ -547,6 +547,44 @@ test("a greeting in front of a real question does not swallow the question", fun
     "a question wearing a greeting is still a question");
 });
 
+
+test("a size typed with a multiplication sign is still a size", function () {
+  // A product that actually has sizes, because the plain fixtures have none and a test
+  // against them passes whether the normaliser works or not.
+  const SIZED = {
+    id: "p_sized", name: "Sized Bath Rug", slug: "sized-bath-rug", categoryId: "c1",
+    material: "cotton", basePrice: 25, images: ["x.jpg"], inStock: true,
+    options: [
+      { type: "color", name: "Color", values: [{ id: "cl_blue", label: "Blue", hex: "#123456" }] },
+      { type: "size", name: "Size", values: [{ id: "sz_1724", label: "17x24" }, { id: "sz_2440", label: "24x40" }] }
+    ],
+    variants: {
+      "cl_blue__sz_1724": { sku: "SZ1724BL", price: 25, inStock: true },
+      "cl_blue__sz_2440": { sku: "SZ2440BL", price: 35, inStock: true }
+    }
+  };
+  asstCtx.HW.DB = asstCtx.HW.schema.normalizeStore({ faq: REAL_FAQ, products: [SIZED],
+    categories: [{ id: "c1", name: "Rugs", slug: "rugs", show: true }] });
+  asstCtx.HW._searchIndex = null; asstCtx.HW.assistant._vocab = null; asstCtx.HW.assistant._topics = null;
+  const A = asstCtx.HW.assistant;
+  A.ctx = { terms: [], misses: 0, lastQ: "", gave: "", rejected: {} };
+  assert(A.route("17x24") === "finder", "plain 17x24 should find the rug, got " + A.route("17x24"));
+  assert(A.route("17×24") === "finder",
+    "17×24 should find it too, got " + A.route("17×24"));
+  assert(A.route("what the size 17×24") === "finder",
+    "a size named inside a question is still a size, got " + A.route("what the size 17×24"));
+});
+
+test("a written size question is not hijacked by the word sets", function () {
+  asstCtx.HW.DB = asstCtx.HW.schema.normalizeStore({ faq: REAL_FAQ, products: PRODUCTS,
+    categories: [{ id: "c1", name: "Rugs", slug: "rugs", show: true }] });
+  asstCtx.HW._searchIndex = null; asstCtx.HW.assistant._vocab = null; asstCtx.HW.assistant._topics = null;
+  const A = asstCtx.HW.assistant;
+  A.ctx = { terms: [], misses: 0, lastQ: "", gave: "", rejected: {} };
+  // "sets" is a word, not a measurement — only something with a digit in it counts
+  assert(A.route("what is your return window") === "faq", "a plain question still goes to the faq");
+});
+
 /* ================================================================ *
  * Results
  * ================================================================ */

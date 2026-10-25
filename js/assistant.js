@@ -71,9 +71,19 @@
    * faq — your words, quoted back
    * ---------------------------------------------------------------- */
   /* The same normalising the product search uses, so "towels" finds "towel" and 27x54
-     survives whichever way it was typed. */
+     survives whichever way it was typed.
+
+     It did not, in fact, survive. Stripping punctuation first turned the × in "17×24" into
+     a space and left two unrelated numbers, so a shopper who typed the size off their own
+     product page matched nothing in the catalogue. The pairs are joined up before anything
+     else is thrown away. */
   function norm(s) {
-    return String(s || '').toLowerCase().replace(/["”″′]/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+    return String(s || '')
+      .toLowerCase()
+      .replace(/["”″′]/g, ' ')
+      .replace(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/g, '$1x$2')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
   }
   function words(s) { return norm(s).split(' ').filter(function (w) { return w.length > 2 && STOP.indexOf(w) < 0; }); }
   var STOP = ['the', 'and', 'for', 'you', 'your', 'are', 'can', 'how', 'what', 'does', 'did', 'will', 'with', 'from', 'have', 'has', 'any', 'they', 'this', 'that', 'was', 'his', 'her'];
@@ -146,7 +156,7 @@
      for a sentence: "a soft cotton rug" has two words that mean nothing to the catalog. */
   function catalogVocab() {
     if (A._vocab && A._vocabDb === HW.DB) return A._vocab;
-    var out = {};
+    var out = {}, sizeSet = {};
     function add(s) { norm(s).split(' ').forEach(function (w) { if (w.length > 2) out[w] = true; }); }
     (HW.DB.categories || []).forEach(function (c) {
       add(c.name);
@@ -161,13 +171,28 @@
       // which lives in "Do I need an account to order?" and got answered with that.
       HW.m.offeredSizes(prod).forEach(function (sz) {
         var k = HW.m.sizeKey(sz.label);
-        if (k && k.length > 2) out[k] = true;
+        if (k && k.length > 2) { out[k] = true; sizeSet[k] = true; }
         add(sz.note);        // runner, slice rug, contour rug, tank lid cover
       });
     });
     A._vocabDb = HW.DB;
     A._vocab = out;
+    A._sizeVocab = sizeSet;
     return out;
+  }
+
+  /* The words in a question that name a measurement we actually stock.
+
+     The digit is the whole test. Towel sizes are written 'Set of 2' and '3 Pieces', so
+     without it the word 'sets' matched a size key and sent 'what sizes do the towel sets
+     come in' — a question with a written answer — off to the product list. */
+  function sizeWords(text) {
+    catalogVocab();
+    var sizes = A._sizeVocab || {};
+    return words(text).filter(function (w) {
+      if (!/[0-9]/.test(w)) return false;
+      return Object.keys(sizes).some(function (v) { return hasWord(v, w); });
+    });
   }
 
   function catalogWords(text) {
@@ -518,6 +543,10 @@
     // subject rather than a thing. "Navy bath towels" wants towels; "care" and "washing" want
     // the care answer, even though the catalog mentions those words too. The test is whether
     // what they typed names something we sell.
+    // A size is the most concrete thing a shopper can type, and typing one is asking to
+    // be shown things. "What size is 17x24" is about a rug, not about our sizing policy,
+    // however much it opens like a question.
+    if (products && sizeWords(t).length) return 'finder';
     if (answer && products) {
       var namesAThing = catalogWords(t).length > 0;
       return (isQuestion(t) || !namesAThing) ? 'faq' : 'finder';
