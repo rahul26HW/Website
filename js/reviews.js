@@ -100,7 +100,13 @@
       return '<article class="rv">' +
         '<header class="rv-head">' + HW.reviews.stars(r.rating, 14) +
         '<b class="rv-name">' + esc(r.name) + '</b>' +
-        '<span class="rv-badge" title="Bought from us">Verified buyer</span>' +
+        /* 'Verified buyer' means this person bought it HERE and the order was checked.
+           A review carried over from a marketplace has not been through any of that, and
+           wearing that badge would be a straightforward false claim — the exact thing the
+           rules on reviews exist to stop. It says where it came from instead. */
+        (r.source
+          ? '<span class="rv-badge src" title="Written on ' + esc(r.source) + ', not on this site">from ' + esc(r.source) + '</span>'
+          : '<span class="rv-badge" title="Bought from us">Verified buyer</span>') +
         '<time class="rv-when">' + esc(u.fmtDate(r.createdAt)) + '</time></header>' +
         (r.title ? '<h3 class="rv-title">' + esc(r.title) + '</h3>' : '') +
         (r.body ? '<p class="rv-body">' + esc(r.body).replace(/\n+/g, '<br>') + '</p>' : '') +

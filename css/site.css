@@ -400,6 +400,7 @@ fieldset.fld legend{font-size:13px;font-weight:600;margin:0 0 6px;padding:0}
 .cf-colors{display:flex;flex-direction:column;gap:2px}
 /* Five rows, then a button. Counting rows rather than capping a height keeps it exact
    whatever the row turns out to measure. */
+.rv-badge.src{background:none;border:1px solid var(--line);color:var(--ink-soft);font-weight:600}
 .cf-list > label:nth-of-type(n+6){display:none}
 .cf-list.open > label:nth-of-type(n+6),.cf-list.cf-all > label{display:flex}
 .cf-more{margin-top:7px;padding:3px 0;border:0;background:none;cursor:pointer;font:inherit;

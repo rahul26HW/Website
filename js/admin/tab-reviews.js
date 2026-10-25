@@ -60,6 +60,104 @@
       '<button class="btn ghost sm" type="button" data-a="rev-reply-cancel">Cancel</button></div></div>';
   }
 
+  /* ---------------------------------------------------------------- *
+   * Importing reviews written somewhere else
+   * ---------------------------------------------------------------- */
+  /* One review per line, tab or pipe separated, pasted straight out of a spreadsheet:
+       product | name | rating | title | body | date
+     The product is matched by SKU, slug, id or name, because whichever of those the
+     export happens to carry is the one you will have.
+
+     Nothing is written until the preview has been read. A paste of eighty rows with the
+     columns in the wrong order is the normal way this goes wrong, and it should go wrong
+     on screen rather than in the database. */
+  var imp = { text: '', rows: null, source: 'Amazon', status: 'published', busy: false, done: '' };
+
+  function findProduct(token) {
+    var t = String(token || '').trim().toLowerCase();
+    if (!t) return null;
+    var list = A.draft.products || [];
+    var byId = list.find(function (p) { return String(p.id).toLowerCase() === t; });
+    if (byId) return byId;
+    var bySlug = list.find(function (p) { return String(p.slug).toLowerCase() === t; });
+    if (bySlug) return bySlug;
+    var byName = list.find(function (p) { return String(p.name).trim().toLowerCase() === t; });
+    if (byName) return byName;
+    // SKUs live on the variants, so this is the last and slowest look.
+    var hit = null;
+    list.forEach(function (p) {
+      if (hit) return;
+      if (String(p.sku || '').toLowerCase() === t) { hit = p; return; }
+      if (!HW.m.isCollection(p)) return;
+      HW.m.eachVariant(p, function (v) { if (!hit && String(v.sku || '').toLowerCase() === t) hit = p; });
+    });
+    return hit;
+  }
+
+  function parseImport(text) {
+    return String(text || '').split(/\r?\n/).map(function (line, i) {
+      var raw = line.trim();
+      if (!raw) return null;
+      var cells = raw.indexOf('\t') >= 0 ? raw.split('\t') : raw.split('|');
+      cells = cells.map(function (c) { return c.trim(); });
+      var prod = findProduct(cells[0]);
+      var rating = Math.round(Number(cells[2]));
+      var when = cells[5] ? new Date(cells[5]) : null;
+      var problems = [];
+      if (!prod) problems.push('no product matching "' + (cells[0] || '') + '"');
+      if (!cells[1]) problems.push('no name');
+      if (!(rating >= 1 && rating <= 5)) problems.push('rating must be 1 to 5');
+      if (!cells[4]) problems.push('no review text');
+      if (cells[5] && isNaN(when)) problems.push('date not understood');
+      return {
+        line: i + 1, product: prod, name: cells[1] || '', rating: rating,
+        title: cells[3] || '', body: cells[4] || '',
+        createdAt: when && !isNaN(when) ? when.toISOString() : null,
+        problems: problems,
+      };
+    }).filter(Boolean);
+  }
+
+  function importPanel() {
+    var rows = imp.rows;
+    var ok = rows ? rows.filter(function (r) { return !r.problems.length; }) : [];
+    var bad = rows ? rows.filter(function (r) { return r.problems.length; }) : [];
+    return '<section class="panel"><h2 class="ph3">Import reviews from elsewhere</h2>' +
+      '<p class="hint">One per line, columns separated by a tab or a pipe, in this order:<br>' +
+      '<code>product &nbsp;|&nbsp; name &nbsp;|&nbsp; rating &nbsp;|&nbsp; title &nbsp;|&nbsp; review &nbsp;|&nbsp; date</code><br>' +
+      'The product can be a SKU, a web address slug, or the exact product name. Title and date may be left empty.</p>' +
+      '<p class="hint">Where a review came from is shown with it on the product page. A review written on ' +
+      'Amazon and shown without saying so is being passed off as something it is not, which is the ' +
+      'difference between quoting someone and claiming them. Import the poor ones as well as the good ' +
+      'ones: a page of nothing but five stars is the thing shoppers have learned not to believe.</p>' +
+      '<div class="grid2">' +
+      '<label class="fld"><span class="lab">Written on</span>' +
+      '<input id="impSource" type="text" value="' + esc(imp.source) + '" placeholder="Amazon"></label>' +
+      '<label class="fld"><span class="lab">Publish as</span><select id="impStatus">' +
+      '<option value="published"' + (imp.status === 'published' ? ' selected' : '') + '>Published straight away</option>' +
+      '<option value="pending"' + (imp.status === 'pending' ? ' selected' : '') + '>Waiting, so I can read them first</option>' +
+      '</select></label></div>' +
+      '<label class="fld"><span class="lab">Paste the rows</span>' +
+      '<textarea id="impText" rows="8" spellcheck="false" placeholder="BWA1724BL&#9;Sarah M.&#9;5&#9;Lovely rug&#9;Soft and it has not shed at all.&#9;2026-08-14">' + esc(imp.text) + '</textarea></label>' +
+      '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="imp-check">Check these rows</button>' +
+      (ok.length ? '<button class="btn loom sm" type="button" data-a="imp-go"' + (imp.busy ? ' disabled' : '') + '>' +
+        (imp.busy ? 'Importing…' : 'Import ' + ok.length + ' review' + (ok.length === 1 ? '' : 's')) + '</button>' : '') +
+      '</div>' +
+      (imp.done ? '<p class="okmsg">' + esc(imp.done) + '</p>' : '') +
+      (rows ? '<div class="tablewrap" style="margin-top:12px"><table class="adt"><thead><tr><th>Line</th><th>Product</th><th>Name</th><th>Rating</th><th>Review</th><th></th></tr></thead><tbody>' +
+        rows.map(function (r) {
+          return '<tr' + (r.problems.length ? ' class="bad"' : '') + '><td>' + r.line + '</td>' +
+            '<td>' + esc(r.product ? r.product.name : '—') + '</td>' +
+            '<td>' + esc(r.name) + '</td>' +
+            '<td>' + (r.rating >= 1 && r.rating <= 5 ? stars(r.rating) : '—') + '</td>' +
+            '<td>' + esc(String(r.body).slice(0, 70)) + (String(r.body).length > 70 ? '…' : '') + '</td>' +
+            '<td class="muted">' + esc(r.problems.join('; ')) + '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        '<p class="hint">' + ok.length + ' ready' + (bad.length ? ', ' + bad.length + ' with something wrong — those are skipped.' : '.') + '</p>'
+        : '') +
+      '</section>';
+  }
+
   A.tabs.reviews = {
     render: function () {
       if (!st.list) return '<h1>Reviews</h1><div class="loading">Loading…</div>';
@@ -79,12 +177,55 @@
         (shown.length ? shown.map(row).join('')
           : '<tr><td colspan="5" class="muted" style="padding:16px">' +
             (st.list.length ? 'Nothing here.' : 'No reviews yet. They start arriving a few days after orders are delivered.') + '</td></tr>') +
-        '</tbody></table></div></section>';
+        '</tbody></table></div></section>' +
+        importPanel();
     }
   };
 
   A.tabs.reviews.after = function () {
     if (!st.list) loadReviews().then(function () { if (A.tab === 'reviews') A.render(); });
+  };
+
+  A.actions['imp-check'] = function () {
+    var box = document.getElementById('impText');
+    var src = document.getElementById('impSource');
+    var sel = document.getElementById('impStatus');
+    imp.text = box ? box.value : '';
+    imp.source = src ? src.value.trim() : '';
+    imp.status = sel ? sel.value : 'published';
+    imp.done = '';
+    imp.rows = parseImport(imp.text);
+    A.render();
+  };
+
+  A.actions['imp-go'] = async function () {
+    var ready = (imp.rows || []).filter(function (r) { return !r.problems.length; });
+    if (!ready.length) return;
+    if (!imp.source) { u.toast('Say where these were written first.'); return; }
+    if (!confirm('Import ' + ready.length + ' review' + (ready.length === 1 ? '' : 's') + ' from ' + imp.source + '?')) return;
+    imp.busy = true; A.render();
+    var payload = ready.map(function (r) {
+      return {
+        product_id: r.product.id,
+        product_name: r.product.name,
+        name: r.name.slice(0, 80),
+        rating: r.rating,
+        title: r.title ? r.title.slice(0, 120) : null,
+        body: r.body.slice(0, 4000),
+        source: imp.source.slice(0, 60),
+        status: imp.status,
+        created_at: r.createdAt || new Date().toISOString(),
+        published_at: imp.status === 'published' ? new Date().toISOString() : null,
+      };
+    });
+    var res = await A.sb.from('reviews').insert(payload);
+    imp.busy = false;
+    if (res.error) { imp.done = ''; u.toast('Import failed: ' + res.error.message); A.render(); return; }
+    imp.done = ready.length + ' review' + (ready.length === 1 ? '' : 's') + ' imported from ' + imp.source + '.';
+    imp.text = ''; imp.rows = null;
+    await loadReviews();
+    A.render();
+    u.toast('Imported');
   };
 
   A.actions['rev-filter'] = function (el) { st.filter = el.dataset.f; A.render(); };
