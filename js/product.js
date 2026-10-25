@@ -652,8 +652,12 @@
         box.hidden = false;
       }).catch(function () { /* a failed count says nothing at all */ });
     };
+    // Three counts, not one. The page sends its own view event about a second after load,
+    // so a count taken immediately misses this very visit and often reads 1 when it is
+    // really 2 — and then says nothing for the next forty-five seconds.
     paint();
-    // Slow on purpose. This is a mood, not a dashboard, and every tick is a round trip.
+    setTimeout(paint, 4000);
+    // Slow after that. This is a mood, not a dashboard, and every tick is a round trip.
     lvTimer = setInterval(paint, 45000);
   }
 
