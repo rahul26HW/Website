@@ -90,7 +90,15 @@
     return sorted(ctx.all.filter(function (p) { return matches(p, ctx.f); }), ctx.sort);
   }
 
-  function facet(group, values, labelFn, extraFn) {
+  /* A long facet is a wall of checkboxes — the rug size list runs to eighteen. Five rows
+     and a button for the rest is enough to decide whether to look further.
+
+     A group with something ticked below the fold opens itself: hiding the filter that is
+     actually in force is worse than a long list, and a shopper who cannot see why only
+     one product is showing has no way to undo it. */
+  var FACET_ROWS = 5;
+
+  function facet(group, values, labelFn, extraFn, listClass) {
     var f = ctx.f;
     var base = ctx.all.filter(function (p) { return matches(p, f, group); });
     var rows = values.map(function (v) {
@@ -104,13 +112,21 @@
       return { v: v, n: n, on: f[group].has(v) };
     });
     // Options with no matches stay visible (greyed out), so shoppers can still see what else exists.
-    return rows.map(function (r) {
+    var html = rows.map(function (r) {
       var id = 'cf-' + group + '-' + u.slugify(r.v), none = r.n === 0 && !r.on;
       return '<label class="' + (group === 'colors' ? 'cf-color' : 'cf-opt') + (none ? ' cf-none' : '') + '" for="' + id + '">' +
         '<input type="checkbox" id="' + id + '" data-act="cf" data-g="' + group + '" data-v="' + esc(r.v) + '"' + (r.on ? ' checked' : '') + (none ? ' disabled' : '') + '>' +
         (extraFn ? extraFn(r.v) : '') + '<span class="cf-clabel">' + esc(labelFn(r.v)) + '</span>' +
         '<span class="cf-count" aria-label="' + u.plural(r.n, 'product') + '">(' + r.n + ')</span></label>';
     }).join('');
+    if (!html) return '';
+    var open = rows.some(function (r) { return r.on; });
+    // One row behind a button is a button for nothing.
+    var worth = rows.length > FACET_ROWS + 1;
+    var cls = (listClass ? listClass + ' ' : '') + 'cf-list' + (worth && open ? ' open' : '') + (worth ? '' : ' cf-all');
+    return '<div class="' + cls + '">' + html + '</div>' +
+      (worth ? '<button class="cf-more" type="button" data-act="cf-more" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+        (open ? 'Show less' : 'Show all ' + rows.length) + '</button>' : '');
   }
 
   function groupHTML(key) {
@@ -129,8 +145,8 @@
       all.forEach(function (p) { colorsOf(p).forEach(function (c) { if (!cmap[c.label]) cmap[c.label] = c.hex; }); });
       inner = facet('colors', Object.keys(cmap).sort(), function (l) { return l; }, function (l) {
         return '<span class="cf-dot" style="background:' + esc(cmap[l]) + '" aria-hidden="true"></span>';
-      });
-      return inner ? '<fieldset class="cf-group"><legend class="h4">Color</legend><div class="cf-colors">' + inner + '</div></fieldset>' : '';
+      }, 'cf-colors');
+      return inner ? '<fieldset class="cf-group"><legend class="h4">Color</legend>' + inner + '</fieldset>' : '';
     }
     if (key === 'sizes' && fcfg.size) {
       // Group by what the size IS, and label it with the cleanest spelling anyone used:
@@ -286,6 +302,15 @@
   }
 
   HW.catalog = {
+    /* Opens or closes one facet. Nothing is re-rendered and no URL changes: this is a
+       shopper looking, not a shopper filtering. */
+    more: function (el) {
+      var list = el.previousElementSibling;
+      if (!list) return;
+      var open = list.classList.toggle('open');
+      el.setAttribute('aria-expanded', open ? 'true' : 'false');
+      el.textContent = open ? 'Show less' : 'Show all ' + list.children.length;
+    },
     toggle: function (el) {
       var g = el.dataset.g, v = el.dataset.v;
       if (el.checked) ctx.f[g].add(v); else ctx.f[g].delete(v);

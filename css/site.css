@@ -398,6 +398,13 @@ fieldset.fld legend{font-size:13px;font-weight:600;margin:0 0 6px;padding:0}
 .cf-opt{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:14px;color:var(--ink);cursor:pointer}
 .cf-opt input{width:16px;height:16px;accent-color:var(--loom);cursor:pointer}
 .cf-colors{display:flex;flex-direction:column;gap:2px}
+/* Five rows, then a button. Counting rows rather than capping a height keeps it exact
+   whatever the row turns out to measure. */
+.cf-list > label:nth-of-type(n+6){display:none}
+.cf-list.open > label:nth-of-type(n+6),.cf-list.cf-all > label{display:flex}
+.cf-more{margin-top:7px;padding:3px 0;border:0;background:none;cursor:pointer;font:inherit;
+  font-size:12.5px;color:var(--loom);text-decoration:underline;text-underline-offset:3px}
+.cf-more:hover{color:var(--loom-dk)}
 .cf-color{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:14px;color:var(--ink);cursor:pointer}
 .cf-color input{width:16px;height:16px;accent-color:var(--loom);cursor:pointer}
 .cf-dot{width:16px;height:16px;border-radius:50%;border:1px solid rgba(0,0,0,.15);flex:0 0 auto}

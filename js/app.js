@@ -119,6 +119,7 @@
     'assist-open': function () { HW.assistantPanel.open(); },
     'assist-close': function () { HW.assistantPanel.close(); },
     'assist-ask': function (el) { HW.assistantPanel.ask(el.dataset.q); },
+    'cf-more': function (el) { HW.catalog.more(el); },
     'search-close': function () { HW.searchPanel.close(); },
     wish: function (el) { HW.wishlist.toggle(el.dataset.id, el); },
     zoom: function (el) { HW.pdp.zoom(el); },
