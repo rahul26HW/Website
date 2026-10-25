@@ -442,6 +442,57 @@
   };
 
   /* ---------------------------------------------------------------- *
+   * saying hello
+   * ---------------------------------------------------------------- */
+  /* "hi" has no word longer than two letters, so it matched nothing in the FAQ and nothing
+     in the catalogue and fell through to "I'm not sure I follow" — which is a cold thing to
+     say to someone who has only said hello. */
+  var HELLO = ['hi', 'hii', 'hiii', 'hiya', 'hey', 'heya', 'hello', 'helo', 'hallo', 'yo',
+  'hai', 'namaste', 'good morning', 'good afternoon', 'good evening', 'greetings', 'howdy'];
+  var THANKS = ['thanks', 'thank you', 'thankyou', 'thanx', 'thx', 'ty', 'cheers', 'nice one',
+  'appreciate it', 'thank u'];
+  var BYE = ['bye', 'goodbye', 'good bye', 'see you', 'see ya', 'later', 'good night', 'cya'];
+  var NODS = ['ok', 'okay', 'oki', 'k', 'kk', 'cool', 'nice', 'great', 'fine', 'sure',
+  'got it', 'alright', 'perfect', 'lovely'];
+
+  function inList(t, list) { return list.indexOf(t) >= 0; }
+
+  /* Only when the whole message is the pleasantry. "Hi, do you ship to Canada" is a
+     question wearing a greeting, and answering it with "hello" would be worse than
+     ignoring the greeting entirely. */
+  function pleasantry(text) {
+    var t = norm(text);
+    if (!t || t.length > 24) return '';
+    if (inList(t, HELLO)) return 'hello';
+    if (inList(t, THANKS)) return 'thanks';
+    if (inList(t, BYE)) return 'bye';
+    if (inList(t, NODS)) return 'nod';
+    return '';
+  }
+
+  /* A greeting in front of a real question is just noise before the signal. */
+  function dropHello(text) {
+    var t = String(text || '');
+    for (var i = 0; i < HELLO.length; i++) {
+      var re = new RegExp('^\\s*' + HELLO[i] + '\\b[\\s,.!-]*', 'i');
+      if (re.test(t)) { var rest = t.replace(re, '').trim(); if (rest) return rest; }
+    }
+    return t;
+  }
+
+  A.handlers.smalltalk = function (text) {
+    var kind = pleasantry(text);
+    A.ctx.misses = 0;
+    if (kind === 'thanks') return p(pick(['Any time.', 'You\u2019re very welcome.', 'Glad to help.']));
+    if (kind === 'bye') return p(pick(['Thanks for stopping by.', 'See you soon.', 'Take care.']));
+    if (kind === 'nod') return p(pick(['Anything else I can look up?', 'Happy to keep going if there\u2019s more.']));
+    var who = (HW.account && HW.account.get()) || null;
+    var first = who && who.name ? String(who.name).split(' ')[0] : '';
+    return p(pick(['Hello' + (first ? ' ' + esc(first) : '') + '.', 'Hi there.', 'Hello.']) +
+      ' What are you looking for?') + chips(topQuestions(3));
+  };
+
+  /* ---------------------------------------------------------------- *
    * route — which handler gets it
    * ---------------------------------------------------------------- */
   /* Only a question about THEIR order. "When will my towels arrive" and "where is your
@@ -450,7 +501,8 @@
   var ORDER_RE = /\b(my|the)\s+(order|parcel|package|delivery|shipment)\b|\border\s+(status|number)\b|\b(track|tracking|dispatched)\b|\bwhere\s+is\s+(my|the)\b/i;
 
   A.route = function (text) {
-    var t = String(text || '');
+    var t = dropHello(String(text || ''));
+    if (pleasantry(text)) return 'smalltalk';
     // The order test comes first and the catalog search second, so an order question never
     // runs through the retrieval step — which is where a model gets wired in later.
     var answer = bestFaq(t);

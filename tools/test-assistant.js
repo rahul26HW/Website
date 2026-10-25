@@ -514,6 +514,39 @@ test('a follow-up fragment is answered against the last search, not alone', func
   assert(A.expand('what about rugs') === 'what about rugs', 'naming a kind of thing starts a new search');
 });
 
+
+/* ================================================================ *
+ * Saying hello
+ * ================================================================ */
+test("a bare greeting is greeted back, not met with I am not sure I follow", function () {
+  setStore();
+  const A = asstCtx.HW.assistant;
+  A.ctx = { terms: [], misses: 0, lastQ: "", gave: "", rejected: {} };
+  ["hi", "Hello", "hey!", "Good morning"].forEach(function (g) {
+    assert(A.route(g) === "smalltalk", g + " routed to " + A.route(g));
+  });
+  const html = A.handlers.smalltalk("hi");
+  assert(/Hello|Hi there/.test(html), "should say hello back: " + html.replace(/<[^>]*>/g, " ").slice(0, 60));
+  assert(html.indexOf("not sure I follow") < 0, "must not be the confused reply");
+});
+
+test("thanks and goodbye are answered in kind", function () {
+  setStore();
+  const A = asstCtx.HW.assistant;
+  A.ctx = { terms: [], misses: 0, lastQ: "", gave: "", rejected: {} };
+  assert(A.route("thanks") === "smalltalk", "thanks should be small talk");
+  assert(A.route("bye") === "smalltalk", "bye should be small talk");
+  assert(/welcome|Any time|Glad/.test(A.handlers.smalltalk("thanks")), "should acknowledge thanks");
+});
+
+test("a greeting in front of a real question does not swallow the question", function () {
+  setStore();
+  const A = asstCtx.HW.assistant;
+  A.ctx = { terms: [], misses: 0, lastQ: "", gave: "", rejected: {} };
+  assert(A.route("hi how do I wash my towels") !== "smalltalk",
+    "a question wearing a greeting is still a question");
+});
+
 /* ================================================================ *
  * Results
  * ================================================================ */
