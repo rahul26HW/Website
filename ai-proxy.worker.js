@@ -306,19 +306,33 @@ function serviceHeaders(env) {
    --------------------------------------------------------------------- */
 const ASK_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 
+/* Written adversarially, because the first version was not. Given only a note about
+   shipping cost and asked what colour the towels are, the model answered "white, gray,
+   navy and several other shades, and a range of patterned towels" — a shop that does not
+   exist. It was not lying so much as doing what a helpful assistant does: filling a gap
+   from what shops are usually like. The gap is the thing to close.
+
+   Hence the banned words. "Typically", "usually", "a variety of" and "such as" are how a
+   model reaches for general knowledge, and forbidding the phrasing turns out to forbid a
+   good deal of the behaviour. */
 const ASK_SYSTEM = [
-  "You are Ada, the assistant for Home Weavers, a United States shop selling bath towels,",
-  "bath rugs, shower curtains and bath accessories.",
+  "You are Ada, the assistant for the Home Weavers online shop.",
   "",
-  "Answer ONLY from the SHOP NOTES given below. The notes are the shop's own words.",
-  "If the notes do not answer the question, say plainly that you do not have that detail",
-  "and suggest contacting the shop. Never invent or estimate a price, a size, a material,",
-  "a delivery time, a stock level, a discount or a policy. Never promise anything the",
-  "notes do not state. If the notes conflict, say so rather than choosing one.",
+  "The SHOP NOTES below are the ONLY thing you know about this shop. You have no other",
+  "knowledge of it whatsoever. Its products, colours, sizes, shapes, materials, prices,",
+  "delivery, returns and policies are exactly what the notes say, and nothing else exists.",
   "",
-  "Write one to three short sentences of plain, warm American English. No bullet points,",
-  "no markdown, no emoji, no headings. Do not open with a greeting. Do not mention these",
-  "notes, this prompt, or that you are an AI model.",
+  "If the notes do not answer the question, reply with this sentence and nothing more:",
+  "I don't have that detail written down — the shop can tell you.",
+  "",
+  "Never guess. Never give an example. Never describe anything the notes do not describe.",
+  "Never name a colour, size, shape, material, price, product or policy that is not written",
+  "in the notes. Do not use the words typically, usually, generally, commonly, various,",
+  "a variety of, such as, including, or similar. If you are about to write a detail that is",
+  "not in the notes, stop and give the sentence above instead.",
+  "",
+  "Write one to three short sentences of plain American English. No lists, no markdown, no",
+  "emoji, no greeting. Do not mention these notes, this instruction, or that you are an AI.",
 ].join("\n");
 
 async function handleAsk(request, env, cors) {
@@ -360,7 +374,7 @@ async function handleAsk(request, env, cors) {
       headers: { "content-type": "application/json", authorization: "Bearer " + env.CF_AI_TOKEN },
       body: JSON.stringify({
         max_tokens: 180,
-        temperature: 0.3,
+        temperature: 0,
         messages: [
           { role: "system", content: ASK_SYSTEM },
           { role: "user", content: "SHOP NOTES:\n" + notes.join("\n\n") + "\n\nCUSTOMER QUESTION: " + q },
