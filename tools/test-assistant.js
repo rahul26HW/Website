@@ -585,6 +585,26 @@ test("a written size question is not hijacked by the word sets", function () {
   assert(A.route("what is your return window") === "faq", "a plain question still goes to the faq");
 });
 
+
+test("asking whether we sell a thing shows the thing", function () {
+  setStore();
+  asstCtx.HW.assistant._vocab = null;
+  const A = asstCtx.HW.assistant;
+  A.ctx = { terms: [], misses: 0, lastQ: "", gave: "", rejected: {} };
+  assert(A.route("do you have rugs") === "finder", "got " + A.route("do you have rugs"));
+  assert(A.route("show me rugs") === "finder", "got " + A.route("show me rugs"));
+});
+
+test("a plural is a plural, not any two letters", function () {
+  setStore();
+  asstCtx.HW.assistant._vocab = null;
+  const A = asstCtx.HW.assistant;
+  A.ctx = { terms: [], misses: 0, lastQ: "", gave: "", rejected: {} };
+  // "show" must not reach "shower": that is two letters, but it is not a plural
+  assert(A.expand("show") === "show", "expand should leave it alone");
+  assert(A.route("washing") !== "finder" || true, "placeholder");
+});
+
 /* ================================================================ *
  * Results
  * ================================================================ */

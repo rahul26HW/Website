@@ -91,12 +91,21 @@
   function shownFaq() { return (HW.DB.faq || []).filter(function (f) { return f.show !== false && (f.q || f.a); }); }
 
   /* Whole words, give or take a plural. Substring matching looked clever until "do you ship
-     to Mars" matched "How much is shipping?" and answered it. */
+     to Mars" matched "How much is shipping?" and answered it.
+
+     "Give or take a plural" used to mean "give or take two letters", which is not the same
+     thing: it let "show" reach "shower", so "show me round rugs" led with a shower curtain.
+     The two extra letters have to actually be a plural now. */
+  function plural(longer, shorter) {
+    var tail = longer.slice(shorter.length);
+    return tail === 's' || tail === 'es';
+  }
+
   function hasWord(haystack, w) {
     return haystack.split(' ').some(function (t) {
       if (t === w) return true;
-      if (t.length > w.length && t.indexOf(w) === 0) return t.length - w.length <= 2;   // towel → towels
-      if (w.length > t.length && w.indexOf(t) === 0) return w.length - t.length <= 2;   // towels → towel
+      if (t.length > w.length && t.indexOf(w) === 0) return plural(t, w);   // towel → towels
+      if (w.length > t.length && w.indexOf(t) === 0) return plural(w, t);   // towels → towel
       return false;
     });
   }
@@ -552,6 +561,11 @@
   /* Only a question about THEIR order. "When will my towels arrive" and "where is your
      warehouse" are not lookups, and answering those with "sign in to track your order" is the
      rudest thing this can do to someone who has not bought anything yet. */
+  /* Asking whether we sell a thing is asking to be shown it. The products guard alongside
+     this does the real work: "do you offer a lifetime guarantee" names nothing we sell, so
+     it stays with the written answers where it belongs. */
+  var STOCKED_RE = /\bdo(?:es)?\s+you\s+(?:have|sell|stock|carry|offer|make|do)\b|\bhave\s+you\s+got\b|\bare\s+there\s+any\b|\bshow\s+me\b|\blooking\s+for\b|\bi\s+(?:want|need)\b/i;
+
   var ORDER_RE = /\b(my|the)\s+(order|parcel|package|delivery|shipment)\b|\border\s+(status|number)\b|\b(track|tracking|dispatched)\b|\bwhere\s+is\s+(my|the)\b/i;
 
   A.route = function (text) {
@@ -582,6 +596,13 @@
     // be shown things. "What size is 17x24" is about a rug, not about our sizing policy,
     // however much it opens like a question.
     if (products && sizeWords(t).length) return 'finder';
+    /* "Do you have towels" is a question, and the question is about the shelves. Asking
+       whether we sell a thing is asking to be shown it, so the question frame must not send
+       it off to the FAQ — where "towels" matched the washing answer. The products guard
+       does the real work: "do you offer a lifetime guarantee" names nothing we sell, so it
+       stays with the written answers. */
+    if (products && STOCKED_RE.test(t)) return 'finder';
+
     if (answer && products) {
       var namesAThing = catalogWords(t).length > 0;
       return (isQuestion(t) || !namesAThing) ? 'faq' : 'finder';
