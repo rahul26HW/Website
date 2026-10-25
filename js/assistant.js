@@ -147,7 +147,16 @@
     });
     (HW.DB.products || []).forEach(function (prod) {
       add(prod.material);
-      if (HW.m.isCollection(prod)) HW.m.optColor(prod).values.forEach(function (c) { add(c.label); });
+      if (!HW.m.isCollection(prod)) return;
+      HW.m.optColor(prod).values.forEach(function (c) { add(c.label); });
+      // A size is something a shopper asks for by name. Without these, "i need 17x24"
+      // had no word the catalog recognised, so the only thing left to match was "need" —
+      // which lives in "Do I need an account to order?" and got answered with that.
+      HW.m.offeredSizes(prod).forEach(function (sz) {
+        var k = HW.m.sizeKey(sz.label);
+        if (k && k.length > 2) out[k] = true;
+        add(sz.note);        // runner, slice rug, contour rug, tank lid cover
+      });
     });
     A._vocabDb = HW.DB;
     A._vocab = out;
