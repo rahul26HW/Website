@@ -20,6 +20,9 @@
    * Small shared pieces
    * ---------------------------------------------------------------- */
   function p(text) { return '<p>' + text + '</p>'; }
+  /* The rewrite marker is a note to ourselves about where our own navigation starts. It
+     must never reach the page, where it would sit in the source of every reply. */
+  function unmark(html) { return String(html).split('<!--tail-->').join(''); }
   function btn(href, label) { return '<a class="btn ghost sm" href="' + esc(href) + '">' + esc(label) + '</a>'; }
 
   function signInPrompt(why) {
@@ -252,7 +255,15 @@
 
   /* Other entries the owner tagged the same way. Offered after an answer, because the next
      question is usually next door to the last one. */
+  function relatedIds(entry, n) {
+    return relatedEntries(entry, n).map(function (f) { return f.id; });
+  }
+
   function related(entry, n) {
+    return relatedEntries(entry, n).map(function (f) { return f.q; });
+  }
+
+  function relatedEntries(entry, n) {
     var tags = norm(entry.tags).split(' ').filter(function (w) { return w.length > 2; });
     if (!tags.length) return [];
     return shownFaq().filter(function (f) { return f.id !== entry.id; })
@@ -264,7 +275,7 @@
       .filter(function (r) { return r.hits > 0; })
       .sort(function (a, b) { return b.hits - a.hits; })
       .slice(0, n)
-      .map(function (r) { return r.f.q; });
+      .map(function (r) { return r.f; });
   }
 
   /* What the conversation is carrying. Reset when the panel opens. */
@@ -314,7 +325,11 @@
       ? p(pick(SURE))
       : p('I’ll take that as <b>' + esc(f.q) + '</b>.');
     var tail = confident(text, f) ? '' : p('If you meant something else, tell me a bit more.');
-    return lead + answer + tail + more +
+    A.ctx.aiFaq = [f.id].concat(relatedIds(f, 2));
+    A.ctx.aiProducts = [];
+    // Everything after this marker survives an AI rewrite: the suggestions and the
+    // escape hatches are ours, not the model's.
+    return lead + answer + tail + '<!--tail-->' + more +
       '<div class="as-actions">' + btn(HW.link('/page/faq'), 'All questions') +
       '<button class="as-nope" type="button" data-act="assist-nope">That wasn\u2019t it</button></div>';
   };
@@ -378,6 +393,8 @@
     // eager because a lazy one inside this scrolling panel never loads at all.
     A.ctx.terms = catalogWords(text);
     A.ctx.misses = 0;
+    A.ctx.aiProducts = hits.map(function (prod) { return prod.id; });
+    A.ctx.aiFaq = [];
     return p(pick(['Here’s what fits that:', 'These look right:', 'Closest I have:', 'Try these:'])) +
       '<ul class="as-results">' + hits.map(function (prod) {
         var r = HW.m.priceRange(prod);
@@ -385,7 +402,7 @@
           '<img src="' + esc(HW.asset(HW.m.thumb(HW.m.imageOrSwatch(prod)))) + '" alt="" width="56" height="56">' +
           '<span class="snm">' + esc(HW.seo.clip(prod.name, 70)) +
           '<span class="spr">' + (r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min)) + '</span></span></a></li>';
-      }).join('') + '</ul>' +
+      }).join('') + '</ul>' + '<!--tail-->' +
       p('Tell me a size, a colour or a shape and I’ll narrow it down.');
   };
 
@@ -466,6 +483,51 @@
   };
 
   /* ---------------------------------------------------------------- *
+   * the model layer
+   * ---------------------------------------------------------------- */
+  /* Off unless the shop turns it on in Admin. When it is on, the written answer is still
+     produced first and still decides WHICH entries are relevant — the model only gets
+     their ids and writes the sentence. If it is slow, unreachable, or says nothing, the
+     written answer is what the customer sees. The feature can fail completely and the
+     assistant still works exactly as it did yesterday. */
+  function aiOn() {
+    return !!(((HW.DB || {}).settings || {}).aiAssistant) && !!(HW.api && HW.api.server);
+  }
+
+  var AI_WAIT = 6000;
+
+  /* Through the same helper the rest of the site uses to reach the function, so the URL
+     and the headers are decided in one place rather than two. A slow model must not leave
+     the bubble sitting on an ellipsis, so the wait is capped and the written answer wins
+     the race by default. */
+  function aiAsk(question) {
+    var live = HW.api.server('/ask', {
+      q: question, faq: A.ctx.aiFaq || [], products: A.ctx.aiProducts || []
+    }).then(function (d) {
+      return d && typeof d.text === 'string' ? d.text.trim() : '';
+    });
+    var giveUp = new Promise(function (resolve) { setTimeout(function () { resolve(''); }, AI_WAIT); });
+    return Promise.race([live, giveUp]);
+  }
+
+  /* Swaps the written prose for the model's sentence and keeps our own tail — the
+     suggested questions, "All questions" and "That wasn't it" are navigation, and a
+     model has no business rewriting those. */
+  function aiRewrite(question, route, html) {
+    if (!aiOn()) return html;
+    if (route !== 'faq' && route !== 'finder') return html;
+    var parts = String(html).split('<!--tail-->');
+    if (parts.length !== 2) return html;
+    var ids = (A.ctx.aiFaq || []).length + (A.ctx.aiProducts || []).length;
+    if (!ids) return html;
+    var keep = route === 'finder' ? parts[0] : '';   // the product rows stay; the FAQ prose does not
+    return aiAsk(question).then(function (text) {
+      if (!text) return html;
+      return (route === 'finder' ? p(esc(text)) + keep : p(esc(text))) + parts[1];
+    }, function () { return html; });
+  }
+
+  /* ---------------------------------------------------------------- *
    * The panel
    * ---------------------------------------------------------------- */
   var release = null;
@@ -532,7 +594,7 @@
       return new Promise(function (go) { setTimeout(go, 420); }).then(function () {
         return A.reject();
       }).then(function (html) {
-        if (row) row.innerHTML = html;
+        if (row) row.innerHTML = unmark(html);
         var box = log(); if (box) box.scrollTop = box.scrollHeight;
       }, function () {
         if (row) row.innerHTML = p('Something went wrong on our side. Try again in a moment.');
@@ -547,7 +609,7 @@
       var row = say('bot', '<p class="as-wait" aria-label="Typing">' +
         '<span class="as-dot"></span><span class="as-dot"></span><span class="as-dot"></span></p>');
       var done = function (html) {
-        if (row) row.innerHTML = html;
+        if (row) row.innerHTML = unmark(html);
         var box = log();
         if (box) box.scrollTop = box.scrollHeight;
       };
@@ -564,7 +626,8 @@
       // message below rather than escaping and leaving the bubble stuck on an ellipsis.
       return new Promise(function (go) { setTimeout(go, beat); }).then(function () {
         var q = A.expand(text);
-        return A.handlers[A.route(q)](q);
+        var route = A.route(q);
+        return aiRewrite(q, route, A.handlers[route](q));
       }).then(done, function () {
         done(p('Something went wrong on our side. Try again in a moment.'));
       });

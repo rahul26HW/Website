@@ -66,6 +66,17 @@
   /* Shape belongs to the size. One rug is sold round, as a runner and as a contour piece, so
      a single value on the product is wrong for most of its sizes. Map it once here and every
      product page shows the shape of the size the shopper has actually chosen. */
+  /* The assistant can quote your answers word for word, or hand the ones it matched to a
+     language model and let it write the reply. Off by default, and off is a working
+     assistant: the model never decides WHICH answer is right, only how it is said, and if
+     it is slow or unreachable the written answer is what the customer sees. */
+  function aiRow() {
+    return A.ui.panel('AI replies',
+      '<p class="hint">With this off, Ada quotes your answers exactly as written. With it on, a language model rewrites them in its own words from the answers it matched — better with an odd phrasing, but it is a model, so read its replies for a while before trusting it. It can never invent a price, a size or a policy: it only ever sees the answers and products it was handed.</p>' +
+      A.ui.check('Let a model write the replies', 'settings.aiAssistant', (A.draft.settings || {}).aiAssistant === true) +
+      A.ui.saveBtn());
+  }
+
   function shapeRows() {
     var rows = (A.draft.settings.sizeShapes || []);
     return A.ui.panel('Shape by size',
@@ -128,6 +139,7 @@
           ui.field('Counting orders from', 'settings.liveFrom', st.liveFrom, { type: 'date',
             hint: 'The day the shop opened for real customers. Orders before it stay in the list but are left out of the dashboard and analytics totals, so test orders don’t flatter the figures. Leave blank to count everything.' }) +
           ui.check('Show empty categories to shoppers', 'settings.showEmptyCategories', st.showEmptyCategories) +
+          aiRow() +
           shapeRows() +
           ui.field('Size guide', 'settings.sizeGuide', st.sizeGuide, { textarea: true, rows: 10, hint: 'Opens from “Size guide” on product pages with sizes. Tables: one row per line, columns separated by | (first row = headings). Leave blank to hide the link.' }) +
           ui.saveBtn()) +
