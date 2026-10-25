@@ -46,14 +46,16 @@ grant insert on public.reviews to authenticated;   -- admins only, by policy
 -- 3. say so on the page
 -- ---------------------------------------------------------------------
 -- The only change is 'source' in each item. Everything else is as it was.
-create or replace function public.public_reviews(p_product_id text)
+drop function if exists public.public_reviews(text);
+
+create or replace function public.public_reviews(p_product_id text, p_limit int default 100)
 returns jsonb language sql security definer stable set search_path = '' as $$
   with mine as (
     select name, rating, title, body, photos, reply, replied_at, created_at, source
       from public.reviews
      where product_id = trim(coalesce(p_product_id, '')) and status = 'published'
      order by created_at desc
-     limit 100
+     limit greatest(1, least(coalesce(p_limit, 100), 200))
   ),
   stats as (
     select count(*)::int as n, round(avg(rating)::numeric, 2) as avg,
