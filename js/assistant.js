@@ -352,6 +352,7 @@
     var tail = confident(text, f) ? '' : p('If you meant something else, tell me a bit more.');
     A.ctx.aiFaq = [f.id].concat(relatedIds(f, 2));
     A.ctx.aiProducts = [];
+    A.ctx.aiConfident = confident(text, f);
     // Everything after this marker survives an AI rewrite: the suggestions and the
     // escape hatches are ours, not the model's.
     return lead + answer + tail + '<!--tail-->' + more +
@@ -423,6 +424,7 @@
     A.ctx.misses = 0;
     A.ctx.aiProducts = hits.map(function (prod) { return prod.id; });
     A.ctx.aiFaq = [];
+    A.ctx.aiConfident = true;      // real products are facts, whatever the phrasing was
     return p(pick(['Here’s what fits that:', 'These look right:', 'Closest I have:', 'Try these:'])) +
       '<ul class="as-results">' + hits.map(function (prod) {
         var r = HW.m.priceRange(prod);
@@ -607,6 +609,11 @@
   function aiRewrite(question, route, html) {
     if (!aiOn()) return html;
     if (route !== 'faq' && route !== 'finder') return html;
+    /* Only when the written answer was a confident match. When Ada is unsure she says so
+       and shows the question she settled on, which a customer can correct — and that is
+       exactly the moment a model stops quoting and starts filling the gap from what shops
+       are generally like. The hedge is worth more than a fluent guess. */
+    if (!A.ctx.aiConfident) return html;
     var parts = String(html).split('<!--tail-->');
     if (parts.length !== 2) return html;
     var ids = (A.ctx.aiFaq || []).length + (A.ctx.aiProducts || []).length;

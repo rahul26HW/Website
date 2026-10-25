@@ -356,13 +356,24 @@ async function handleAsk(request, env, cors) {
     if (faqIds.indexOf(String(entry.id)) < 0) return;
     notes.push("Q: " + String(entry.q || "").trim() + "\nA: " + htmlToText(String(entry.a || "")).trim());
   });
+  /* The colours and sizes come too. Asked what colour the towels are, with only a name
+     and a material to go on, the model answered "white and beige" — it had nothing true
+     to say and said something anyway. Given the real list it answers correctly, and a
+     model with facts in front of it reaches for them before it reaches for invention. */
   (store.products || []).forEach((p) => {
     if (!p || p.hidden) return;
     if (prodIds.indexOf(String(p.id)) < 0) return;
+    const opts = Array.isArray(p.options) ? p.options : [];
+    const labels = (type) => ((opts.find((o) => o && o.type === type) || {}).values || [])
+      .map((v) => String((v && v.label) || "").trim()).filter(Boolean).slice(0, 20);
+    const colours = labels("color");
+    const sizes = labels("size");
     const bits = [String(p.name || "").trim()];
-    if (p.material) bits.push("made of " + p.material);
+    if (p.material) bits.push("material: " + p.material);
     if (p.shape) bits.push("shape: " + p.shape);
-    notes.push("Product: " + bits.join(", "));
+    if (colours.length) bits.push("colours available: " + colours.join(", "));
+    if (sizes.length) bits.push("sizes available: " + sizes.join(", "));
+    notes.push("Product — " + bits.join("; "));
   });
   if (!notes.length) return json({ error: "no-context" }, 422, cors);
 
