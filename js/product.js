@@ -235,12 +235,13 @@
         '<h1>' + esc(p.name) + '</h1>' +
         saleBand(p) +
         '<div class="price"><span class="now ' + (sp.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(sp.effective) + '</span>' + (sp.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(sp.timedSale ? sp.wasPrice : sp.price) + '</span>' : '') + '</div>' +
+        '<p class="socialproof" id="socialProof" role="status" hidden></p>' +
         descHTML(p) +
         (p.sku ? '<div class="skuline">SKU ' + esc(p.sku) + (p.upc ? ' · UPC ' + esc(p.upc) : '') + '</div>' : '') + shipBox() +
         '<div class="stocknote ' + (inStock ? 'in' : 'out') + '"><span aria-hidden="true">● </span>' + esc(m.stockLabel(qtyKey, inStock)) + '</div>' +
-        '<p class="socialproof" id="socialProof" role="status" hidden></p>' +
         '<div class="qtyrow">' + (inStock ? stepper(m.invTracked(qtyKey) ? m.invQty(qtyKey) : UNTRACKED_MAX) : '') + buy + '</div>' +
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
+        '<p class="liveview" id="liveView" role="status" hidden></p>' +
         (inStock ? '' : notifyHTML(p, m.simpleSku(p), 'This item')),
       inStock: inStock,
       specs: [{ label: 'SKU', value: p.sku }, { label: 'UPC', value: p.upc }, { label: 'Dimensions', value: p.dims }, { label: 'Pile height', value: p.pileHeight },
@@ -315,12 +316,13 @@
         '<h1>' + esc(p.name) + '</h1>' +
         saleBand(p) +
         '<div class="price" aria-live="polite"><span class="now ' + (v.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(v.effective) + '</span>' + (v.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(v.timedSale ? v.wasPrice : v.price) + '</span>' : '') + '</div>' +
+        '<p class="socialproof" id="socialProof" role="status" hidden></p>' +
         descHTML(p) + swatches + sizes +
         '<div class="skuline">SKU ' + esc(v.sku) + (v.upc ? ' · UPC ' + esc(v.upc) : '') + '</div>' + shipBox() +
         '<div class="stocknote ' + (v.inStock ? 'in' : 'out') + '" aria-live="polite"><span aria-hidden="true">● </span>' + esc(v.inStock ? m.stockLabel(v.sku, true) : 'This option is currently sold out') + '</div>' +
-        '<p class="socialproof" id="socialProof" role="status" hidden></p>' +
         '<div class="qtyrow">' + (v.inStock ? stepper(m.invTracked(v.sku) ? m.invQty(v.sku) : UNTRACKED_MAX) : '') + buy + '</div>' +
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
+        '<p class="liveview" id="liveView" role="status" hidden></p>' +
         (v.inStock ? '' : notifyHTML(p, v.sku, v.color.label + ' / ' + v.size.label)),
       inStock: v.inStock,
       specs: [{ label: 'SKU', value: v.sku }, { label: 'UPC', value: v.upc }, { label: cOpt.name || 'Color', value: v.color.label },
@@ -620,6 +622,41 @@
     return code;
   }
 
+  /* Inline SVG rather than an emoji: an emoji renders as a different picture on every
+     platform and sits on the text baseline wherever it likes. */
+  var FLAME = '<svg class="sp-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor">' +
+    '<path d="M12 2s1.2 3-1.4 5.6C8 10.2 6 12 6 14.8A6 6 0 0 0 18 15c0-2-.8-3.4-1.8-4.6-.5 1-1.2 1.6-2 1.9.7-2.3.3-5.2-2.2-7.1C12.6 4.3 12.4 3 12 2Z"/></svg>';
+  var EYE = '<svg class="lv-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7">' +
+    '<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.6"/></svg>';
+
+  /* ---------------------------------------------------------------- *
+   * who else is on this page
+   * ---------------------------------------------------------------- */
+  /* Counts visits, not people — a visit is all the site knows, and two tabs are two
+     visits. It only speaks at two or more: at one the only visit on the page is the
+     person reading it, and telling someone they are here is not social proof. */
+  var lvTimer = null;
+
+  function liveViewers(productId) {
+    if (lvTimer) { clearInterval(lvTimer); lvTimer = null; }
+    var paint = function () {
+      var mount = document.getElementById('liveView');
+      if (!mount) { if (lvTimer) { clearInterval(lvTimer); lvTimer = null; } return; }
+      if (!HW.api || !HW.api.rpc) return;
+      HW.api.rpc('product_live_viewers', { p_product_id: productId }).then(function (n) {
+        var box = document.getElementById('liveView');
+        if (!box) return;
+        var c = Number(n) || 0;
+        if (c < 2) { box.hidden = true; box.innerHTML = ''; return; }
+        box.innerHTML = EYE + '<span>' + u.plural(c, 'person is', 'people are') + ' viewing this right now</span>';
+        box.hidden = false;
+      }).catch(function () { /* a failed count says nothing at all */ });
+    };
+    paint();
+    // Slow on purpose. This is a mood, not a dashboard, and every tick is a round trip.
+    lvTimer = setInterval(paint, 45000);
+  }
+
   function socialProof(productId, cachedOnly) {
     var mount = document.getElementById('socialProof');
     if (!mount) return;
@@ -645,7 +682,7 @@
   function paintSocialProof(mount, lines) {
     if (spTimer) { clearInterval(spTimer); spTimer = null; }
     if (!mount || !lines || !lines.length) return;
-    mount.innerHTML = '<span class="sp-dot" aria-hidden="true"></span><span class="sp-line"></span>';
+    mount.innerHTML = FLAME + '<span class="sp-line"></span>';
     var slot = mount.querySelector('.sp-line');
     var i = 0;
     var show = function () { slot.innerHTML = lines[i % lines.length]; i++; };
@@ -703,7 +740,7 @@
       },
       after: function () { HW.gallery.fit(); fitSwatches(); HW.recent.add(p.id); if (p.summary) loadFull(p);
         if (HW.reviews) HW.reviews.section(p.id, 'rvMount');
-        socialProof(p.id); }
+        socialProof(p.id); liveViewers(p.id); HW.buzz.start(); }
     };
   };
 })(window.HW = window.HW || {});
