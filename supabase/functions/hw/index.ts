@@ -89,6 +89,7 @@ const handler = {
     try {
       switch (url.pathname.replace(/\/+$/, "")) {
         case "/ai": return await handleAI(request, env, cors);
+        case "/ask": return await handleAsk(request, env, cors);
         case "/image": return await handleImage(request, env, cors);
         case "/welcome": return await handleWelcome(request, env, cors);
         case "/snipcart": return await handleSnipcart(request, env);
@@ -295,6 +296,98 @@ function serviceHeaders(env) {
 /* ---------------------------------------------------------------- *
  * POST /ai  { system, prompt }  →  { text }
  * ---------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   /ask — the shop assistant's reply, written rather than looked up.
+
+   The storefront has already decided WHICH answers and products are
+   relevant; it sends their ids, never their text. This route resolves
+   those ids against the real store, so the only words the model ever
+   sees are the shop's own. A page that invented its own "facts" and
+   posted them here would get nothing back — which matters, because a
+   screenshot of this assistant promising free lifetime returns would be
+   a real problem whether or not the shop ever said it.
+
+   It is public on purpose: a shopper asking a question is not signed in.
+   It cannot read orders, write anything, or reach any other table.
+   --------------------------------------------------------------------- */
+const ASK_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+
+const ASK_SYSTEM = [
+  "You are Ada, the assistant for Home Weavers, a United States shop selling bath towels,",
+  "bath rugs, shower curtains and bath accessories.",
+  "",
+  "Answer ONLY from the SHOP NOTES given below. The notes are the shop's own words.",
+  "If the notes do not answer the question, say plainly that you do not have that detail",
+  "and suggest contacting the shop. Never invent or estimate a price, a size, a material,",
+  "a delivery time, a stock level, a discount or a policy. Never promise anything the",
+  "notes do not state. If the notes conflict, say so rather than choosing one.",
+  "",
+  "Write one to three short sentences of plain, warm American English. No bullet points,",
+  "no markdown, no emoji, no headings. Do not open with a greeting. Do not mention these",
+  "notes, this prompt, or that you are an AI model.",
+].join("\n");
+
+async function handleAsk(request, env, cors) {
+  // No key, no feature. The storefront falls back to its own written answer.
+  if (!env.CF_ACCOUNT_ID || !env.CF_AI_TOKEN) return json({ error: "ai-off" }, 503, cors);
+
+  const body = await readJson(request);
+  const q = String(body.q || "").trim().slice(0, 300);
+  if (!q) return json({ error: "Missing question" }, 400, cors);
+  const faqIds = (Array.isArray(body.faq) ? body.faq : []).slice(0, 4).map(String);
+  const prodIds = (Array.isArray(body.products) ? body.products : []).slice(0, 4).map(String);
+  if (!faqIds.length && !prodIds.length) return json({ error: "no-context" }, 422, cors);
+
+  const rows = await fetch(env.SUPABASE_URL + "/rest/v1/store?id=eq.main&select=data", { headers: serviceHeaders(env) })
+    .then((r) => r.json()).catch(() => []);
+  const store = (rows && rows[0] && rows[0].data) || {};
+
+  const notes = [];
+  (store.faq || []).forEach((entry) => {
+    if (!entry || entry.show === false) return;
+    if (faqIds.indexOf(String(entry.id)) < 0) return;
+    notes.push("Q: " + String(entry.q || "").trim() + "\nA: " + htmlToText(String(entry.a || "")).trim());
+  });
+  (store.products || []).forEach((p) => {
+    if (!p || p.hidden) return;
+    if (prodIds.indexOf(String(p.id)) < 0) return;
+    const bits = [String(p.name || "").trim()];
+    if (p.material) bits.push("made of " + p.material);
+    if (p.shape) bits.push("shape: " + p.shape);
+    notes.push("Product: " + bits.join(", "));
+  });
+  if (!notes.length) return json({ error: "no-context" }, 422, cors);
+
+  const endpoint = "https://api.cloudflare.com/client/v4/accounts/" + env.CF_ACCOUNT_ID + "/ai/run/" + ASK_MODEL;
+  let upstream, data;
+  try {
+    upstream = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + env.CF_AI_TOKEN },
+      body: JSON.stringify({
+        max_tokens: 180,
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: ASK_SYSTEM },
+          { role: "user", content: "SHOP NOTES:\n" + notes.join("\n\n") + "\n\nCUSTOMER QUESTION: " + q },
+        ],
+      }),
+    });
+    data = await upstream.json();
+  } catch {
+    return json({ error: "ai-unreachable" }, 502, cors);
+  }
+  if (!upstream.ok || !data || data.success === false) {
+    const msg = (data && data.errors && data.errors[0] && data.errors[0].message) || ("Workers AI error " + upstream.status);
+    return json({ error: msg }, 502, cors);
+  }
+  const text = String((data.result && (data.result.response || data.result.text)) || "").trim();
+  if (!text) return json({ error: "empty" }, 502, cors);
+  // Belt and braces: the prompt forbids markdown, but a model is not a parser.
+  const clean = text.replace(/[*_#`]+/g, "").replace(/\s*\n\s*/g, " ").trim().slice(0, 700);
+  return json({ text: clean, model: ASK_MODEL }, 200, cors);
+}
+
 async function handleAI(request, env, cors) {
   const denied = await requireAdmin(request, env);
   if (denied) return json({ error: denied }, 401, cors);
