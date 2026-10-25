@@ -631,7 +631,12 @@
      model has no business rewriting those. */
   function aiRewrite(question, route, html) {
     if (!aiOn()) return html;
-    if (route !== 'faq' && route !== 'finder') return html;
+    /* The written answer only. Asked for coral rugs, with six products in front of it that
+       all come in Coral, the model wrote that two of them did — an undercount sitting
+       directly above a correct list of six. Not invention; a bad summary, which is worse in
+       one way, because it reads as precision. The rows are the answer to a product search
+       and prose on top of them only adds somewhere for an error to live. */
+    if (route !== 'faq') return html;
     /* Only when the written answer was a confident match. When Ada is unsure she says so
        and shows the question she settled on, which a customer can correct — and that is
        exactly the moment a model stops quoting and starts filling the gap from what shops
