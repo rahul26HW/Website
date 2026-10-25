@@ -233,6 +233,7 @@
     return {
       html: '<div class="eyebrow">' + esc(cat ? cat.name : '') + (sub ? ' · ' + esc(sub.name) : '') + '</div>' +
         '<h1>' + esc(p.name) + '</h1>' +
+        '<a class="rvtop" id="rvTop" href="#rvMount" hidden></a>' +
         saleBand(p) +
         '<div class="price"><span class="now ' + (sp.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(sp.effective) + '</span>' + (sp.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(sp.timedSale ? sp.wasPrice : sp.price) + '</span>' : '') + '</div>' +
         '<p class="socialproof" id="socialProof" role="status" hidden></p>' +
@@ -314,6 +315,7 @@
       v: v,
       html: '<div class="eyebrow">' + esc(cat ? cat.name : '') + (sub ? ' · ' + esc(sub.name) : '') + '</div>' +
         '<h1>' + esc(p.name) + '</h1>' +
+        '<a class="rvtop" id="rvTop" href="#rvMount" hidden></a>' +
         saleBand(p) +
         '<div class="price" aria-live="polite"><span class="now ' + (v.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(v.effective) + '</span>' + (v.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(v.timedSale ? v.wasPrice : v.price) + '</span>' : '') + '</div>' +
         '<p class="socialproof" id="socialProof" role="status" hidden></p>' +

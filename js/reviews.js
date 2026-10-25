@@ -77,6 +77,23 @@
     if (!d) { el.innerHTML = ''; return; }
 
     var n = Number(d.count) || 0;
+
+    /* The stars belong next to the price as well as at the bottom of the page: by the
+       time someone has scrolled to the reviews they have already decided. Filled from
+       the call the section was making anyway. */
+    var top = document.getElementById('rvTop');
+    if (top) {
+      if (n) {
+        top.innerHTML = HW.reviews.stars(d.average, 15) +
+          '<span class="rvtop-avg">' + esc(Number(d.average).toFixed(1)) + '</span>' +
+          '<span class="rvtop-n">' + u.plural(n, 'review') + '</span>';
+        top.hidden = false;
+      } else {
+        top.hidden = true;
+        top.innerHTML = '';
+      }
+    }
+
     if (!n) {
       el.innerHTML = '<div class="rv-empty"><h2>Reviews</h2>' +
         '<p class="muted">No reviews yet. If you have bought this, you can review it from your order.</p></div>';
@@ -101,12 +118,14 @@
         '<header class="rv-head">' + HW.reviews.stars(r.rating, 14) +
         '<b class="rv-name">' + esc(r.name) + '</b>' +
         /* 'Verified buyer' means this person bought it HERE and the order was checked.
-           A review carried over from a marketplace has not been through any of that, and
-           wearing that badge would be a straightforward false claim — the exact thing the
-           rules on reviews exist to stop. It says where it came from instead. */
-        (r.source
-          ? '<span class="rv-badge src" title="Written on ' + esc(r.source) + ', not on this site">from ' + esc(r.source) + '</span>'
-          : '<span class="rv-badge" title="Bought from us">Verified buyer</span>') +
+           A review carried over from a marketplace has been through none of that, so it
+           does not get the badge — claiming it would be a plain falsehood, and that is the
+           thing the rules on reviews exist to stop.
+
+           It no longer names the marketplace either: a competitor's name on every card is
+           not what the shop wants, and it is not needed for the claim to be honest. The
+           line under the heading covers it once, quietly, for the whole section. */
+        (r.source ? '' : '<span class="rv-badge" title="Bought from us">Verified buyer</span>') +
         '<time class="rv-when">' + esc(u.fmtDate(r.createdAt)) + '</time></header>' +
         (r.title ? '<h3 class="rv-title">' + esc(r.title) + '</h3>' : '') +
         (r.body ? '<p class="rv-body">' + esc(r.body).replace(/\n+/g, '<br>') + '</p>' : '') +
@@ -115,7 +134,9 @@
         '</article>';
     }).join('');
 
+    var carried = (d.items || []).some(function (r) { return r && r.source; });
     el.innerHTML = '<div class="rv-wrap"><h2>Reviews</h2>' +
+      (carried ? '<p class="rv-note">Some of these were first written on the retail sites that also sell our products.</p>' : '') +
       '<div class="rv-top"><div class="rv-score"><b>' + (Number(d.average) || 0).toFixed(1) + '</b>' +
       HW.reviews.stars(d.average, 18) +
       '<span class="muted">' + n + (n === 1 ? ' review' : ' reviews') + '</span></div>' +
