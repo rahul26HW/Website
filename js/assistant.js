@@ -402,9 +402,12 @@
   /* ---------------------------------------------------------------- *
    * finder — only things we actually sell and can actually send
    * ---------------------------------------------------------------- */
+  var FINDER_ROWS = 6;
+
   A.handlers.finder = function (text) {
     var matched = catalogHits(text);
-    var hits = matched.filter(function (prod) { return !HW.m.productOut(prod); }).slice(0, 4);
+    var available = matched.filter(function (prod) { return !HW.m.productOut(prod); });
+    var hits = available.slice(0, FINDER_ROWS);
     if (!hits.length) {
       // "We don't sell that" and "that is sold out" are different answers, and only one of
       // them is true when the catalog matched but every size has gone.
@@ -428,6 +431,13 @@
           '<span class="snm">' + esc(HW.seo.clip(prod.name, 70)) +
           '<span class="spr">' + (r.min === r.max ? u.money(r.min) : 'from ' + u.money(r.min)) + '</span></span></a></li>';
       }).join('') + '</ul>' + '<!--tail-->' +
+      // Four of eighteen with no hint that fourteen were left out reads as "that is all we
+      // have". Say the number, and link to the full list rather than asking anyone to
+      // scroll a chat panel through it.
+      (available.length > hits.length
+        ? p(esc(available.length + ' matches in all.') + ' <a class="link-u" href="' +
+            esc(HW.link('/search?q=' + encodeURIComponent(text))) + '">See them all</a>')
+        : '') +
       p('Tell me a size, a colour or a shape and I’ll narrow it down.');
   };
 
