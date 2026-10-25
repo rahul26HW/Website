@@ -1228,9 +1228,15 @@ main#view.booting ~ footer.site{visibility:hidden}
 body.admin-mode .assistbubble,body.admin-mode .assistpanel{display:none}
 /* What other shoppers did, said quietly. One line at a time, because two stacked claims
    read as a sales pitch and one reads as a fact. */
-/* Sits directly under the price, where a shopper is already looking at a number. Warm
-   rather than red: this is a fact about the shop, not a countdown. */
-.socialproof{display:flex;align-items:center;gap:7px;margin:8px 0 0;font-family:var(--ui);font-size:13px;font-weight:600;color:var(--clay-text,#9A5A33);min-height:19px}
+/* Sits directly under the price, where a shopper is already looking at a number.
+
+   It was set at 13px against 15.5px body copy, which made the one line on the page that
+   is meant to catch an eye the smallest thing near it. A badge now: bigger than the
+   paragraph under it, on a warm tint, sized to its own text rather than the column.
+   Warm rather than red — this is a fact about the shop, not a countdown. */
+.socialproof{display:inline-flex;align-items:center;gap:8px;margin:10px 0 0;font-family:var(--ui);
+  font-size:14.5px;font-weight:600;color:var(--clay-text,#9A5A33);min-height:19px;
+  background:rgba(154,91,55,.1);border-radius:999px;padding:7px 14px 7px 12px}
 .socialproof[hidden]{display:none}
 .socialproof .sp-ico{flex:0 0 auto}
 .socialproof .sp-line{transition:opacity .26s ease}
@@ -1262,8 +1268,15 @@ body.admin-mode .assistbubble,body.admin-mode .assistpanel{display:none}
   color:var(--ink-soft);font-size:13px;line-height:1;padding:9px 10px 6px 2px}
 .buzz-x:hover{color:var(--ink)}
 @media(max-width:560px){
-  .buzz{left:10px;right:10px;bottom:10px;max-width:none}
-  body.has-stickybuy .buzz{bottom:calc(78px + env(safe-area-inset-bottom))}
+  /* Full width, but stacked ABOVE the assistant bubble rather than beside it. Both are
+     pinned bottom-right and both get pushed up by the sticky Add to cart bar, so side by
+     side they land on top of each other. */
+  .buzz{left:10px;right:10px;bottom:74px;max-width:none}
+  body.has-stickybuy .buzz{bottom:calc(144px + env(safe-area-inset-bottom))}
+  .buzz-in{padding:12px}
+  .buzz-in img{width:60px;height:60px}
+  .buzz-who{font-size:12.5px}
+  .buzz-txt b{font-size:14.5px}
 }
 @media(prefers-reduced-motion:reduce){.buzz{transition:none}}
 /* Shop by use: the question a shopper actually has (where is it going?) rather than the one

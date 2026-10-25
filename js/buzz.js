@@ -18,9 +18,12 @@
   var u = HW.u, esc = u.esc;
 
   var KEY = 'hw:buzzOff';
-  var GAP = 11000;        // between cards
-  var SHOW = 6000;        // how long one stays
-  var FIRST = 7000;       // nothing at all until the page has been read for a moment
+  // Seven seconds before the first card and six on screen meant most people never saw
+  // one: they were still reading the photographs. Sooner, and long enough to actually
+  // read it.
+  var GAP = 14000;        // between cards
+  var SHOW = 9000;        // how long one stays
+  var FIRST = 3500;       // a moment to let the page settle, no more
 
   var rows = null, i = 0, timer = null, started = false, el = null;
 
@@ -80,8 +83,12 @@
       '<button class="buzz-x" type="button" aria-label="Stop showing these">✕</button>';
     box.querySelector('.buzz-x').addEventListener('click', dismiss);
     box.hidden = false;
-    // The class drives the slide; set it on the next frame so the transition actually runs.
-    requestAnimationFrame(function () { box.classList.add('on'); });
+    // Reading offsetWidth flushes layout, which gives the transition a start value to move
+    // from. This used to wait for requestAnimationFrame, which never fires while a tab is
+    // backgrounded or throttled — so the card unhid itself at opacity 0 and hid again nine
+    // seconds later, having been invisible the whole time.
+    void box.offsetWidth;
+    box.classList.add('on');
     timer = setTimeout(hide, SHOW);
   }
 
