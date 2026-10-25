@@ -705,6 +705,14 @@
   }
 
   HW.assistantPanel = {
+    /* The bubble is the way in and the way out. Having to find the small x to close what a
+       big round button opened is a nuisance on a phone, where the x is the hardest thing on
+       the panel to hit. */
+    toggle: function () {
+      var panel = document.getElementById('assistPanel');
+      if (panel && !panel.hidden) HW.assistantPanel.close();
+      else HW.assistantPanel.open();
+    },
     open: function () {
       var panel = document.getElementById('assistPanel');
       if (!panel || !panel.hidden) return;

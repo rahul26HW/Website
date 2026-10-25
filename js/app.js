@@ -116,7 +116,7 @@
     'cf-clear': function () { HW.catalog.clear(); },
     'cf-toggle': function (el) { HW.catalog.toggleSidebar(el); },
     'search-open': function () { HW.searchPanel.open(); },
-    'assist-open': function () { HW.assistantPanel.open(); },
+    'assist-open': function () { HW.assistantPanel.toggle(); },
     'assist-close': function () { HW.assistantPanel.close(); },
     'assist-ask': function (el) { HW.assistantPanel.ask(el.dataset.q); },
     'cf-more': function (el) { HW.catalog.more(el); },
