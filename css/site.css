@@ -867,7 +867,15 @@ fieldset.optblock{padding:0;margin:0 0 22px}
 .size-btn.oos.active{opacity:.7;text-decoration:line-through}
 .hdots .hpause{width:auto;height:auto;background:none;color:#fff;font-size:10px;line-height:1;padding:0 0 0 8px;opacity:.85}
 .hdots .hpause:hover{opacity:1}
-.fbottom-links{display:flex;flex-wrap:wrap;gap:6px 22px}
+/* The legal row is a <nav> of links next to a <button>, and a button brings its own box.
+   Stretched to the row height it centres its label, which put the "Cookie settings"
+   underline a couple of pixels below every other one. Baseline alignment is what makes
+   text sit on the same line as other text, whatever element it happens to be in.
+
+   The button also carried margin-left:22px while the row already had a 22px gap, so it
+   sat double-spaced from "Accessibility". */
+.fbottom-links{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 22px}
+.fbottom-links .linkbtn{margin-left:0;min-height:0}
 .fbottom-links a{margin-left:0}
 .fsocial:empty{display:none}
 .news-result:empty{display:none}
