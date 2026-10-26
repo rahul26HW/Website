@@ -67,6 +67,22 @@
     });
   };
 
+  /* The stars beside the price. Separate from the section below so a redraw can put them
+     back without another round trip. */
+  HW.reviews.summary = null;
+  HW.reviews.paintTop = function () {
+    var top = document.getElementById('rvTop');
+    if (!top) return;
+    var s = HW.reviews.summary;
+    if (!s || !s.n) { top.hidden = true; top.innerHTML = ''; return; }
+    top.innerHTML = HW.reviews.stars(s.avg, 15) +
+      // Rounded DOWN, never up. 4.97 shown as 5.0 claims a perfect score the shop does not
+      // have, and one four-star review is enough to make that untrue.
+      '<span class="rvtop-avg">' + esc((Math.floor(Number(s.avg) * 10) / 10).toFixed(1)) + '</span>' +
+      '<span class="rvtop-n">' + u.plural(s.n, 'review') + '</span>';
+    top.hidden = false;
+  };
+
   /* ---------- the section under a product ---------- */
   HW.reviews.section = async function (productId, mount) {
     var el = typeof mount === 'string' ? document.getElementById(mount) : mount;
@@ -81,18 +97,11 @@
     /* The stars belong next to the price as well as at the bottom of the page: by the
        time someone has scrolled to the reviews they have already decided. Filled from
        the call the section was making anyway. */
-    var top = document.getElementById('rvTop');
-    if (top) {
-      if (n) {
-        top.innerHTML = HW.reviews.stars(d.average, 15) +
-          '<span class="rvtop-avg">' + esc(Number(d.average).toFixed(1)) + '</span>' +
-          '<span class="rvtop-n">' + u.plural(n, 'review') + '</span>';
-        top.hidden = false;
-      } else {
-        top.hidden = true;
-        top.innerHTML = '';
-      }
-    }
+    /* Kept, because the buy column redraws itself whenever a colour or size changes and
+       takes the stars with it. The summary is the same for every variant, so it is painted
+       again from memory rather than asked for again. */
+    HW.reviews.summary = { id: productId, n: n, avg: d.average };
+    HW.reviews.paintTop();
 
     if (!n) {
       el.innerHTML = '<div class="rv-empty"><h2>Reviews</h2>' +

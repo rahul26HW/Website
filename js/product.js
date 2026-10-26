@@ -372,6 +372,7 @@
     HW.snip && HW.snip.refresh();
     stickyBuy();
     socialProof(p.id, true);   // from cache: a colour change is not a reason to re-ask
+    if (HW.reviews && HW.reviews.paintTop) HW.reviews.paintTop();
   }
 
   /* On a phone the buy box scrolls off the top long before someone has finished reading,
