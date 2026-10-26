@@ -76,7 +76,7 @@
      the opposite of what a real review is for.
 
      Initials are left alone. 'J' and 'NG' are what those people chose to be called. */
-  var PLACEHOLDER = /^(amazon|kindle|walmart|jcpenney|jcp)s+customer$|^anonymous$|^a?s*customer$|^reviewers*d*$|^users*d*$|^guest$/i;
+  var PLACEHOLDER = /^(?:amazon|kindle|walmart|jcpenney|jcp)\s*customer$|^anonymous$|^(?:a\s+)?customer$|^reviewer\s*\d*$|^user\s*\d*$|^guest$/i;
 
   function displayName(name) {
     var n = String(name || '').trim();
