@@ -67,6 +67,22 @@
     });
   };
 
+  /* A display name from a marketplace is whatever that marketplace called the person, and
+     two kinds of it should not be reprinted here.
+
+     'Amazon Customer' and 'Kindle Customer' are not names at all, they are the marketplace
+     signing its own work — and the shop asked for marketplace names to stay off these cards.
+     'reviewer012' and 'anonymous' are system placeholders that read as fabricated, which is
+     the opposite of what a real review is for.
+
+     Initials are left alone. 'J' and 'NG' are what those people chose to be called. */
+  var PLACEHOLDER = /^(amazon|kindle|walmart|jcpenney|jcp)s+customer$|^anonymous$|^a?s*customer$|^reviewers*d*$|^users*d*$|^guest$/i;
+
+  function displayName(name) {
+    var n = String(name || '').trim();
+    return (!n || PLACEHOLDER.test(n)) ? 'Anonymous' : n;
+  }
+
   /* The stars beside the price. Separate from the section below so a redraw can put them
      back without another round trip. */
   HW.reviews.summary = null;
@@ -125,7 +141,7 @@
       }).join('');
       return '<article class="rv">' +
         '<header class="rv-head">' + HW.reviews.stars(r.rating, 14) +
-        '<b class="rv-name">' + esc(r.name) + '</b>' +
+        '<b class="rv-name">' + esc(displayName(r.name)) + '</b>' +
         /* 'Verified buyer' means this person bought it HERE and the order was checked.
            A review carried over from a marketplace has been through none of that, so it
            does not get the badge — claiming it would be a plain falsehood, and that is the
