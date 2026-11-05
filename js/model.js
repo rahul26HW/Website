@@ -224,11 +224,55 @@
     var list = (raw || []).map(function (x) { return String(x || '').trim(); });
     return list[primary || 0] || list.filter(Boolean)[0] || '';
   };
+  /* The same picture, twice. "Move images to Storage" copied every external image into
+     Supabase as a WebP and ADDED the copy rather than replacing the original, so every
+     migrated photo is in the list twice: once as the slow Dropbox .jpg and once as the
+     fast Storage .webp. A shopper scrolls past each feature image two times.
+
+     Matching is by filename, because the two copies share nothing else — different host,
+     different extension, and Storage appends a six-character hash. MachineWashable_Blue.jpg
+     and machinewashable-blue-n33k6j.webp are one picture.
+
+     The Storage copy wins when both are present: that is the whole point of having moved
+     them. This only hides the duplicate; the data still holds both until it is cleaned. */
+  function photoKey(url) {
+    var name = String(url || '').split('/').pop().split('?')[0];
+    try { name = decodeURIComponent(name); } catch (e) { /* leave it as it came */ }
+    return name
+      .replace(/\.(jpe?g|png|webp|avif|gif)$/i, '')
+      .replace(/-[a-z0-9]{6}$/i, '')        // the hash Storage adds
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+  }
+
+  function inStorage(url) { return String(url || '').indexOf('/storage/v1/object/public/') >= 0; }
+
+  m.dedupePhotos = function (list) {
+    var byKey = {}, order = [];
+    (list || []).forEach(function (url) {
+      if (!url) return;
+      var k = photoKey(url);
+      if (!k) { order.push(url); return; }          // nothing to match on: keep it
+      if (!(k in byKey)) { byKey[k] = url; order.push(k); return; }
+      // Seen before. Trade up to the Storage copy, otherwise keep the first.
+      if (!inStorage(byKey[k]) && inStorage(url)) byKey[k] = url;
+    });
+    return order.map(function (x) { return (x in byKey) ? byKey[x] : x; });
+  };
+
   m.photosWithPrimary = function (raw, primary) {
-    var list = (raw || []).map(function (x) { return String(x || '').trim(); });
+    var list = (raw || []).map(function (x) { return String(x || '').trim(); }).filter(Boolean);
     var primaryUrl = list[primary || 0];
-    var photos = list.filter(Boolean);
-    var start = primaryUrl ? photos.indexOf(primaryUrl) : 0;
+    var photos = m.dedupePhotos(list);
+    // The primary may have been the copy that lost; follow it to the one that survived.
+    var start = 0;
+    if (primaryUrl) {
+      start = photos.indexOf(primaryUrl);
+      if (start < 0) {
+        var want = photoKey(primaryUrl);
+        start = photos.findIndex(function (u) { return photoKey(u) === want; });
+      }
+    }
     return { photos: photos, start: start < 0 ? 0 : start };
   };
   /* A color's main photo: the first sold size's own photo (the product shot), else the color's shared photos
