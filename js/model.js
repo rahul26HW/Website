@@ -287,8 +287,15 @@
     }
     return m.firstPhoto(c.images, c.primary) || '';
   };
-  /* A photo of the fabric itself for the colour button: a set swatch image, else a photo named "…swatch…",
-     else a close-up. None found → the colour dot is used. */
+  /* A photo of the fabric itself for the colour button: a set swatch image, else a photo named "…swatch…".
+     None found → the colour dot is used, which is always a safe answer.
+
+     There used to be a third guess: any photo whose filename said "close-up". It read as a reasonable
+     fallback and was anything but. Across the whole catalogue it never once produced a usable swatch —
+     Essence's BMESS_Closeup_*.JPG files are information cards with text printed across them, so the
+     colour buttons turned into ten unreadable thumbnails. Every colour that relied on it is better
+     served by its own hex dot, which is what 36 colours already do. "…swatch…" stays: it says what the
+     file is rather than guessing from a word that means something else here. */
   m.swatchImage = function (p, c) {
     if (c.swatchImage) return c.swatchImage;
     var all = (c.images || []).slice();
@@ -298,7 +305,7 @@
     });
     all = all.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
     var name = function (u) { return u.split('/').pop(); };
-    return all.find(function (u) { return /swatch/i.test(name(u)); }) || all.find(function (u) { return /close-?up/i.test(name(u)); }) || '';
+    return all.find(function (u) { return /swatch/i.test(name(u)); }) || '';
   };
   /* Labels a product card can carry (Admin › Products › Badge and the CSV "badge" column). */
   m.BADGES = ['New', 'Best Seller', 'Clearance Sale', 'Sale', 'Limited Edition', 'Back in Stock', 'Low Stock'];
