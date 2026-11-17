@@ -191,6 +191,14 @@ details.colgroup .gbody{padding:4px 14px 14px}
 .slotthumb.empty{display:inline-block}
 .pup{flex:0 0 auto;width:36px;height:36px;border:1px solid var(--line);background:var(--card);border-radius:8px;cursor:pointer;color:var(--loom-dk);font-size:15px}
 .pup:hover{border-color:var(--loom);background:var(--linen)}
+/* Reordering photos: the thumbnail is the drag handle, the number beside it the keyboard way. */
+.slotthumb[draggable="true"]{cursor:grab}
+.slotthumb[draggable="true"]:active{cursor:grabbing}
+.photoslot.dragging{opacity:.4}
+.photoslot.dropto{outline:2px solid var(--loom);outline-offset:3px;border-radius:8px}
+.ppos{flex:0 0 auto;width:46px;height:36px;border:1px solid var(--line);background:var(--card);border-radius:8px;cursor:pointer;color:var(--ink);font-size:12.5px;padding:0 2px 0 6px}
+.ppos:hover{border-color:var(--loom)}
+.ppos-sp{flex:0 0 auto;width:46px}
 .sizehead{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin-bottom:4px}
 .sizerow input{border:1px solid var(--line);border-radius:var(--r);padding:9px 10px;font-size:14px;width:100%;font-family:inherit}
 .colorhead input[type=text]{border:1px solid var(--line);border-radius:var(--r);padding:9px 10px;font-size:14px;font-family:inherit}

@@ -79,18 +79,67 @@
   /* ================================================================ *
    * Editor
    * ================================================================ */
-  function photoGrid(bindBase, images, primary, actionPrimary, extra) {
+  /* A photo's position is simply which of the eight boxes it sits in, so reordering means
+     moving the links between boxes. Two ways to do it: drag the thumbnail onto the slot you
+     want, or set the number beside it. Both go through moveByPos below. */
+  function photoGrid(bindBase, images, primary, actionPrimary, extra, key) {
     var imgs = (images || []).slice(0, 8); while (imgs.length < 8) imgs.push('');
-    return '<div class="photogrid8">' + imgs.map(function (url, i) {
+    var nFilled = imgs.filter(Boolean).length;
+    return '<div class="photogrid8" data-key="' + esc(key || '') + '">' + imgs.map(function (url, i) {
       var id = 'ph_' + bindBase.replace(/[^a-z0-9]/gi, '_') + '_' + i;
       var isPrim = (primary || 0) === i;
-      return '<div class="photoslot' + (isPrim && url ? ' isprim' : '') + '">' +
-        (url ? '<img class="slotthumb" src="' + esc(HW.asset(url)) + '" alt="" loading="lazy" data-check-img>' : '<span class="slotthumb empty" aria-hidden="true"></span>') +
+      var pos = imgs.slice(0, i).filter(Boolean).length;   // this photo's place among the filled ones
+      var opts = '';
+      for (var n = 0; n < nFilled; n++) opts += '<option value="' + n + '"' + (n === pos ? ' selected' : '') + '>' + (n + 1) + '</option>';
+      return '<div class="photoslot' + (isPrim && url ? ' isprim' : '') + '" data-i="' + i + '">' +
+        (url ? '<img class="slotthumb" draggable="true" src="' + esc(HW.asset(url)) + '" alt="" loading="lazy" data-check-img>' : '<span class="slotthumb empty" aria-hidden="true"></span>') +
         '<label class="sr-only" for="' + id + '">Photo ' + (i + 1) + ' URL</label>' +
         '<input id="' + id + '" type="text" value="' + esc(url) + '" placeholder="Photo ' + (i + 1) + '" data-bind="' + bindBase + '.' + i + '" data-type="trim">' +
+        (url && nFilled > 1
+          ? '<select class="ppos" data-i="' + i + '" title="Position — change it to move this photo" aria-label="Position of photo ' + (pos + 1) + '">' + opts + '</select>'
+          : '<span class="ppos-sp" aria-hidden="true"></span>') +
         '<button class="pstar' + (isPrim ? ' on' : '') + '" type="button" title="Use as the default photo" aria-label="Make photo ' + (i + 1) + ' the default" aria-pressed="' + isPrim + '" data-a="' + actionPrimary + '" data-i="' + i + '"' + (extra || '') + '>★</button>' +
         '<button class="pup" type="button" data-a="upload" data-for="' + id + '" data-folder="products" data-max="1600" aria-label="Upload photo ' + (i + 1) + '">⤒</button></div>';
-    }).join('') + '</div>';
+    }).join('') + '</div>' +
+      (nFilled > 1 ? '<p class="hint" style="margin:6px 0 0">Drag a photo onto another slot to move it there, or change its number. Everything in between shifts along.</p>' : '');
+  }
+
+  /* Move the photo at place `from` to place `to`, counting only slots that hold a photo, and
+     closing the gap behind it — the way dragging a card in a list behaves. The default photo
+     follows its own picture rather than keeping its number. Returns null when nothing moves. */
+  function moveByPos(images, primary, from, to) {
+    var arr = (images || []).slice(0, 8);
+    var items = [];
+    arr.forEach(function (url, slot) { if (url) items.push({ url: url, slot: slot }); });
+    if (items.length < 2) return null;
+    from = +from; to = Math.max(0, Math.min(items.length - 1, +to));
+    if (!(from >= 0 && from < items.length) || to === from) return null;
+    var p = primary == null ? 0 : primary, keep = null;
+    items.forEach(function (it) { if (it.slot === p) keep = it; });
+    if (!keep) keep = items[0];
+    items.splice(to, 0, items.splice(from, 1)[0]);
+    var out = items.map(function (it) { return it.url; });
+    while (out.length < 8) out.push('');
+    return { images: out, primary: Math.max(0, items.indexOf(keep)), from: from, to: to };
+  }
+
+  function slotToPos(images, slot) { return (images || []).slice(0, slot).filter(Boolean).length; }
+
+  /* key '' = the simple product's own photos; otherwise a variant's. */
+  function photoHolder(key) { return key ? variant(key) : A.edit; }
+
+  function photoMove(key, from, to) {
+    var h = photoHolder(key);
+    var r = moveByPos(h.images, h.primary, from, to);
+    if (!r) return false;
+    h.images = r.images; h.primary = r.primary;
+    if (key) {
+      A.openVariant = key;
+      A.photoMoves = A.photoMoves || {};
+      (A.photoMoves[key] = A.photoMoves[key] || []).push({ from: r.from, to: r.to });
+    }
+    rer();
+    return true;
   }
 
   /* Every photo on the product, grouped by colour so a 19-colour collection doesn't render
@@ -228,9 +277,11 @@
           (nOwn ? '<b>' + nOwn + ' photo' + (nOwn > 1 ? 's' : '') + '</b>' : (nColor ? 'using the color’s photos' : '<b style="color:var(--clay)">no photos yet</b>')) + '</summary>' +
           '<div style="padding:8px 0 4px">' +
           (!nOwn && nColor ? '<p class="hint" style="margin:0 0 8px">Showing the ' + esc(color.label) + ' photos. <button class="btn ghost sm" type="button" data-a="p-var-copy-color" data-key="' + esc(key) + '">Copy them here to edit</button></p>' : '') +
-          photoGrid(vb + '.images', ov.images, ov.primary, 'p-var-primary', ' data-key="' + esc(key) + '"') +
+          photoGrid(vb + '.images', ov.images, ov.primary, 'p-var-primary', ' data-key="' + esc(key) + '"', key) +
           A.ui.field('Video URL (optional)', vb + '.video', ov.video || '', { type: 'trim', placeholder: 'YouTube / Vimeo / .mp4' }) +
           (nOwn ? '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="p-var-copy-all" data-key="' + esc(key) + '">Copy these photos to all sizes in ' + esc(color.label) + '</button>' +
+            (((A.photoMoves || {})[key] || []).length
+              ? '<button class="btn ghost sm" type="button" data-a="p-var-order-all" data-key="' + esc(key) + '">Apply this order to all sizes in ' + esc(color.label) + '</button>' : '') +
             '<button class="btn ghost sm" type="button" data-a="p-var-clear" data-key="' + esc(key) + '">Clear</button></div>' : '') +
           '</div></details></td></tr>';
       }).join('') + '</tbody></table></div></div></details>';
@@ -284,6 +335,45 @@
       u.qsa('details.vphotos', main).forEach(function (dt) {
         dt.addEventListener('toggle', function () { if (dt.open) A.openVariant = dt.dataset.key; });
       });
+      // Reorder by the number beside a photo.
+      main.addEventListener('change', function (e) {
+        var sel = e.target;
+        if (!sel.classList || !sel.classList.contains('ppos')) return;
+        var grid = sel.closest('.photogrid8'), key = grid.dataset.key || '';
+        var h = photoHolder(key);
+        photoMove(key, slotToPos(h.images, +sel.dataset.i), +sel.value);
+      });
+
+      // Reorder by dragging a thumbnail onto the slot it should take.
+      var from = null;
+      var clearMarks = function () { u.qsa('.photoslot.dropto', main).forEach(function (s) { s.classList.remove('dropto'); }); };
+      main.addEventListener('dragstart', function (e) {
+        var th = e.target.closest && e.target.closest('.slotthumb[draggable="true"]');
+        if (!th) return;
+        from = th.closest('.photoslot');
+        from.classList.add('dragging');
+        if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', from.dataset.i); } catch (err) {} }
+      });
+      main.addEventListener('dragend', function () {
+        if (from) from.classList.remove('dragging');
+        clearMarks(); from = null;
+      });
+      main.addEventListener('dragover', function (e) {
+        var slot = from && e.target.closest && e.target.closest('.photoslot');
+        if (!slot || slot.parentElement !== from.parentElement || slot === from) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        if (!slot.classList.contains('dropto')) { clearMarks(); slot.classList.add('dropto'); }
+      });
+      main.addEventListener('drop', function (e) {
+        var slot = from && e.target.closest && e.target.closest('.photoslot');
+        if (!slot || slot.parentElement !== from.parentElement || slot === from) return;
+        e.preventDefault();
+        var grid = slot.parentElement, key = grid.dataset.key || '';
+        var h = photoHolder(key), imgs = h.images;
+        photoMove(key, slotToPos(imgs, +from.dataset.i), slotToPos(imgs, +slot.dataset.i));
+      });
+
       // Photo URL typed or uploaded: refresh that slot's thumbnail without a full re-render.
       main.addEventListener('input', function (e) {
         var el = e.target;
@@ -327,7 +417,7 @@
   }
 
   function openEditor(key, obj) {
-    A.edit = obj; A.editKey = key; A.slugTouched = key !== 'new'; A.openColor = 0; A.openVariant = null;
+    A.edit = obj; A.editKey = key; A.slugTouched = key !== 'new'; A.openColor = 0; A.openVariant = null; A.photoMoves = {};
     if (!isColl(obj)) { obj.images = (obj.images || []).slice(0, 8); while (obj.images.length < 8) obj.images.push(''); }
     var start = JSON.stringify(obj);
     A.editDirty = function () { return JSON.stringify(A.edit) !== start; };
@@ -490,6 +580,39 @@
     rer(); u.toast('Copied to all sizes');
   };
   A.actions['p-var-clear'] = function (el) { var o = variant(el.dataset.key); delete o.images; delete o.primary; delete o.video; A.openVariant = el.dataset.key; rer(); };
+
+  /* Repeat the moves just made here on every other size in this colour. Replaying the moves
+     themselves — not matching by file name — is the only way to be exact, because the sizes
+     share some photos and have their own for the rest. A size holding a different number of
+     photos can't take the same moves, so it is left alone and named afterwards. */
+  A.actions['p-var-order-all'] = function (el) {
+    var key = el.dataset.key, moves = (A.photoMoves || {})[key] || [];
+    if (!moves.length) { u.toast('Reorder this size first'); return; }
+    var cid = key.split('__')[0], src = variant(key);
+    var n = (src.images || []).filter(Boolean).length;
+    var colour = (optC(A.edit).values.find(function (c) { return c.id === cid; }) || {}).label || 'this colour';
+    if (!confirm('Repeat the same ' + moves.length + ' move' + (moves.length > 1 ? 's' : '') + ' on every other size in ' + colour + '?\n\nSizes with a different number of photos are left untouched.')) return;
+    var changed = 0, skipped = [];
+    optS(A.edit).values.forEach(function (s) {
+      var k2 = cid + '__' + s.id;
+      if (k2 === key) return;
+      var o = (A.edit.variants || {})[k2];
+      var imgs = (o && o.images) || [];
+      var cnt = imgs.filter(Boolean).length;
+      if (!cnt) return;                       // no photos of its own — nothing to reorder
+      if (cnt !== n) { skipped.push(s.label + ' (' + cnt + ')'); return; }
+      var moved = false;
+      moves.forEach(function (mv) {
+        var r = moveByPos(o.images, o.primary, mv.from, mv.to);
+        if (r) { o.images = r.images; o.primary = r.primary; moved = true; }
+      });
+      if (moved) changed++;
+    });
+    A.openVariant = key; rer();
+    u.toast(changed ? 'Order applied to ' + changed + ' size' + (changed > 1 ? 's' : '') +
+      (skipped.length ? ' — skipped ' + skipped.join(', ') + ', which hold a different number of photos' : '')
+      : 'No other size had the same ' + n + ' photos to reorder');
+  };
 
   /* ---------- list actions ---------- */
   A.actions['product-dup'] = function (el) {
