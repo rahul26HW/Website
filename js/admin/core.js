@@ -642,12 +642,37 @@
     pv.innerHTML = A.ui.previewInner(el.value);
     wireImgChecks(pv);
   };
+  /* A picture that fails to appear tells us one thing — it did not load. It does not tell us the
+     link is the wrong kind, which is what this used to announce for every failure alike. The
+     usual cause is the opposite of a bad link: a perfectly good Dropbox URL, asked for at the
+     same moment as thirty others, and refused because Dropbox throttles bursts. Operators were
+     being sent to re-upload images that were never broken.
+
+     So: say the wrong-kind-of-link thing only when the link really is the wrong kind, and
+     otherwise retry once before saying anything. One retry converts most throttled refusals
+     back into a picture, and what survives it is worth a message that admits both
+     possibilities rather than picking the less likely one. */
   function wireImgChecks(root) {
     u.qsa('img[data-check-img]', root).forEach(function (img) {
+      var retried = false;
       img.addEventListener('error', function () {
         var box = img.parentElement;
-        if (box) box.innerHTML = '<span class="imgerr">This link isn’t a direct image. Use Upload, or a URL ending in .jpg, .png or .webp.</span>';
-      }, { once: true });
+        if (!box) return;
+        var src = img.getAttribute('src') || '';
+        var schema = HW.schema;
+        if (src && schema && schema.isDirectImageUrl && !schema.isDirectImageUrl(src)) {
+          box.innerHTML = '<span class="imgerr">This link isn’t a direct image. Use Upload, or a URL ending in .jpg, .png or .webp.</span>';
+          return;
+        }
+        if (!retried) {
+          retried = true;
+          setTimeout(function () {
+            img.src = src + (src.indexOf('?') >= 0 ? '&' : '?') + 'retry=' + Date.now();
+          }, 1200);
+          return;
+        }
+        box.innerHTML = '<span class="imgerr">This image didn’t load. The link may be broken, or the host may be refusing requests — reload to try again, or use Upload.</span>';
+      });
     });
   }
   A.wireImgChecks = wireImgChecks;
