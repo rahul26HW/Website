@@ -536,7 +536,11 @@ fieldset.fld legend{font-size:13px;font-weight:600;margin:0 0 6px;padding:0}
 .size-btn:hover{border-color:var(--ink)}
 .size-btn.active{background:var(--ink);color:#fff;border-color:var(--ink)}
 .size-btn.oos{opacity:.4;text-decoration:line-through;cursor:not-allowed}
-.stocknote{font-size:13px;font-weight:600;margin:0 0 18px}
+.stocknote{font-size:13px;font-weight:600;margin:0 0 6px}
+/* The dispatch cutoff: the one deadline here that is short, true and repeats by itself. */
+.cutoff{font-size:13px;font-weight:600;color:var(--clay-text);margin:0 0 18px;font-variant-numeric:tabular-nums}
+.cutoff[hidden]{display:none}
+.stocknote+.cutoff{margin-top:0}
 .stocknote.in{color:var(--loom)}
 .stocknote.out{color:var(--clay)}
 

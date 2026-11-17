@@ -44,6 +44,59 @@
     var s = (DB() && DB().settings && DB().settings.shippingDays) || '';
     return s.trim() || '2–4 business days';
   };
+  /* ---------- dispatch cutoff ----------
+     The one deadline on this shop that is genuinely short and genuinely repeats: the hour the
+     warehouse stops picking. It resets itself every day because it really does, so it needs no
+     minding, and it is about the shopper's parcel rather than our sale — which is the honest way
+     to be urgent. A sale countdown that restarted every 24 hours would say something untrue.
+
+     Everything is worked out in the warehouse's own time zone, so the shopper in California and
+     the shopper in Maine are told the same, correct thing. */
+  var CUT_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  /* How far the warehouse clock is from UTC at this instant — which changes twice a year. */
+  function zoneOffset(ts, zone) {
+    var f = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour12: false, year: 'numeric',
+      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var p = {};
+    f.formatToParts(new Date(ts)).forEach(function (x) { if (x.type !== 'literal') p[x.type] = x.value; });
+    var h = +p.hour === 24 ? 0 : +p.hour;
+    return Date.UTC(+p.year, +p.month - 1, +p.day, h, +p.minute, +p.second) - ts;
+  }
+  /* The moment a wall-clock time in the warehouse's zone actually happens. Asked twice so a day
+     that changes its offset — the two clock-change weekends — still lands on the right instant. */
+  function fromZone(y, mo, d, h, mi, zone) {
+    var want = Date.UTC(y, mo, d, h, mi);
+    var ts = want - zoneOffset(want, zone);
+    return want - zoneOffset(ts, zone);
+  }
+  function zoneDate(ts, zone) {
+    var off = zoneOffset(ts, zone);
+    var w = new Date(ts + off);
+    return { y: w.getUTCFullYear(), mo: w.getUTCMonth(), d: w.getUTCDate(), dow: w.getUTCDay() };
+  }
+  /* When the next parcel leaves, and how long is left to be on it. Null when it is switched off. */
+  m.dispatch = function (now) {
+    var c = (DB() && DB().settings && DB().settings.cutoff) || null;
+    if (!c || !c.enabled) return null;
+    var hm = String(c.time || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!hm) return null;
+    var h = +hm[1], mi = +hm[2];
+    if (!(h >= 0 && h < 24 && mi >= 0 && mi < 60)) return null;
+    var zone = c.zone || 'America/New_York';
+    var sat = c.saturday === true;
+    var t = now ? +now : Date.now();
+    /* Walk forward to the first cutoff that is still ahead and falls on a day we actually ship. */
+    for (var i = 0; i < 10; i++) {
+      var z = zoneDate(t + i * 86400000, zone);
+      var at = fromZone(z.y, z.mo, z.d, h, mi, zone);
+      if (at <= t) continue;
+      var dow = zoneDate(at, zone).dow;
+      if (dow === 0 || (dow === 6 && !sat)) continue;   // Sunday never, Saturday only if we do
+      return { at: at, left: at - t, day: CUT_DAYS[dow], today: zoneDate(t, zone).d === zoneDate(at, zone).d };
+    }
+    return null;
+  };
+
   m.lowStock = function () {
     var n = Number(DB() && DB().settings && DB().settings.lowStockThreshold);
     return n > 0 ? n : 5;

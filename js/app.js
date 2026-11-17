@@ -51,6 +51,7 @@
     HW.observeReveals();
     if (HW.reviews) HW.reviews.paintCards();
     if (HW.saleClock) HW.saleClock.start();
+    if (HW.cutoffClock) HW.cutoffClock.start();
     if (HW.rails) HW.rails.init();
     if (HW.measure) {
       var pid = route.name === 'product' && HW.pdp && HW.pdp.currentId ? HW.pdp.currentId() : '';

@@ -134,6 +134,17 @@
         ui.panel('Store settings',
           '<div class="grid2">' +
           ui.field('Shipping time', 'settings.shippingDays', st.shippingDays, { hint: 'One setting used everywhere: product pages, stock labels, checkout and pages (write {{shipping_days}} in page text).', placeholder: '2–4 business days' }) +
+          '<div class="field"><label>Dispatch cutoff</label>' +
+          '<p class="hint" style="margin:6px 0 10px">The hour the warehouse stops picking. In-stock product pages then count down to it — “Order within 9h 02m and it ships Tuesday” — and it starts again by itself the next day. ' +
+          '<b>Only switch this on if the cutoff is one you actually keep</b>: a deadline the warehouse ignores is a promise broken on every order.</p>' +
+          ui.check('Show the countdown', 'settings.cutoff.enabled', (st.cutoff || {}).enabled) +
+          ui.check('We ship on Saturdays too', 'settings.cutoff.saturday', (st.cutoff || {}).saturday) +
+          '<div class="grid2">' +
+          ui.field('Cutoff time', 'settings.cutoff.time', (st.cutoff || {}).time, { placeholder: '05:00', hint: '24-hour clock, e.g. 05:00 or 17:00.' }) +
+          ui.field('Warehouse time zone', 'settings.cutoff.zone', (st.cutoff || {}).zone, {
+            options: [['America/New_York', 'Eastern (New Jersey)'], ['America/Chicago', 'Central'],
+                      ['America/Denver', 'Mountain'], ['America/Los_Angeles', 'Pacific']] }) +
+          '</div></div>' +
           ui.field('Out-of-stock products', 'settings.outOfStock', st.outOfStock, { options: [['show', 'Show with “Out of stock” badge (sorted last)'], ['hide', 'Hide from listings and search']] }) + '</div>' +
           '<div class="grid2">' +
           ui.field('Low-stock alert at', 'settings.lowStockThreshold', st.lowStockThreshold, { type: 'int', min: 0, hint: 'SKUs at or below this number are flagged in Inventory and show “Only N left”.' }) +

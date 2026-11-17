@@ -240,6 +240,7 @@
         descHTML(p) +
         (p.sku ? '<div class="skuline">SKU ' + esc(p.sku) + (p.upc ? ' · UPC ' + esc(p.upc) : '') + '</div>' : '') + shipBox() +
         '<div class="stocknote ' + (inStock ? 'in' : 'out') + '"><span aria-hidden="true">● </span>' + esc(m.stockLabel(qtyKey, inStock)) + '</div>' +
+        (inStock ? '<p class="cutoff" data-cutoff hidden></p>' : '') +
         '<div class="qtyrow">' + (inStock ? stepper(m.invTracked(qtyKey) ? m.invQty(qtyKey) : UNTRACKED_MAX) : '') + buy + '</div>' +
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
         '<p class="liveview" id="liveView" role="status" hidden></p>' +
@@ -334,6 +335,7 @@
         descHTML(p) + swatches + sizes +
         '<div class="skuline">SKU ' + esc(v.sku) + (v.upc ? ' · UPC ' + esc(v.upc) : '') + '</div>' + shipBox() +
         '<div class="stocknote ' + (v.inStock ? 'in' : 'out') + '" aria-live="polite"><span aria-hidden="true">● </span>' + esc(v.inStock ? m.stockLabel(v.sku, true) : 'This option is currently sold out') + '</div>' +
+        (v.inStock ? '<p class="cutoff" data-cutoff hidden></p>' : '') +
         '<div class="qtyrow">' + (v.inStock ? stepper(m.invTracked(v.sku) ? m.invQty(v.sku) : UNTRACKED_MAX) : '') + buy + '</div>' +
         '<div class="pdpwish">' + HW.wishlist.button(p, 'wishbtn') + '</div>' +
         '<p class="liveview" id="liveView" role="status" hidden></p>' +
@@ -384,6 +386,9 @@
     HW.snip && HW.snip.refresh();
     stickyBuy();
     socialProof(p.id, true);   // from cache: a colour change is not a reason to re-ask
+    // The stock line is rebuilt above, so the clocks hanging off it have to be picked up again.
+    if (HW.saleClock) HW.saleClock.start();
+    if (HW.cutoffClock) HW.cutoffClock.start();
     if (HW.reviews && HW.reviews.paintTop) HW.reviews.paintTop();
   }
 

@@ -183,6 +183,47 @@
   };
 
   /* ================================================================ *
+   * Dispatch cutoff
+   * "Order within 9h 02m and it ships Tuesday." The only short deadline on the shop that is true
+   * and repeats on its own, because the warehouse really does stop picking at that hour. One timer
+   * fills every [data-cutoff]; when the hour passes it simply names the next day's.
+   * ================================================================ */
+  HW.cutoffClock = (function () {
+    var timer = null;
+    function two(n) { return (n < 10 ? '0' : '') + n; }
+    function left(ms) {
+      var h = Math.floor(ms / 3600000), mi = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60;
+      if (h > 0) return h + 'h ' + two(mi) + 'm';
+      if (mi > 0) return mi + 'm ' + two(s) + 's';
+      return s + 's';
+    }
+    function paint() {
+      var els = u.qsa('[data-cutoff]');
+      if (!els.length) { stop(); return; }
+      var d = HW.m.dispatch();
+      els.forEach(function (el) {
+        if (!d) { el.hidden = true; el.textContent = ''; return; }
+        el.hidden = false;
+        /* Over a weekend the next cutoff can be two days off, and "67h 00m" is not a countdown —
+           it is a number. Past a day, name the day instead and let the clock start on its own
+           once it means something. */
+        el.textContent = d.left > 86400000
+          ? 'Next dispatch ' + d.day
+          : 'Order within ' + left(d.left) + ' and it ships ' + (d.today ? 'today' : d.day);
+      });
+    }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+    return {
+      start: function () {
+        stop();
+        if (!u.qsa('[data-cutoff]').length) return;
+        paint();
+        timer = setInterval(paint, 1000);
+      }
+    };
+  })();
+
+  /* ================================================================ *
    * Sale countdown
    * One timer for the whole page: it fills every [data-sale-ends] element and, when the sale runs out,
    * redraws the page so prices and badges go back to normal without anyone touching anything.
