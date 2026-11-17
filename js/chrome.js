@@ -153,7 +153,7 @@
     if (sale) {
       var last = sale.endsAt - Date.now() < 24 * 3600 * 1000;
       annText.innerHTML = '<span class="ann-head">' + (last ? 'Last day! ' : '') + u.esc(sale.name) + '</span>' +
-        '<span class="ann-clock">Ends in <b data-sale-ends="' + sale.endsAt + '" data-sale-style="bar"></b></span>';
+        '<span class="ann-clock" data-sale-ends="' + sale.endsAt + '" data-sale-style="bar"></span>';
       annBar.hidden = false;
       if (HW.saleClock) HW.saleClock.start();
     } else {

@@ -24,9 +24,9 @@
     if (coll) {
       var r = m.priceRange(p, opts.minPrice, opts.maxPrice);
       priceHtml = (r.min === r.max
-        ? '<span class="now ' + (sale ? 'on' : '') + '">' + u.money(r.min) + '</span>'
-        : '<span class="muted" style="font-size:12px;letter-spacing:.04em">from</span> <span class="now ' + (sale ? 'on' : '') + '">' + u.money(r.min) + '</span>') +
-        (sale && r.wasMin > r.min ? '<span class="was"><span class="sr-only">Was </span>' + u.money(r.wasMin) + '</span>' : '');
+        ? '<span class="now ' + (r.wasMin > r.min ? 'on' : '') + '">' + u.money(r.min) + '</span>'
+        : '<span class="muted" style="font-size:12px;letter-spacing:.04em">from</span> <span class="now ' + (r.wasMin > r.min ? 'on' : '') + '">' + u.money(r.min) + '</span>') +
+        (r.wasMin > r.min ? '<span class="was"><span class="sr-only">Was </span>' + u.money(r.wasMin) + '</span>' : '');
       action = out
         ? '<button class="btn block sm" type="button" disabled>Out of stock</button>'
         : '<a class="btn block sm loom" href="' + url + '" aria-label="Select options for ' + esc(p.name) + '">Select options</a>';

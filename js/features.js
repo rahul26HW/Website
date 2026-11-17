@@ -189,26 +189,43 @@
    * ================================================================ */
   HW.saleClock = (function () {
     var timer = null;
+    /* Ticking digits only in the last stretch. A countdown reading "07 DAYS" tells a shopper the
+       sale is long and they can come back later — the opposite of what a countdown is for. Until
+       then the sale carries the day it ends, which is honest and still a deadline. Inside the
+       window the days are rolled into the hours, so it reads "35 HRS", never "01 DAYS". */
+    var CLOCK_WITHIN = 48 * 3600000;
+    var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     function two(n) { return (n < 10 ? '0' : '') + n; }
+    /* "Ends Sunday" while the end is inside the week, "Ends Nov 30" beyond it. */
+    function endsLabel(endsAt) {
+      var e = new Date(endsAt);
+      return 'Ends ' + (endsAt - Date.now() < 6 * 86400000
+        ? DAYS[e.getDay()]
+        : MONTHS[e.getMonth()] + ' ' + e.getDate());
+    }
     function paint() {
       var els = u.qsa('[data-sale-ends]');
       if (!els.length) { stop(); return; }
       var over = false;
       els.forEach(function (el) {
-        var left = Number(el.getAttribute('data-sale-ends')) - Date.now();
+        var endsAt = Number(el.getAttribute('data-sale-ends'));
+        var left = endsAt - Date.now();
         if (!(left > 0)) { over = true; return; }
-        var d = Math.floor(left / 86400000), h = Math.floor(left / 3600000) % 24,
-            mi = Math.floor(left / 60000) % 60, sec = Math.floor(left / 1000) % 60;
+        var far = left > CLOCK_WITHIN;
+        var h = Math.floor(left / 3600000), mi = Math.floor(left / 60000) % 60, sec = Math.floor(left / 1000) % 60;
+        var ticks = two(h) + 'h ' + two(mi) + 'm ' + two(sec) + 's';
         if (el.getAttribute('data-sale-style') === 'bar') {
-          el.textContent = (d ? two(d) + 'd ' : '') + two(h) + 'h ' + two(mi) + 'm ' + two(sec) + 's';
+          el.textContent = far ? endsLabel(endsAt) : 'Ends in ' + ticks;
           return;
         }
         var slot = el.querySelector('[data-sale-clock]') || el;
         if (slot.getAttribute('data-sale-clock') === 'parts') {
-          slot.innerHTML = (d ? '<i>' + two(d) + '<em>DAYS</em></i>' : '') +
-            '<i>' + two(h) + '<em>HRS</em></i><i>' + two(mi) + '<em>MIN</em></i><i>' + two(sec) + '<em>SEC</em></i>';
+          slot.innerHTML = far
+            ? '<i class="when">' + endsLabel(endsAt) + '</i>'
+            : '<i>' + two(h) + '<em>HRS</em></i><i>' + two(mi) + '<em>MIN</em></i><i>' + two(sec) + '<em>SEC</em></i>';
         } else {
-          el.textContent = 'Ends in ' + (d ? d + 'd ' : '') + two(h) + 'h ' + two(mi) + 'm' + (d ? '' : ' ' + two(sec) + 's');
+          el.textContent = far ? endsLabel(endsAt) : 'Ends in ' + ticks;
         }
       });
       if (over) {

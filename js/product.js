@@ -235,7 +235,7 @@
         '<h1>' + esc(p.name) + '</h1>' +
         '<a class="rvtop" id="rvTop" href="#rvMount" hidden></a>' +
         saleBand(p) +
-        '<div class="price"><span class="now ' + (sp.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(sp.effective) + '</span>' + (sp.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(sp.timedSale ? sp.wasPrice : sp.price) + '</span>' : '') + '</div>' +
+        priceBlock(sp, false) +
         '<p class="socialproof" id="socialProof" role="status" hidden></p>' +
         descHTML(p) +
         (p.sku ? '<div class="skuline">SKU ' + esc(p.sku) + (p.upc ? ' · UPC ' + esc(p.upc) : '') + '</div>' : '') + shipBox() +
@@ -261,6 +261,18 @@
     var groups = [], by = {};
     list.forEach(function (s) { var g = s.group || 'Other'; if (!by[g]) { by[g] = []; groups.push(g); } by[g].push(s); });
     return groups.map(function (g) { return '<div class="sizegroup"><div class="sg-h">' + esc(g) + '</div><div class="sizes">' + by[g].map(btn).join('') + '</div></div>'; }).join('');
+  }
+
+  /* The price, and — when there is one — what the shopper is actually saving. The old page struck
+     out the price the last discount was taken off, so a $5.17 saving read as $2.97. Everything is
+     now measured from the list price, which is the number the saving should be judged against. */
+  function priceBlock(pr, live) {
+    return '<div class="price"' + (live ? ' aria-live="polite"' : '') + '>' +
+      '<span class="now ' + (pr.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(pr.effective) + '</span>' +
+      (pr.onSale
+        ? '<span class="was"><span class="sr-only">Was </span>' + u.money(pr.wasPrice) + '</span>' +
+          '<span class="saved">Save ' + u.money(pr.saved) + (pr.percentOff ? ' (' + pr.percentOff + '% off)' : '') + '</span>'
+        : '') + '</div>';
   }
 
   /* The sale band: the name of the sale and how long is left. One clock ticks it (js/features.js). */
@@ -317,7 +329,7 @@
         '<h1>' + esc(p.name) + '</h1>' +
         '<a class="rvtop" id="rvTop" href="#rvMount" hidden></a>' +
         saleBand(p) +
-        '<div class="price" aria-live="polite"><span class="now ' + (v.onSale ? 'on' : '') + '" style="font-weight:600">' + u.money(v.effective) + '</span>' + (v.onSale ? '<span class="was"><span class="sr-only">Was </span>' + u.money(v.timedSale ? v.wasPrice : v.price) + '</span>' : '') + '</div>' +
+        priceBlock(v, true) +
         '<p class="socialproof" id="socialProof" role="status" hidden></p>' +
         descHTML(p) + swatches + sizes +
         '<div class="skuline">SKU ' + esc(v.sku) + (v.upc ? ' · UPC ' + esc(v.upc) : '') + '</div>' + shipBox() +

@@ -32,10 +32,28 @@
       var sale = d.sale || {};
       var running = A.saleWindow(sale);
       var cats = (d.categories || []).map(function (c) { return [c.id, c.name]; });
+      var ev = d.everyday || {};
+      var evPct = ev.enabled && +ev.percent > 0 ? +ev.percent : 0;
+      var salePct = A.saleWindow(sale).state === 'live' ? +sale.percent || 0 : 0;
       return '<h1>Promotions</h1><p class="sub">Discount codes shoppers enter in the cart, your free-shipping rule, timed sales, and newsletter sign-ups.</p>' +
 
+        ui.panel('Everyday discount',
+          '<p class="hint" style="margin:-6px 0 12px">One percentage off the list price of every product, running all the time. ' +
+          'It replaces typing a sale price on each size by hand, so there is one number to change instead of a hundred and sixty-eight. ' +
+          'A sale price still typed on a size or a variant wins for that item and ignores this.</p>' +
+          ui.check('Take this off every price', 'everyday.enabled', ev.enabled) +
+          '<div class="grid2">' +
+          ui.field('Everyday off (%)', 'everyday.percent', ev.percent, { type: 'number', min: 0, max: 90, step: '0.5', hint: 'Measured from the list price. 10 turns $21.99 into $19.79.' }) +
+          '<div class="field"><label>What a shopper pays today</label><p class="hint" style="margin:6px 0 0">' +
+          (evPct + salePct > 0
+            ? '<b>' + (Math.round((evPct + salePct) * 10) / 10) + '% off</b> the list price' +
+              (salePct ? ' — ' + evPct + '% everyday plus ' + salePct + '% sale, added together' : '') +
+              '. A $21.99 rug sells for <b>' + u.money(Math.round(21.99 * (100 - Math.min(90, evPct + salePct))) / 100) + '</b>.'
+            : 'Nothing off — every product sells at its list price.') +
+          '</p></div></div>') +
+
         ui.panel('Timed sale',
-          '<p class="hint" style="margin:-6px 0 12px">Takes an extra percentage off the current selling price between the two times below, shows a green band with a countdown on those product pages and a “' + esc(sale.ribbon || 'Sale') + '” ribbon on their cards. ' +
+          '<p class="hint" style="margin:-6px 0 12px">An extra percentage, <b>added to the everyday discount above</b> and taken off the list price, between the two times below. It shows a green band with a countdown on those product pages and a “' + esc(sale.ribbon || 'Sale') + '” ribbon on their cards. ' +
           'It stops on its own: at the end time the prices and the badges go back with nothing to switch off.</p>' +
           (running.state === 'live' ? '<p class="okmsg">Running now — ends ' + esc(running.endsText) + ' (' + esc(running.leftText) + ' left).</p>'
             : running.state === 'waiting' ? '<p class="hint"><b>Scheduled.</b> Starts ' + esc(running.startsText) + '.</p>'
@@ -46,7 +64,7 @@
           ui.field('Band text (product page)', 'sale.name', sale.name, { maxlength: 120, placeholder: 'Autumn sale — 10% off all towels' }) +
           ui.field('Ribbon text (cards)', 'sale.ribbon', sale.ribbon, { maxlength: 30, placeholder: 'Sale' }) + '</div>' +
           '<div class="grid2">' +
-          ui.field('Extra off (%)', 'sale.percent', sale.percent, { type: 'number', min: 0, step: '0.5', hint: 'Taken off the price the shopper sees today. 1–70.' }) +
+          ui.field('Extra off (%)', 'sale.percent', sale.percent, { type: 'number', min: 0, step: '0.5', hint: 'Added to the everyday discount, both measured from the list price. 1–70.' }) +
           ui.field('Applies to', 'sale.scope', sale.scope, { options: [['all', 'Every product'], ['categories', 'Chosen categories'], ['products', 'Chosen products']] }) + '</div>' +
           '<div class="grid2">' +
           ui.field('Starts', 'sale.startsAt', A.toLocalInput(sale.startsAt), { inputType: 'datetime-local', type: 'datetime', hint: 'Your own time zone.' }) +

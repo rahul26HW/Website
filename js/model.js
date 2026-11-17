@@ -74,14 +74,14 @@
     // The variant's own photos first, then the color's shared photos (care, colour chart…) not already shown.
     var colorImgs = (color.images || []).filter(Boolean);
     var rawImgs = hasOwn ? (ov.images || []).concat(colorImgs.filter(function (x) { return ownImgs.indexOf(x) < 0; })) : (color.images || []);
-    var was = (sale != null && sale < price) ? sale : price;
-    var timed = m.salePriceOf(p, was);
+    var pr = m.priced(p, price, sale);          // every percentage comes off `price`, the list price
     return {
-      color: color, size: size, price: price, salePrice: timed != null ? timed : sale,
-      effective: timed != null ? timed : was,
-      wasPrice: timed != null ? was : price,     // what the sale is taken off
-      timedSale: timed != null,
-      onSale: timed != null || (sale != null && sale < price),
+      color: color, size: size, price: pr.price, salePrice: pr.salePrice,
+      effective: pr.effective,
+      wasPrice: pr.wasPrice,                     // the list price — what the saving is measured from
+      timedSale: pr.timedSale,
+      percentOff: pr.percentOff, saved: pr.saved,
+      onSale: pr.onSale,
       available: !off,
       upc: ov.upc || '',
       weight: ov.weight || null, dims: ov.dims || null,   // grams / cm, for the carrier quote
@@ -175,21 +175,77 @@
     if (sale.scope === 'categories') return (sale.s.categoryIds || []).indexOf(p.categoryId) >= 0 ? sale : null;
     return sale;
   };
-  /* The selling price with the sale applied (rounded to the cent, like the database). */
-  m.salePriceOf = function (p, effective) {
-    var sale = m.saleFor(p);
-    if (!sale || !(effective > 0)) return null;
-    var cut = Math.round(effective * (100 - sale.percent)) / 100;
-    return cut < effective ? cut : null;
+  /* ---------- discounts ----------
+     One rule, and this is the whole of it: every percentage is measured from the list price, and the
+     percentages add up. An everyday 10% with a 15% sale on top is 25% off the list price — not 15%
+     off an already-cut price, which is what it used to be. That old way hid the real saving (the
+     shopper saw $2.97 off when they were really saving $5.17) and could not be explained in a
+     sentence. A sale price typed by hand on a size or a variant still wins outright for that one
+     item, and the percentages are then ignored there. */
+  m.everydayPercent = function () {
+    var e = (DB() || {}).everyday;
+    if (!e || !e.enabled) return 0;
+    var n = +e.percent;
+    return isFinite(n) && n > 0 ? n : 0;
   };
+  /* Everything off this product right now: the everyday markdown plus any sale that is running. */
+  m.discountPercent = function (p) {
+    var sale = m.saleFor(p);
+    var total = m.everydayPercent() + (sale ? +sale.percent : 0);
+    if (!isFinite(total) || total <= 0) return 0;
+    return Math.min(90, total);          // never give it away, whatever gets typed in Admin
+  };
+  /* List price less every percentage that applies, rounded to the cent exactly as the database
+     rounds it, so the page and the card charge can never differ. */
+  m.priceAfterDiscount = function (p, list) {
+    if (!(list > 0)) return null;
+    var pct = m.discountPercent(p);
+    if (!pct) return null;
+    var cut = Math.round(list * (100 - pct)) / 100;
+    return cut > 0 && cut < list ? cut : null;
+  };
+  /* The single place a selling price is decided, so a card, a product page, the cart, the feed and
+     the order can never disagree. `typed` is a hand-entered sale price, which wins when set. */
+  m.priced = function (p, list, typed) {
+    list = +list;
+    var hand = typed != null && typed !== '' && +typed > 0 && +typed < list ? +typed : null;
+    /* Changeover guard. Until the store carries an `everyday` setting, prices work the old way —
+       the typed sale price first, then the timed sale on top of it. Without this the code deploy
+       and the store change would have to land in the same second, and whichever arrived first
+       would misprice the shop in between. Delete this branch once `everyday` is saved and the
+       typed sale prices are cleared; nothing else depends on it. */
+    if (!(DB() || {}).everyday) {
+      var sale = m.saleFor(p);
+      var base = hand != null ? hand : list;
+      var old = sale ? Math.round(base * (100 - sale.percent)) / 100 : base;
+      if (!(old > 0) || old > base) old = base;
+      /* The saving is measured from the list price, the same as it will be afterwards, so the
+         struck price and the saving always add up on screen. Nobody's price changes here. */
+      return {
+        price: list, wasPrice: list, effective: old,
+        salePrice: old < list ? old : null, onSale: old < list,
+        percentOff: old < list ? Math.round((1 - old / list) * 100) : 0,
+        saved: old < list ? Math.round((list - old) * 100) / 100 : 0,
+        timedSale: !!sale
+      };
+    }
+    var cut = hand == null ? m.priceAfterDiscount(p, list) : null;
+    var eff = hand != null ? hand : (cut != null ? cut : list);
+    var on = eff < list;
+    return {
+      price: list, wasPrice: list, effective: eff,
+      salePrice: on ? eff : null, onSale: on,
+      percentOff: on ? Math.round((1 - eff / list) * 100) : 0,
+      saved: on ? Math.round((list - eff) * 100) / 100 : 0,
+      timedSale: on && hand == null && !!m.saleFor(p)
+    };
+  };
+  /* Kept for callers that still ask "what would the sale make of this price?" */
+  m.salePriceOf = function (p, list) { return m.priceAfterDiscount(p, list); };
 
   /* ---------- prices ---------- */
   m.simplePrice = function (p) {
-    var price = +p.price, sale = p.salePrice != null && p.salePrice !== '' ? +p.salePrice : null;
-    var was = (sale != null && sale < price) ? sale : price;
-    var timed = m.salePriceOf(p, was);
-    return { price: price, salePrice: timed != null ? timed : sale, onSale: timed != null || (sale != null && sale < price),
-      effective: timed != null ? timed : was, wasPrice: timed != null ? was : price, timedSale: timed != null };
+    return m.priced(p, +p.price, p.salePrice);
   };
   m.priceRange = function (p, lo, hi) {
     if (!m.isCollection(p)) {
