@@ -651,17 +651,39 @@
      So: say the wrong-kind-of-link thing only when the link really is the wrong kind, and
      otherwise retry once before saying anything. One retry converts most throttled refusals
      back into a picture, and what survives it is worth a message that admits both
-     possibilities rather than picking the less likely one. */
+     possibilities rather than picking the less likely one.
+
+     The message also used to be written with box.innerHTML, and in the photo grid that box is
+     the whole .photoslot — so reporting a failure deleted the slot's URL field, its ★ button
+     and its upload button, and the slots below appeared to shift. It removed the very controls
+     needed to look at the link or replace it, and left a grid whose thumbnails no longer lined
+     up with their inputs. Now only the picture is swapped for an empty placeholder and the
+     message is added beside it, so the slot keeps working. */
   function wireImgChecks(root) {
     u.qsa('img[data-check-img]', root).forEach(function (img) {
       var retried = false;
-      img.addEventListener('error', function () {
+      function report(text) {
         var box = img.parentElement;
         if (!box) return;
+        if (img.parentNode) {
+          var ph = document.createElement('span');
+          ph.className = (img.className ? img.className + ' ' : '') + 'empty';
+          ph.setAttribute('aria-hidden', 'true');
+          img.parentNode.replaceChild(ph, img);
+        }
+        if (!box.querySelector('.imgerr')) {
+          var span = document.createElement('span');
+          span.className = 'imgerr';
+          span.textContent = text;
+          box.appendChild(span);
+        }
+      }
+      img.addEventListener('error', function () {
+        if (!img.parentElement) return;
         var src = img.getAttribute('src') || '';
         var schema = HW.schema;
         if (src && schema && schema.isDirectImageUrl && !schema.isDirectImageUrl(src)) {
-          box.innerHTML = '<span class="imgerr">This link isn’t a direct image. Use Upload, or a URL ending in .jpg, .png or .webp.</span>';
+          report('This link isn’t a direct image. Use Upload, or a URL ending in .jpg, .png or .webp.');
           return;
         }
         if (!retried) {
@@ -671,7 +693,7 @@
           }, 1200);
           return;
         }
-        box.innerHTML = '<span class="imgerr">This image didn’t load. The link may be broken, or the host may be refusing requests — reload to try again, or use Upload.</span>';
+        report('This image didn’t load. The link may be broken, or the host may be refusing requests — reload to try again, or use Upload.');
       });
     });
   }
