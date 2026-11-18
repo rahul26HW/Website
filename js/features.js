@@ -230,11 +230,13 @@
    * ================================================================ */
   HW.saleClock = (function () {
     var timer = null;
-    /* Ticking digits only in the last stretch. A countdown reading "07 DAYS" tells a shopper the
-       sale is long and they can come back later — the opposite of what a countdown is for. Until
-       then the sale carries the day it ends, which is honest and still a deadline. Inside the
-       window the days are rolled into the hours, so it reads "35 HRS", never "01 DAYS". */
-    var CLOCK_WITHIN = 48 * 3600000;
+    /* The clock ticks the whole way down, and the days are always rolled into the hours — it
+       reads "167 HRS", never "07 DAYS". A countdown written in days tells a shopper the sale is
+       long and they can come back later, which is the opposite of what a countdown is for; the
+       very same deadline said in hours is just as true and actually reads as one. Past a
+       fortnight even hours stop meaning anything, so a sale longer than that carries its end
+       date instead of a number nobody can picture. */
+    var CLOCK_WITHIN = 14 * 86400000;
     var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     function two(n) { return (n < 10 ? '0' : '') + n; }
