@@ -36,7 +36,23 @@
       '<span class="zoomhint" aria-hidden="true">⤢ Zoom</span></button>';
   }
 
-  function galleryHTML(items, start, alt) {
+  /* The corner tag on the main photo. Switched on in Admin, off by default. The figure on it is
+     the one the price line on the same page is using, so the tag cannot promise a saving the shop
+     is not giving — whatever gets typed anywhere else. It is hidden from screen readers because
+     the price line beside it already says the same thing in words. */
+  function saleTag(p, pr) {
+    var t = ((HW.DB || {}).sale || {}).tag;
+    if (!t || !t.enabled) return '';
+    if (!pr || !pr.onSale || !(pr.percentOff > 0) || !m.saleFor(p)) return '';
+    var col = /^#[0-9a-fA-F]{3,8}$/.test(String(t.color || '')) ? t.color : '#C0261C';
+    var label = String(t.text == null ? 'Black Friday' : t.text).trim();
+    return '<span class="saletag ' + (t.corner === 'right' ? 'right' : 'left') + '"' +
+      ' style="background:' + esc(col) + '" aria-hidden="true">' +
+      (label ? '<i>' + esc(label) + '</i>' : '') +
+      '<b>' + pr.percentOff + '%</b><u>off</u></span>';
+  }
+
+  function galleryHTML(items, start, alt, tag) {
     var idx = Math.min(Math.max(start || 0, 0), items.length - 1);
     gal = { items: items, idx: idx, alt: alt };
     var thumbs = items.map(function (it, i) {
@@ -52,7 +68,7 @@
       '<div class="vthumbs" id="vthumbs">' + thumbs + '</div>' +
       (arrows ? '<button class="vth-nav" type="button" data-act="gal-scroll" data-dir="1" aria-label="Scroll thumbnails down">▼</button>' : '') +
       '</div><div class="vmain">' +
-      '<div class="gallery" id="galMain" aria-live="polite">' + mainHTML(items[idx], alt, true) + '</div>' +
+      '<div class="gallery" id="galMain" aria-live="polite">' + mainHTML(items[idx], alt, true) + '</div>' + (tag || '') +
       (items.length > 1 ? '<button class="gnav prev" type="button" data-act="gal-step" data-dir="-1" aria-label="Previous photo">‹</button><button class="gnav next" type="button" data-act="gal-step" data-dir="1" aria-label="Next photo">›</button>' : '') +
       '</div></div>';
   }
@@ -231,6 +247,7 @@
     else if (HW.snip.enabled()) buy = '<button id="buyBtn" class="btn loom snipcart-add-item" type="button" style="flex:1;justify-content:center" data-item-quantity="' + sel.qty + '" ' + HW.snip.attrs(HW.snip.simpleItem(p)) + '>Add to cart</button>';
     else buy = '<button id="buyBtn" class="btn loom" type="button" style="flex:1;justify-content:center" data-act="add" data-id="' + esc(p.id) + '" data-from="pdp">Add to cart</button>';
     return {
+      tag: saleTag(p, sp),
       html: '<div class="eyebrow">' + esc(cat ? cat.name : '') + (sub ? ' · ' + esc(sub.name) : '') + '</div>' +
         '<h1>' + esc(p.name) + '</h1>' +
         '<a class="rvtop" id="rvTop" href="#rvMount" hidden></a>' +
@@ -326,6 +343,7 @@
 
     return {
       v: v,
+      tag: saleTag(p, v),
       html: '<div class="eyebrow">' + esc(cat ? cat.name : '') + (sub ? ' · ' + esc(sub.name) : '') + '</div>' +
         '<h1>' + esc(p.name) + '</h1>' +
         '<a class="rvtop" id="rvTop" href="#rvMount" hidden></a>' +
@@ -366,7 +384,7 @@
     }
     return {
       cat: cat,
-      pdp: '<div class="pdp"><div class="gallerywrap">' + galleryHTML(items, info.start, alt) + '</div><div class="info" id="pdpInfo">' + info.html + '</div></div>',
+      pdp: '<div class="pdp"><div class="gallerywrap">' + galleryHTML(items, info.start, alt, info.tag) + '</div><div class="info" id="pdpInfo">' + info.html + '</div></div>',
       tabs: tabsHTML(info.specs, p.features, p.care, info.inStock, p)
     };
   }

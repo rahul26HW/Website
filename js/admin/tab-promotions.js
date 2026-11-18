@@ -69,6 +69,14 @@
           '<div class="grid2">' +
           ui.field('Starts', 'sale.startsAt', A.toLocalInput(sale.startsAt), { inputType: 'datetime-local', type: 'datetime', hint: 'Your own time zone.' }) +
           ui.field('Ends', 'sale.endsAt', A.toLocalInput(sale.endsAt), { inputType: 'datetime-local', type: 'datetime', hint: 'The countdown on the product page points here. At this moment the prices and the badges go back on their own.' }) + '</div>' +
+          '<div class="field"><label>Tag on the product photo</label>' +
+          '<p class="hint" style="margin:6px 0 10px">A small tag in the corner of the main photo on a product page. The figure on it is the saving that product is actually getting, read off the price on the same page — so it cannot say more than the shop gives, whatever is typed anywhere else.</p>' +
+          ui.check('Show a tag on product photos', 'sale.tag.enabled', (sale.tag || {}).enabled) +
+          '<div class="grid3">' +
+          ui.field('Words on the tag', 'sale.tag.text', (sale.tag || {}).text == null ? 'Black Friday' : (sale.tag || {}).text, { maxlength: 24, hint: 'Leave blank for just the percentage.' }) +
+          ui.field('Corner', 'sale.tag.corner', (sale.tag || {}).corner || 'left', { options: [['left', 'Top left'], ['right', 'Top right']] }) +
+          ui.field('Colour', 'sale.tag.color', (sale.tag || {}).color || '#C0261C', { inputType: 'color' }) +
+          '</div></div>' +
           (sale.scope === 'categories'
             ? '<div class="field"><label>Categories in the sale</label><div class="checkrow">' +
               cats.map(function (c) {
