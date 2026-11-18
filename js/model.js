@@ -83,52 +83,6 @@
              h: w.getUTCHours(), mi: w.getUTCMinutes() };
   }
 
-  /* ---------- a sale that opens and closes every day ----------
-     The window is two wall-clock times in one zone and it is allowed to cross midnight: 06:00 to
-     01:00 is the nineteen hours from six one morning to one the next. Whether it is open is
-     decided by the time of day alone — the very same test the database runs when it prices an
-     order — so the page and the charge can never disagree about whether the sale is on.
-     A window that is switched off, or typed wrong, is simply no window: the sale then runs
-     straight through as it always did, rather than vanishing because of a typo. */
-  function hhmm(v) {
-    var x = String(v || '').match(/^(\d{1,2}):(\d{2})$/);
-    if (!x) return null;
-    var h = +x[1], mi = +x[2];
-    return h >= 0 && h < 24 && mi >= 0 && mi < 60 ? h * 60 + mi : null;
-  }
-  /* The next instant at which the clock in `zone` reads `mins` past midnight. */
-  function nextAt(t, mins, zone) {
-    for (var i = 0; i <= 1; i++) {
-      var z = zoneDate(t + i * 86400000, zone);
-      var at = fromZone(z.y, z.mo, z.d, (mins / 60) | 0, mins % 60, zone);
-      if (at > t) return at;
-    }
-    return null;
-  }
-  /* Held for the minute it belongs to. Every price on the page asks whether the sale is open, and
-     the answer costs five trips through Intl — enough to show on a catalogue render. The key is
-     the minute itself rather than "how long since last time", so the answer can never be stale and
-     never depends on the order the questions were asked in. */
-  var winAt = { key: '', was: null };
-  function dailyWindow(d, t) {
-    if (!d || !d.enabled) return null;
-    var from = hhmm(d.from), to = hhmm(d.to);
-    if (from == null || to == null || from === to) return null;
-    var zone = d.zone || 'America/New_York';
-    var key = from + '|' + to + '|' + zone + '|' + Math.floor(t / 60000);
-    if (winAt.key === key) return winAt.was;
-    var out = window_(from, to, zone, t);
-    winAt.key = key; winAt.was = out;
-    return out;
-  }
-  function window_(from, to, zone, t) {
-    var z = zoneDate(t, zone);
-    var at = z.h * 60 + z.mi;
-    var open = from < to ? (at >= from && at < to) : (at >= from || at < to);
-    return open
-      ? { open: true, closesAt: nextAt(t, to, zone) }
-      : { open: false, opensAt: nextAt(t, from, zone) };
-  }
   /* When the next parcel leaves, and how long is left to be on it. Null when it is switched off. */
   m.dispatch = function (now) {
     var c = (DB() && DB().settings && DB().settings.cutoff) || null;
@@ -269,30 +223,9 @@
     var t = now ? +now : Date.now();
     var when = function (v) { return Date.parse(String(v || '').trim().replace(/([+-]\d\d)$/, '$1:00')); };
     var from = when(s.startsAt), to = when(s.endsAt);
-    var out = null;
-    if (isFinite(from) && isFinite(to) && t >= from && t < to) {
-      /* The daily window narrows the run to the same hours each day, and the countdown then points
-         at tonight's close instead of the far end of the whole thing — which is the difference
-         between a deadline a shopper can act on and a number nobody can picture. */
-      var win = dailyWindow(s.daily, t);
-      if (!win || win.open) {
-        var ends = win && win.closesAt && win.closesAt < to ? win.closesAt : to;
-        out = { name: s.name || 'Sale', ribbon: s.ribbon || 'Sale', percent: s.percent,
-                endsAt: ends, startsAt: from, scope: s.scope, s: s, daily: !!win };
-      }
-    }
-    return out;
-  };
-  /* When the window next opens, for a page that is sitting there while the sale is shut. */
-  m.saleOpensAt = function (now) {
-    var s = (DB() || {}).sale;
-    if (!s || !s.enabled || !(s.percent > 0)) return null;
-    var t = now ? +now : Date.now();
-    var when = function (v) { return Date.parse(String(v || '').trim().replace(/([+-]\d\d)$/, '$1:00')); };
-    var to = when(s.endsAt);
-    var win = dailyWindow(s.daily, t);
-    if (!win || win.open || !(isFinite(to) && win.opensAt < to)) return null;
-    return win.opensAt;
+    if (!(isFinite(from) && isFinite(to) && t >= from && t < to)) return null;
+    return { name: s.name || 'Sale', ribbon: s.ribbon || 'Sale', percent: s.percent,
+             endsAt: to, startsAt: from, scope: s.scope, s: s };
   };
   /* Is this product part of the sale that is running? */
   m.saleFor = function (p) {

@@ -282,7 +282,7 @@
     if (!sale) return '';
     return '<div class="saleband" role="note" data-sale-ends="' + sale.endsAt + '">' +
       '<span class="t">' + esc(sale.name) + '</span>' +
-      '<span class="c" data-sale-clock="parts" data-cutoff-band></span></div>';
+      '<span class="c" data-sale-clock="parts"></span></div>';
   }
 
 /* "Deliver to 08854" — the real carrier price for this item plus an estimated arrival window.
