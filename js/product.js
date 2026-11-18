@@ -49,7 +49,7 @@
     return '<span class="saletag ' + (t.corner === 'right' ? 'right' : 'left') + '"' +
       ' style="background:' + esc(col) + '" aria-hidden="true">' +
       (label ? '<i>' + esc(label) + '</i>' : '') +
-      '<b>' + pr.percentOff + '%</b><u>off</u></span>';
+      '<b>' + pr.percentOff + '% off</b></span>';
   }
 
   function galleryHTML(items, start, alt, tag) {

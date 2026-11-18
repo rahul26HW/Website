@@ -1009,13 +1009,15 @@ main#view.booting ~ footer.site{visibility:hidden}
 @media(max-width:720px){#topnav{min-height:0}}
 
 /* ---- sale tag on the product photo (Admin: Promotions) ---- */
-.saletag{position:absolute;top:14px;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:64px;padding:9px 11px 10px;border-radius:999px;color:#fff;line-height:1;pointer-events:none;box-shadow:0 8px 20px -10px rgba(42,38,34,.6)}
-.saletag.left{left:14px}
-.saletag.right{right:14px}
-.saletag i{font-style:normal;font-size:9px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;opacity:.92;margin-bottom:4px;white-space:nowrap}
-.saletag b{font-size:21px;font-weight:700;letter-spacing:-.01em}
-.saletag u{text-decoration:none;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:600;opacity:.92;margin-top:3px}
-@media(max-width:560px){.saletag{top:10px;left:10px;min-width:56px;padding:8px 9px}.saletag.right{right:10px}.saletag b{font-size:18px}}
+/* Flush into the photo's own corner, and only the inner corner is rounded — a label stuck on the
+   picture, not a badge floating over it. The frame's own radius is var(--r), so the outer corner
+   carries the same one and the two edges read as one shape. */
+.saletag{position:absolute;top:0;z-index:3;display:inline-flex;align-items:baseline;gap:6px;padding:7px 12px 8px;color:#fff;font-size:12.5px;font-weight:600;line-height:1.15;white-space:nowrap;pointer-events:none}
+.saletag.left{left:0;border-radius:var(--r) 0 8px 0}
+.saletag.right{right:0;border-radius:0 var(--r) 0 8px}
+.saletag i{font-style:normal;font-weight:600;opacity:.95}
+.saletag b{font-weight:700}
+@media(max-width:560px){.saletag{font-size:11.5px;padding:6px 10px 7px;gap:5px}}
 
 /* ---- hero: picture-only slide (banner with its words already in the image) ---- */
 .hslide.pic{background:#E9EDF3}
