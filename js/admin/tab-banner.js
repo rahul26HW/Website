@@ -21,7 +21,10 @@
       '<div class="grid2">' +
       ui.imageInput('Desktop image', p + 'image', s.image, { folder: 'hero', max: 2400, wide: true, hint: 'Landscape, about 2400 × 1200 px. Keep the subject to one side — text sits over the image. Already have a finished banner with words in it? Leave Eyebrow, Headline, Subtext and Button text blank: the picture then shows whole, and the Button link makes the whole banner clickable.' }) +
       ui.imageInput('Mobile image (optional)', p + 'mobileImage', s.mobileImage, { folder: 'hero', max: 1200, hint: 'Portrait, about 1080 × 1350 px. Used on phones.' }) + '</div>' +
+      '<div class="grid2">' +
       ui.field('Image description (alt text)', p + 'alt', s.alt, { hint: 'Describe the photo for screen readers, e.g. “Striped bath rug beside a white bathtub”.', maxlength: 140 }) +
+      ui.field('Colour behind the banner', p + 'bg', s.bg || '#E9EDF3', { inputType: 'color', hint: 'Only for a finished banner (the fields above left blank). The banner is shown whole, so on a wide screen there is a margin at its edges — set this to the banner’s own background colour and the margin disappears. A dark banner needs a dark colour here.' }) +
+      '</div>' +
       '</section>';
   }
 
