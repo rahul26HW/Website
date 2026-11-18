@@ -301,6 +301,19 @@
     return {
       start: function () {
         stop();
+        /* Shut for the night, but opening again in the morning. A page left sitting there would
+           otherwise show last night's full price until somebody reloaded it, so it watches for
+           the window and redraws itself when the sale comes back. */
+        var opens = HW.m.saleOpensAt ? HW.m.saleOpensAt() : null;
+        if (opens) {
+          timer = setInterval(function () {
+            if (Date.now() < opens) return;
+            stop();
+            try { HW.paintChrome(); } catch (e) { /* the bar is redrawn on the next page anyway */ }
+            if (HW.router) HW.router.run({ scroll: false });
+          }, 30000);
+          return;
+        }
         if (!u.qsa('[data-sale-ends]').length) return;
         paint();
         timer = setInterval(paint, 1000);

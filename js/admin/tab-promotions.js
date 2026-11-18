@@ -68,7 +68,18 @@
           ui.field('Applies to', 'sale.scope', sale.scope, { options: [['all', 'Every product'], ['categories', 'Chosen categories'], ['products', 'Chosen products']] }) + '</div>' +
           '<div class="grid2">' +
           ui.field('Starts', 'sale.startsAt', A.toLocalInput(sale.startsAt), { inputType: 'datetime-local', type: 'datetime', hint: 'Your own time zone.' }) +
-          ui.field('Ends', 'sale.endsAt', A.toLocalInput(sale.endsAt), { inputType: 'datetime-local', type: 'datetime', hint: 'The countdown runs to this moment, wherever the shopper is.' }) + '</div>' +
+          ui.field('Ends', 'sale.endsAt', A.toLocalInput(sale.endsAt), { inputType: 'datetime-local', type: 'datetime', hint: 'The last day of the whole run. With a daily window below, the countdown points at tonight’s close instead.' }) + '</div>' +
+          '<div class="field"><label>Open and close it every day</label>' +
+          '<p class="hint" style="margin:6px 0 10px">Without this the sale runs straight through, and a week-long sale can only honestly show a week-long countdown — which tells a shopper to come back later. With it, the sale really does shut each night and open again in the morning, so the countdown is short, it resets every day, and it is true: at the closing time the prices genuinely go back up until it opens again. ' +
+          '<b>The price is the full price while it is shut</b> — that is the part that makes a short countdown honest, so only switch this on if you mean it.</p>' +
+          ui.check('Run it only between these hours each day', 'sale.daily.enabled', (sale.daily || {}).enabled) +
+          '<div class="grid3">' +
+          ui.field('Opens', 'sale.daily.from', (sale.daily || {}).from, { placeholder: '06:00', hint: '24-hour clock.' }) +
+          ui.field('Closes', 'sale.daily.to', (sale.daily || {}).to, { placeholder: '01:00', hint: 'Earlier than the opening time means it carries past midnight — 06:00 to 01:00 is nineteen hours.' }) +
+          ui.field('Time zone', 'sale.daily.zone', (sale.daily || {}).zone || 'America/New_York', {
+            options: [['America/New_York', 'Eastern'], ['America/Chicago', 'Central'],
+                      ['America/Denver', 'Mountain'], ['America/Los_Angeles', 'Pacific']] }) +
+          '</div></div>' +
           (sale.scope === 'categories'
             ? '<div class="field"><label>Categories in the sale</label><div class="checkrow">' +
               cats.map(function (c) {
