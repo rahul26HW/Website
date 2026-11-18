@@ -33,6 +33,17 @@
     if (p.charAt(0) === '/') p = p.slice(1);
     return r.base + p;
   };
+  /* The stamp this page was built with, read off the stylesheet link that carries it. Anything
+     fetched later by script — the admin modules — has to carry it too: without it a browser goes
+     on running the copy it cached, and no amount of publishing will change what the person sees. */
+  HW.ver = (function () {
+    var css = document.querySelector('link[rel="stylesheet"][href*="css/site.css"]');
+    return (((css && css.getAttribute('href')) || '').split('?v=')[1] || '').trim();
+  })();
+  HW.assetV = function (p) {
+    var u = HW.asset(p);
+    return HW.ver && u.indexOf('?') < 0 ? u + '?v=' + HW.ver : u;
+  };
   /* Absolute URL for canonical / Open Graph / feeds. */
   HW.absUrl = function (p) {
     var site = ((HW.DB && HW.DB.settings && HW.DB.settings.siteUrl) || '').trim();

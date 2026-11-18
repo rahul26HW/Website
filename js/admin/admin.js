@@ -22,12 +22,12 @@
     if (loading) return loading;
     if (!document.querySelector('link[data-admin-css]')) {
       var css = document.createElement('link');
-      css.rel = 'stylesheet'; css.href = HW.asset('css/admin.css'); css.setAttribute('data-admin-css', '');
+      css.rel = 'stylesheet'; css.href = HW.assetV('css/admin.css'); css.setAttribute('data-admin-css', '');
       document.head.appendChild(css);
     }
     loading = (window.supabase ? Promise.resolve() : script(SUPABASE_JS))
       .then(function () {
-        return FILES.reduce(function (p, f) { return p.then(function () { return script(HW.asset('js/admin/' + f)); }); }, Promise.resolve());
+        return FILES.reduce(function (p, f) { return p.then(function () { return script(HW.assetV('js/admin/' + f)); }); }, Promise.resolve());
       });
     return loading;
   }

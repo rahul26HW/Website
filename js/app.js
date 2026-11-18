@@ -80,7 +80,7 @@
     if (framed) { document.getElementById('admin').innerHTML = '<div class="loading">Open the admin in its own tab.</div>'; return; }
     if (HW.admin) { HW.admin.enter(); return; }
     var s = document.createElement('script');
-    s.src = HW.asset('js/admin/admin.js');
+    s.src = HW.assetV('js/admin/admin.js');
     s.onload = function () { if (HW.admin) HW.admin.enter(); };
     s.onerror = function () { document.getElementById('admin').innerHTML = '<div class="loading">The admin couldn’t load. Check your connection and refresh.</div>'; };
     document.body.appendChild(s);

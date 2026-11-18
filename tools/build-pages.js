@@ -102,8 +102,11 @@ async function main() {
   }
 
   const crypto = require('crypto');
-  const stampFrom = ['css/site.css'].concat(
-    fs.readdirSync(path.join(ROOT, 'js')).filter(function (f) { return f.endsWith('.js'); }).map(function (f) { return 'js/' + f; }));
+  // Admin files are in here too: they are fetched by script with this same stamp on them, so a
+  // change to one has to move the stamp or nobody will ever be served it.
+  const stampFrom = ['css/site.css', 'css/admin.css']
+    .concat(fs.readdirSync(path.join(ROOT, 'js')).filter(function (f) { return f.endsWith('.js'); }).map(function (f) { return 'js/' + f; }))
+    .concat(fs.readdirSync(path.join(ROOT, 'js/admin')).filter(function (f) { return f.endsWith('.js'); }).map(function (f) { return 'js/admin/' + f; }));
   const stamp = crypto.createHash('sha1')
     .update(stampFrom.map(function (f) { return fs.readFileSync(path.join(ROOT, f)); }).join(''))
     .digest('hex').slice(0, 8);
