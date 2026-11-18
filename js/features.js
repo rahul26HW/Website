@@ -197,12 +197,20 @@
       if (mi > 0) return mi + 'm ' + two(s) + 's';
       return s + 's';
     }
+    /* The band counts the seconds as well — a ticking second is the whole of what it is for. */
+    function full(ms) {
+      var h = Math.floor(ms / 3600000), mi = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60;
+      return (h > 0 ? h + 'h ' : '') + two(mi) + 'm ' + two(s) + 's';
+    }
     function paint() {
       var els = u.qsa('[data-cutoff]');
       if (!els.length) { stop(); return; }
       var d = HW.m.dispatch();
+      /* One deadline to a page. When the sale band is carrying the dispatch clock, this line would
+         only say the same thing a second time, so it steps aside and lets the band speak. */
+      var band = !!(d && u.qsa('.saleband [data-cutoff-band]').length);
       els.forEach(function (el) {
-        if (!d) { el.hidden = true; el.textContent = ''; return; }
+        if (!d || band) { el.hidden = true; el.textContent = ''; return; }
         el.hidden = false;
         /* Over a weekend the next cutoff can be two days off, and "67h 00m" is not a countdown —
            it is a number. Past a day, name the day instead and let the clock start on its own
@@ -214,6 +222,12 @@
     }
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
     return {
+      /* What the sale band shows in place of the sale's own clock, or null when no cutoff is set. */
+      pill: function () {
+        var d = HW.m.dispatch ? HW.m.dispatch() : null;
+        if (!d) return null;
+        return d.left > 86400000 ? 'Next dispatch ' + d.day : 'Order within ' + full(d.left);
+      },
       start: function () {
         stop();
         if (!u.qsa('[data-cutoff]').length) return;
@@ -230,13 +244,12 @@
    * ================================================================ */
   HW.saleClock = (function () {
     var timer = null;
-    /* The clock ticks the whole way down, and the days are always rolled into the hours — it
-       reads "167 HRS", never "07 DAYS". A countdown written in days tells a shopper the sale is
-       long and they can come back later, which is the opposite of what a countdown is for; the
-       very same deadline said in hours is just as true and actually reads as one. Past a
-       fortnight even hours stop meaning anything, so a sale longer than that carries its end
-       date instead of a number nobody can picture. */
-    var CLOCK_WITHIN = 14 * 86400000;
+    /* The sale's own end is a backstop, not the deadline. It ticks only in the last stretch, and
+       even then the days are rolled into the hours so it reads "35 HRS", never "01 DAYS". Outside
+       that window it carries the day it ends: a countdown reading "170 HRS" is a week wearing a
+       different hat, and it tells a shopper to come back later — the opposite of the point. The
+       deadline that ticks every day is today's dispatch cutoff, which the band carries. */
+    var CLOCK_WITHIN = 48 * 3600000;
     var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     function two(n) { return (n < 10 ? '0' : '') + n; }
@@ -264,9 +277,16 @@
         }
         var slot = el.querySelector('[data-sale-clock]') || el;
         if (slot.getAttribute('data-sale-clock') === 'parts') {
-          slot.innerHTML = far
-            ? '<i class="when">' + endsLabel(endsAt) + '</i>'
-            : '<i>' + two(h) + '<em>HRS</em></i><i>' + two(mi) + '<em>MIN</em></i><i>' + two(sec) + '<em>SEC</em></i>';
+          /* A week-long sale has no deadline a shopper can feel, however the hours are written —
+             170 of them is still a week. Today's dispatch cutoff is a deadline: short, true, and
+             it comes round again every morning for as long as the sale runs. So the band carries
+             that when a cutoff is set, and falls back to the sale's own clock when none is. */
+          var pill = slot.hasAttribute('data-cutoff-band') && HW.cutoffClock ? HW.cutoffClock.pill() : null;
+          slot.innerHTML = pill
+            ? '<i class="when">' + pill + '</i>'
+            : far
+              ? '<i class="when">' + endsLabel(endsAt) + '</i>'
+              : '<i>' + two(h) + '<em>HRS</em></i><i>' + two(mi) + '<em>MIN</em></i><i>' + two(sec) + '<em>SEC</em></i>';
         } else {
           el.textContent = far ? endsLabel(endsAt) : 'Ends in ' + ticks;
         }
