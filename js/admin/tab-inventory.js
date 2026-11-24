@@ -59,7 +59,9 @@
           '<p class="hint" style="margin:-6px 0 12px">An <b>.xlsx</b> or <b>CSV</b> file — a warehouse export uploads just as it downloaded. It needs a row of column names, with the SKU under <b>SKU</b> or <b>Master SKU</b> and the count under <b>Available</b> or <b>Quantity</b>; every other column is ignored. A plain two-column <b>sku,quantity</b> file works too. You’ll see a row-by-row report before anything changes.</p>' +
           '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="inv-download">⬇ Download current (CSV)</button>' +
           '<button class="btn loom sm" type="button" data-a="inv-upload">⬆ Upload stock file</button></div>' +
-          '<div class="grid2" style="margin-top:14px">' + A.ui.field('Low-stock alert at', 'settings.lowStockThreshold', A.draft.settings.lowStockThreshold, { type: 'int', min: 0, hint: 'Saved with Save changes.' }) + '</div>') +
+          '<div class="grid2" style="margin-top:14px">' +
+          A.ui.field('Low-stock alert at', 'settings.lowStockThreshold', A.draft.settings.lowStockThreshold, { type: 'int', min: 0, hint: 'Flags a SKU as Low. Doesn’t change what shoppers can buy. Saved with Save changes.' }) +
+          A.ui.field('Upload as sold out at or below', 'settings.uploadSoldOutAt', A.draft.settings.uploadSoldOutAt, { type: 'int', min: 0, hint: 'A safety buffer: anything at or below this number arrives as 0, so the website stops taking orders on it. Exactly this many counts too — set 4 if 5 should still sell. 0 uploads the real figures. Saved with Save changes.' }) + '</div>') +
 
         '<section class="panel"><h2 class="ph3">Stock levels</h2>' +
         '<div class="toolbar"><div class="subnav">' + chip('all', 'All') + chip('low', 'Low') + chip('out', 'Out') + chip('untracked', 'Not tracked') + chip('nosku', 'Missing SKU') + '</div>' +
@@ -196,7 +198,11 @@
     }
     var known = {};
     rows().forEach(function (r) { if (r.sku) known[r.sku] = r; else known[r.key] = r; });
-    var updates = {}, report = [], seen = {}, subRows = 0, barcodes = 0, negatives = 0, notHere = [];
+    // Stock is uploaded by hand every so often rather than watched live, so the last few units of
+    // anything are the ones most likely to be gone already. At or below this line a SKU arrives as 0
+    // and the website stops taking orders on it until the next upload says otherwise.
+    var floor = Math.max(0, parseInt((A.draft.settings || {}).uploadSoldOutAt, 10) || 0);
+    var updates = {}, report = [], seen = {}, subRows = 0, barcodes = 0, negatives = 0, held = 0, notHere = [];
     table.slice(map.from).forEach(function (cols, idx) {
       var line = idx + map.from + 1;
       if (!cols.some(function (c) { return String(c == null ? '' : c).trim(); })) return;
@@ -223,10 +229,12 @@
       if (!known[sku]) { notHere.push(sku); return; }
       if (seen[sku]) { report.push({ line: line, ok: false, sku: sku, msg: 'Duplicate — SKU already on line ' + seen[sku] + '; this row was skipped' }); return; }
       seen[sku] = line;
+      var why = qtyRaw.charAt(0) === '-' ? ' (file said ' + qtyRaw + ', oversold)' : '';
+      if (floor && qty > 0 && qty <= floor) { held++; why = ' (file said ' + qty + ', at or below your ' + floor + ')'; qty = 0; }
       var key = known[sku].key;
       var before = A.draft.inventory[key];
       updates[key] = qty;
-      report.push({ line: line, ok: true, sku: sku, msg: (before == null ? 'not tracked' : before) + ' → ' + qty + (qtyRaw.charAt(0) === '-' ? ' (file said ' + qtyRaw + ', oversold)' : '') });
+      report.push({ line: line, ok: true, sku: sku, msg: (before == null ? 'not tracked' : before) + ' → ' + qty + why });
     });
     var good = report.filter(function (r) { return r.ok; }), bad = report.filter(function (r) { return !r.ok; });
     A.modal({
@@ -234,9 +242,11 @@
       body: '<p class="hint" style="margin:-4px 0 12px">Stock read from <b>' + esc(map.qtyName) + '</b>, SKUs from <b>' + esc(map.skuName) + '</b>' +
           (subRows ? ' · ' + subRows + ' location row' + (subRows === 1 ? '' : 's') + ' skipped (they repeat their SKU’s count)' : '') + '.</p>' +
         (barcodes ? A.ui.warn('<b>' + barcodes + ' row' + (barcodes === 1 ? '' : 's') + ' held back</b> for a count over 7 digits — check that <b>' + esc(map.qtyName) + '</b> really is the stock column.') : '') +
+        (held ? A.ui.warn('<b>Safety buffer is on.</b> ' + held + ' SKU' + (held === 1 ? ' that has' : 's that have') + ' 1–' + floor + ' in the file ' + (held === 1 ? 'is' : 'are') + ' being uploaded as 0, so the website won’t sell ' + (held === 1 ? 'it' : 'them') + '. Change it under <b>Upload as sold out at or below</b>.') : '') +
         '<p><b class="ok">' + good.length + ' row' + (good.length === 1 ? '' : 's') + ' ready</b>' + (bad.length ? ' · <b class="bad">' + bad.length + ' with errors (skipped)</b>' : '') +
           (notHere.length ? ' · <b>' + notHere.length + ' SKU' + (notHere.length === 1 ? '' : 's') + ' not sold on the website (skipped)</b>' : '') +
-          (negatives ? ' · <b>' + negatives + ' negative count' + (negatives === 1 ? '' : 's') + ' read as 0</b>' : '') + '</p>' +
+          (negatives ? ' · <b>' + negatives + ' negative count' + (negatives === 1 ? '' : 's') + ' read as 0</b>' : '') +
+          (held ? ' · <b>' + held + ' SKU' + (held === 1 ? '' : 's') + ' at or below ' + floor + ' held at 0</b>' : '') + '</p>' +
         (notHere.length ? '<p class="hint" style="margin:-8px 0 12px">Normal for a full warehouse export. ' +
           (notHere.length > 8 ? 'First few: ' : '') + '<code>' + notHere.slice(0, 8).map(esc).join('</code> <code>') + '</code>' +
           (notHere.length > 8 ? ' …' : '') + '</p>' : '') +

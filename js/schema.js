@@ -49,6 +49,10 @@
         outOfStock: 'show',           // 'show' = badge + sorted last, 'hide' = remove from listings
         showEmptyCategories: false,
         lowStockThreshold: 5,
+        // Safety buffer for the stock upload. Counts at or below this arrive as 0, so a SKU the
+        // warehouse has almost none of shows sold out instead of taking an order we can't fill
+        // between one manual stock upload and the next. 0 uploads the real figures.
+        uploadSoldOutAt: 0,
         siteUrl: '',                  // e.g. https://nitish463.github.io/Website/ (used for canonical + sitemap)
         googleClientId: '',           // public OAuth client ID for "Continue with Google" (blank hides the button)
         // Shape belongs to the size, not the product: one rug is sold round, runner and
