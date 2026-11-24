@@ -196,7 +196,7 @@
     }
     var known = {};
     rows().forEach(function (r) { if (r.sku) known[r.sku] = r; else known[r.key] = r; });
-    var updates = {}, report = [], seen = {}, subRows = 0, barcodes = 0, notHere = [];
+    var updates = {}, report = [], seen = {}, subRows = 0, barcodes = 0, negatives = 0, notHere = [];
     table.slice(map.from).forEach(function (cols, idx) {
       var line = idx + map.from + 1;
       if (!cols.some(function (c) { return String(c == null ? '' : c).trim(); })) return;
@@ -208,9 +208,11 @@
         report.push({ line: line, ok: false, msg: 'Missing SKU' }); return;
       }
       if (/^\(no sku\)/i.test(sku)) { report.push({ line: line, ok: false, sku: sku, msg: 'This product has no SKU yet — add it in the table first' }); return; }
-      if (/^-/.test(qtyRaw)) { report.push({ line: line, ok: false, sku: sku, msg: 'Quantity can’t be negative' }); return; }
-      if (!/^\d+(\.0+)?$/.test(qtyRaw)) { report.push({ line: line, ok: false, sku: sku, msg: qtyRaw === '' ? 'Missing quantity' : 'Quantity “' + qtyRaw + '” is not a whole number' }); return; }
+      if (!/^-?\d+(\.0+)?$/.test(qtyRaw)) { report.push({ line: line, ok: false, sku: sku, msg: qtyRaw === '' ? 'Missing quantity' : 'Quantity “' + qtyRaw + '” is not a whole number' }); return; }
+      // A warehouse that has shipped more than it received shows a negative. There is nothing on the
+      // shelf either way, so it becomes 0 — sold out — rather than holding the whole upload up.
       var qty = parseInt(qtyRaw, 10);
+      if (qty < 0) { negatives++; qty = 0; }
       if (qty > MAX_QTY) {
         barcodes++;
         report.push({ line: line, ok: false, sku: sku, msg: qtyRaw + ' is far too big to be stock — that reads like a barcode, not a count' });
@@ -224,7 +226,7 @@
       var key = known[sku].key;
       var before = A.draft.inventory[key];
       updates[key] = qty;
-      report.push({ line: line, ok: true, sku: sku, msg: (before == null ? 'not tracked' : before) + ' → ' + qty });
+      report.push({ line: line, ok: true, sku: sku, msg: (before == null ? 'not tracked' : before) + ' → ' + qty + (qtyRaw.charAt(0) === '-' ? ' (file said ' + qtyRaw + ', oversold)' : '') });
     });
     var good = report.filter(function (r) { return r.ok; }), bad = report.filter(function (r) { return !r.ok; });
     A.modal({
@@ -233,7 +235,8 @@
           (subRows ? ' · ' + subRows + ' location row' + (subRows === 1 ? '' : 's') + ' skipped (they repeat their SKU’s count)' : '') + '.</p>' +
         (barcodes ? A.ui.warn('<b>' + barcodes + ' row' + (barcodes === 1 ? '' : 's') + ' held back</b> for a count over 7 digits — check that <b>' + esc(map.qtyName) + '</b> really is the stock column.') : '') +
         '<p><b class="ok">' + good.length + ' row' + (good.length === 1 ? '' : 's') + ' ready</b>' + (bad.length ? ' · <b class="bad">' + bad.length + ' with errors (skipped)</b>' : '') +
-          (notHere.length ? ' · <b>' + notHere.length + ' SKU' + (notHere.length === 1 ? '' : 's') + ' not sold on the website (skipped)</b>' : '') + '</p>' +
+          (notHere.length ? ' · <b>' + notHere.length + ' SKU' + (notHere.length === 1 ? '' : 's') + ' not sold on the website (skipped)</b>' : '') +
+          (negatives ? ' · <b>' + negatives + ' negative count' + (negatives === 1 ? '' : 's') + ' read as 0</b>' : '') + '</p>' +
         (notHere.length ? '<p class="hint" style="margin:-8px 0 12px">Normal for a full warehouse export. ' +
           (notHere.length > 8 ? 'First few: ' : '') + '<code>' + notHere.slice(0, 8).map(esc).join('</code> <code>') + '</code>' +
           (notHere.length > 8 ? ' …' : '') + '</p>' : '') +
