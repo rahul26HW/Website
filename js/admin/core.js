@@ -850,6 +850,119 @@
     });
   };
 
+  A.readFileBuffer = function (file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(fr.result); };
+      fr.onerror = function () { reject(new Error('Could not read that file')); };
+      fr.readAsArrayBuffer(file);
+    });
+  };
+
+  /* ---------------------------------------------------------------- *
+   * Spreadsheets (.xlsx), so a supplier or warehouse export can be
+   * uploaded as it downloaded — no re-saving it as CSV first. No
+   * library needed: a .xlsx is a ZIP of XML and the browser inflates.
+   * ---------------------------------------------------------------- */
+  function zipEntries(buf) {
+    var b = new Uint8Array(buf), dv = new DataView(buf), i;
+    for (i = b.length - 22; i >= 0; i--) if (dv.getUint32(i, true) === 0x06054b50) break;
+    if (i < 0) throw new Error('That file isn’t a .xlsx spreadsheet (no ZIP directory in it).');
+    var n = dv.getUint16(i + 10, true), at = dv.getUint32(i + 16, true), out = {};
+    while (n-- > 0) {
+      if (at + 46 > b.length || dv.getUint32(at, true) !== 0x02014b50) break;
+      var nameLen = dv.getUint16(at + 28, true), name = '';
+      for (var k = 0; k < nameLen; k++) name += String.fromCharCode(b[at + 46 + k]);
+      var local = dv.getUint32(at + 42, true), comp = dv.getUint32(at + 20, true);
+      var start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+      out[name] = { method: dv.getUint16(at + 10, true), bytes: comp ? b.subarray(start, start + comp) : b.subarray(start) };
+      at += 46 + nameLen + dv.getUint16(at + 30, true) + dv.getUint16(at + 32, true);
+    }
+    return out;
+  }
+
+  async function zipText(entry) {
+    if (!entry) return '';
+    if (entry.method === 0) return new TextDecoder().decode(entry.bytes);
+    if (entry.method !== 8 || typeof DecompressionStream === 'undefined') {
+      throw new Error('This browser can’t unpack that .xlsx. Open it and save as CSV, then upload that.');
+    }
+    var stream = new Blob([entry.bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return await new Response(stream).text();
+  }
+
+  /* "B" → 1, "AC" → 28. Keeps empty cells in the right column. */
+  function colIndex(ref) {
+    var n = 0;
+    for (var i = 0; i < ref.length; i++) {
+      var c = ref.charCodeAt(i);
+      if (c < 65 || c > 90) break;
+      n = n * 26 + (c - 64);
+    }
+    return n - 1;
+  }
+
+  function sharedStrings(xml) {
+    if (!xml) return [];
+    var doc = new DOMParser().parseFromString(xml, 'application/xml');
+    return Array.prototype.map.call(doc.getElementsByTagName('si'), function (si) {
+      return Array.prototype.filter.call(si.getElementsByTagName('t'), function (t) { return t.parentNode.nodeName !== 'rPh'; })
+        .map(function (t) { return t.textContent; }).join('');
+    });
+  }
+
+  /* The first worksheet as rows of plain strings. Row and column gaps are preserved, so a
+     line number in a report is the row number the person sees in Excel. */
+  A.parseXlsx = async function (file) {
+    var zip = zipEntries(await A.readFileBuffer(file));
+    var ss = sharedStrings(await zipText(zip['xl/sharedStrings.xml']));
+    var name = 'xl/worksheets/sheet1.xml';
+    if (!zip[name]) {
+      var sheets = Object.keys(zip).filter(function (k) { return /^xl\/worksheets\/[^/]+\.xml$/.test(k); }).sort();
+      if (!sheets.length) throw new Error('That .xlsx has no worksheet in it.');
+      name = sheets[0];
+    }
+    var doc = new DOMParser().parseFromString(await zipText(zip[name]), 'application/xml');
+    var rows = [];
+    Array.prototype.forEach.call(doc.getElementsByTagName('row'), function (row) {
+      var cells = [];
+      Array.prototype.forEach.call(row.getElementsByTagName('c'), function (c) {
+        var at = colIndex(c.getAttribute('r') || ''), t = c.getAttribute('t'), v = '';
+        if (at < 0) at = cells.length;
+        if (t === 'inlineStr') { var is = c.getElementsByTagName('t'); v = is.length ? is[0].textContent : ''; }
+        else {
+          var vs = c.getElementsByTagName('v');
+          v = vs.length ? vs[0].textContent : '';
+          if (t === 's') v = ss[parseInt(v, 10)] || '';
+        }
+        while (cells.length < at) cells.push('');
+        cells[at] = v;
+      });
+      var at = parseInt(row.getAttribute('r'), 10);
+      if (at > 0) { while (rows.length < at - 1) rows.push([]); rows[at - 1] = cells; }
+      else rows.push(cells);
+    });
+    return rows;
+  };
+
+  /* One way in for "a file of rows": .xlsx straight from an export, or CSV. */
+  A.readSheet = async function (file) {
+    var name = file.name || '';
+    if (/\.xls$/i.test(name)) throw new Error('That’s the old .xls format. Open it and save as .xlsx or CSV, then upload that.');
+    if (/\.xlsx$|\.xlsm$/i.test(name)) return await A.parseXlsx(file);
+    var text = await A.readFile(file);
+    // "CSV (Comma delimited)" from Excel is Windows-1252, not UTF-8: read it again with that encoding.
+    if (/\ufffd/.test(text)) {
+      text = await new Promise(function (resolve, reject) {
+        var fr = new FileReader();
+        fr.onload = function () { resolve(fr.result); };
+        fr.onerror = function () { reject(new Error('Could not read that file')); };
+        fr.readAsText(file, 'windows-1252');
+      });
+    }
+    return A.parseCsv(text);
+  };
+
   A.pickFile = function (accept) {
     return new Promise(function (resolve) {
       var inp = document.createElement('input');

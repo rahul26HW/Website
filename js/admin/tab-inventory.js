@@ -56,9 +56,9 @@
         (counts.nosku ? A.ui.warn(counts.nosku + ' simple product' + (counts.nosku > 1 ? 's have' : ' has') + ' no SKU. Type the real SKU in the table below — stock moves to it when you save.') : '') +
 
         A.ui.panel('Daily upload',
-          '<p class="hint" style="margin:-6px 0 12px">CSV with columns <b>sku,quantity</b> (a header row is fine). Download the current list, fill in today’s counts, and upload it. You’ll see a row-by-row report before anything changes.</p>' +
+          '<p class="hint" style="margin:-6px 0 12px">An <b>.xlsx</b> or <b>CSV</b> file — a warehouse export uploads just as it downloaded. It needs a row of column names, with the SKU under <b>SKU</b> or <b>Master SKU</b> and the count under <b>Available</b> or <b>Quantity</b>; every other column is ignored. A plain two-column <b>sku,quantity</b> file works too. You’ll see a row-by-row report before anything changes.</p>' +
           '<div class="btnrow"><button class="btn ghost sm" type="button" data-a="inv-download">⬇ Download current (CSV)</button>' +
-          '<button class="btn loom sm" type="button" data-a="inv-upload">⬆ Upload inventory CSV</button></div>' +
+          '<button class="btn loom sm" type="button" data-a="inv-upload">⬆ Upload stock file</button></div>' +
           '<div class="grid2" style="margin-top:14px">' + A.ui.field('Low-stock alert at', 'settings.lowStockThreshold', A.draft.settings.lowStockThreshold, { type: 'int', min: 0, hint: 'Saved with Save changes.' }) + '</div>') +
 
         '<section class="panel"><h2 class="ph3">Stock levels</h2>' +
@@ -144,26 +144,81 @@
     A.download('home-weavers-inventory-' + A.today() + '.csv', A.toCsv(data), 'text/csv');
   };
 
+  /* ---------------------------------------------------------------- *
+   * Upload
+   * Column names we accept, best first. Stock means "Available" — what can still be promised to a
+   * shopper. "On Hand" counts units already committed to other orders, so it oversells.
+   * ---------------------------------------------------------------- */
+  var SKU_COLS = ['sku', 'mastersku', 'itemsku', 'productsku', 'skucode', 'merchantsku', 'sellersku'];
+  var QTY_COLS = ['available', 'availablequantity', 'availableqty', 'quantityavailable', 'quantity', 'qty', 'stock', 'onhand'];
+  var NEVER_QTY = /upc|barcode|ean|gtin|asin|cost|price|weight/;
+  var MAX_QTY = 9999999; // the same 7-digit ceiling the table's own quantity box enforces
+
+  function norm(s) { return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+  function cell(cols, at) { return String(at >= 0 && cols[at] != null ? cols[at] : '').trim(); }
+
+  /* Which column is the SKU and which is the count. Named columns win; a bare two-column
+     sku,quantity file still works. Anything else is refused rather than guessed at — reading
+     column 2 blind is how a UPC column once became the stock count. */
+  function mapColumns(table) {
+    var head = (table[0] || []).map(norm), i, at;
+    var sku = -1, qty = -1;
+    for (i = 0; i < SKU_COLS.length && sku < 0; i++) sku = head.indexOf(SKU_COLS[i]);
+    for (i = 0; i < QTY_COLS.length && qty < 0; i++) { at = head.indexOf(QTY_COLS[i]); if (at >= 0 && !NEVER_QTY.test(head[at])) qty = at; }
+    if (sku >= 0 && qty >= 0) {
+      return { sku: sku, qty: qty, from: 1, named: true, skuName: cell(table[0], sku), qtyName: cell(table[0], qty) };
+    }
+    var width = 0;
+    table.forEach(function (r) { var n = r.length; while (n > 0 && !cell(r, n - 1)) n--; if (n > width) width = n; });
+    if (width <= 2) {
+      // Two columns, read in order — unless the second is named as something that plainly isn't a count.
+      if (NEVER_QTY.test(head[1] || '')) {
+        return { fatal: 'The second column of this file is <b>' + esc(cell(table[0], 1)) + '</b>, which isn’t a stock count. Upload a file whose count column is named <b>Available</b> or <b>Quantity</b>.' };
+      }
+      var skipHead = head[0] === 'sku' || QTY_COLS.indexOf(head[1]) >= 0;
+      return { sku: 0, qty: 1, from: skipHead ? 1 : 0, named: false, skuName: 'column 1', qtyName: 'column 2' };
+    }
+    var names = (table[0] || []).map(function (h) { return cell([h], 0); }).filter(Boolean);
+    return { fatal: 'This file has ' + width + ' columns and no row of column names I recognise, so I can’t tell which one is the stock count — and guessing is what put barcodes in the stock column last time.' +
+      (names.length ? ' Its first row reads: <b>' + esc(names.slice(0, 12).join(' · ')) + '</b>.' : '') +
+      ' Name the SKU column <b>SKU</b> (or <b>Master SKU</b>) and the count column <b>Available</b> (or <b>Quantity</b>), or upload a plain two-column <b>sku,quantity</b> file.' };
+  }
+
   A.actions['inv-upload'] = async function () {
-    var file = await A.pickFile('.csv,text/csv');
+    var file = await A.pickFile('.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     if (!file) return;
-    var text;
-    try { text = await A.readFile(file); } catch (e) { u.toast(e.message); return; }
-    var parsed = A.parseCsv(text);
+    var table;
+    try { table = await A.readSheet(file); } catch (e) { u.toast(e.message); return; }
+    var map = mapColumns(table);
+    if (map.fatal) {
+      A.modal({ title: 'Inventory upload: ' + file.name, body: '<p class="badmsg">' + map.fatal + '</p>', buttons: [] });
+      return;
+    }
     var known = {};
     rows().forEach(function (r) { if (r.sku) known[r.sku] = r; else known[r.key] = r; });
-    var updates = {}, report = [], seen = {};
-    parsed.forEach(function (cols, idx) {
-      var line = idx + 1;
-      if (!cols.some(function (c) { return String(c).trim(); })) return;
-      var sku = String(cols[0] || '').trim().replace(/^'/, ''), qtyRaw = String(cols[1] == null ? '' : cols[1]).trim();
-      if (idx === 0 && /^sku$/i.test(sku)) return;
-      if (!sku) { report.push({ line: line, ok: false, msg: 'Missing SKU' }); return; }
+    var updates = {}, report = [], seen = {}, subRows = 0, barcodes = 0, notHere = [];
+    table.slice(map.from).forEach(function (cols, idx) {
+      var line = idx + map.from + 1;
+      if (!cols.some(function (c) { return String(c == null ? '' : c).trim(); })) return;
+      var sku = cell(cols, map.sku).replace(/^'/, ''), qtyRaw = cell(cols, map.qty).replace(/,/g, '');
+      if (!sku) {
+        // A warehouse export lists each bin on its own row under the SKU, with the SKU cell left empty.
+        // Those rows repeat numbers already counted on the SKU's own row, so they're skipped, not failed.
+        if (map.named) { subRows++; return; }
+        report.push({ line: line, ok: false, msg: 'Missing SKU' }); return;
+      }
       if (/^\(no sku\)/i.test(sku)) { report.push({ line: line, ok: false, sku: sku, msg: 'This product has no SKU yet — add it in the table first' }); return; }
-      if (!/^-?\d+$/.test(qtyRaw)) { report.push({ line: line, ok: false, sku: sku, msg: qtyRaw === '' ? 'Missing quantity' : 'Quantity “' + qtyRaw + '” is not a whole number' }); return; }
+      if (/^-/.test(qtyRaw)) { report.push({ line: line, ok: false, sku: sku, msg: 'Quantity can’t be negative' }); return; }
+      if (!/^\d+(\.0+)?$/.test(qtyRaw)) { report.push({ line: line, ok: false, sku: sku, msg: qtyRaw === '' ? 'Missing quantity' : 'Quantity “' + qtyRaw + '” is not a whole number' }); return; }
       var qty = parseInt(qtyRaw, 10);
-      if (qty < 0) { report.push({ line: line, ok: false, sku: sku, msg: 'Quantity can’t be negative' }); return; }
-      if (!known[sku]) { report.push({ line: line, ok: false, sku: sku, msg: 'Unknown SKU (not in any product)' }); return; }
+      if (qty > MAX_QTY) {
+        barcodes++;
+        report.push({ line: line, ok: false, sku: sku, msg: qtyRaw + ' is far too big to be stock — that reads like a barcode, not a count' });
+        return;
+      }
+      // A warehouse holds plenty the website doesn't sell. Those rows are counted and named, not
+      // listed one by one — thousands of them would bury the handful of errors that need reading.
+      if (!known[sku]) { notHere.push(sku); return; }
       if (seen[sku]) { report.push({ line: line, ok: false, sku: sku, msg: 'Duplicate — SKU already on line ' + seen[sku] + '; this row was skipped' }); return; }
       seen[sku] = line;
       var key = known[sku].key;
@@ -174,7 +229,14 @@
     var good = report.filter(function (r) { return r.ok; }), bad = report.filter(function (r) { return !r.ok; });
     A.modal({
       title: 'Inventory upload: ' + file.name,
-      body: '<p><b class="ok">' + good.length + ' row' + (good.length === 1 ? '' : 's') + ' ready</b>' + (bad.length ? ' · <b class="bad">' + bad.length + ' with errors (skipped)</b>' : '') + '</p>' +
+      body: '<p class="hint" style="margin:-4px 0 12px">Stock read from <b>' + esc(map.qtyName) + '</b>, SKUs from <b>' + esc(map.skuName) + '</b>' +
+          (subRows ? ' · ' + subRows + ' location row' + (subRows === 1 ? '' : 's') + ' skipped (they repeat their SKU’s count)' : '') + '.</p>' +
+        (barcodes ? A.ui.warn('<b>' + barcodes + ' row' + (barcodes === 1 ? '' : 's') + ' held back</b> for a count over 7 digits — check that <b>' + esc(map.qtyName) + '</b> really is the stock column.') : '') +
+        '<p><b class="ok">' + good.length + ' row' + (good.length === 1 ? '' : 's') + ' ready</b>' + (bad.length ? ' · <b class="bad">' + bad.length + ' with errors (skipped)</b>' : '') +
+          (notHere.length ? ' · <b>' + notHere.length + ' SKU' + (notHere.length === 1 ? '' : 's') + ' not sold on the website (skipped)</b>' : '') + '</p>' +
+        (notHere.length ? '<p class="hint" style="margin:-8px 0 12px">Normal for a full warehouse export. ' +
+          (notHere.length > 8 ? 'First few: ' : '') + '<code>' + notHere.slice(0, 8).map(esc).join('</code> <code>') + '</code>' +
+          (notHere.length > 8 ? ' …' : '') + '</p>' : '') +
         '<div class="tablewrap" style="max-height:340px;overflow:auto"><table class="vartable"><thead><tr><th>Line</th><th>SKU</th><th>Result</th></tr></thead><tbody>' +
         bad.concat(good).map(function (r) { return '<tr class="' + (r.ok ? '' : 'errrow') + '"><td>' + r.line + '</td><td><code>' + esc(r.sku || '') + '</code></td><td>' + (r.ok ? '✓ ' : '✗ ') + esc(r.msg) + '</td></tr>'; }).join('') +
         '</tbody></table></div>' + (good.length ? '<p class="hint">Applying saves the store immediately.</p>' : ''),
